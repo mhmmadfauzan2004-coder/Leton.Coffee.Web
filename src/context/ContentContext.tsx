@@ -109,7 +109,10 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Multi-tab sync via window storage event
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === LETON_STORAGE_KEY && e.newValue) {
+      if (
+        (e.key === LETON_STORAGE_KEY || e.key === 'leton_global_data') &&
+        e.newValue
+      ) {
         try {
           const parsed = JSON.parse(e.newValue);
           const sanitized = sanitizeLoadedData(parsed);
@@ -146,10 +149,21 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
           try {
             const payload = JSON.parse(e.data);
             if (payload && payload.data && payload.data.siteSettings) {
-              const liveData = sanitizeLoadedData(payload.data);
-              setData(liveData);
-              saveStoredContent(liveData);
-              setLastUpdated(Date.now());
+              // Only apply INITIAL_SYNC if localStorage is clean/empty, to protect user edited photos & content
+              if (payload.type === 'INITIAL_SYNC') {
+                if (!hasStoredContent()) {
+                  const liveData = sanitizeLoadedData(payload.data);
+                  setData(liveData);
+                  saveStoredContent(liveData);
+                  setLastUpdated(Date.now());
+                }
+              } else if (payload.type === 'CONTENT_UPDATE') {
+                // Live update from active admin action
+                const liveData = sanitizeLoadedData(payload.data);
+                setData(liveData);
+                saveStoredContent(liveData);
+                setLastUpdated(Date.now());
+              }
             }
           } catch (err) {
             console.error('Error parsing SSE event:', err);

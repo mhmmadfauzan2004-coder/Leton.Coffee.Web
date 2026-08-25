@@ -12,12 +12,15 @@ import {
 } from '../types';
 import { initialLetonData } from '../data/initialData';
 
-// Primary & Specific LocalStorage Keys
+// Primary & Explicit LocalStorage Keys
+export const LETON_GLOBAL_DATA_KEY = 'leton_global_data';
 export const LETON_STORAGE_KEY = 'leton_cms_content_v1';
 export const LETON_BACKUP_KEY = 'leton_cached_content';
 export const LETON_LAST_SYNC_KEY = 'leton_cms_last_sync';
 
+// Granular Photo & Section Keys for direct persistence
 export const LETON_KEY_LOGO_URL = 'leton_logo_url';
+export const LETON_KEY_HERO_BG = 'leton_hero_bg_image';
 export const LETON_KEY_BARISTAS = 'leton_baristas_data';
 export const LETON_KEY_MENU_ITEMS = 'leton_menu_items';
 export const LETON_KEY_MENU_CATEGORIES = 'leton_menu_categories';
@@ -29,8 +32,7 @@ export const LETON_KEY_ABOUT_CONTENT = 'leton_about_content';
 export const LETON_KEY_CONTACT_SETTINGS = 'leton_contact_settings';
 
 /**
- * Deep merge loaded data from localStorage with initial default data
- * to ensure all fields, arrays, and properties exist safely.
+ * Deep merge raw data with initial default data to ensure all fields exist safely.
  */
 export function sanitizeLoadedData(raw: any): LetonData {
   if (!raw || typeof raw !== 'object') {
@@ -78,9 +80,25 @@ export function sanitizeLoadedData(raw: any): LetonData {
 }
 
 /**
+ * Checks whether custom content exists in localStorage
+ */
+export function hasStoredContent(): boolean {
+  if (typeof window === 'undefined') return false;
+  return Boolean(
+    localStorage.getItem(LETON_GLOBAL_DATA_KEY) ||
+    localStorage.getItem(LETON_STORAGE_KEY) ||
+    localStorage.getItem(LETON_BACKUP_KEY) ||
+    localStorage.getItem(LETON_KEY_LOGO_URL) ||
+    localStorage.getItem(LETON_KEY_BARISTAS) ||
+    localStorage.getItem(LETON_KEY_BRANCHES) ||
+    localStorage.getItem(LETON_KEY_MENU_ITEMS)
+  );
+}
+
+/**
  * Retrieve saved CMS content from browser localStorage.
- * Prioritizes localStorage data and specific keys so that refreshed pages
- * never revert to default AI mock data.
+ * Always reads from localStorage first before any mock data.
+ * If data exists in localStorage, it will NEVER be overwritten by defaults.
  */
 export function loadStoredContent(): LetonData {
   if (typeof window === 'undefined') {
@@ -90,31 +108,63 @@ export function loadStoredContent(): LetonData {
   try {
     let resultData: LetonData | null = null;
 
-    // 1. Check primary storage key
-    const primary = localStorage.getItem(LETON_STORAGE_KEY);
-    if (primary) {
-      const parsed = JSON.parse(primary);
-      resultData = sanitizeLoadedData(parsed);
-    }
-
-    // 2. Check backup key if primary wasn't present
-    if (!resultData) {
-      const backup = localStorage.getItem(LETON_BACKUP_KEY);
-      if (backup) {
-        const parsed = JSON.parse(backup);
-        resultData = sanitizeLoadedData(parsed);
+    // 1. Check primary global data key first
+    const globalDataStr = localStorage.getItem(LETON_GLOBAL_DATA_KEY);
+    if (globalDataStr) {
+      try {
+        const parsed = JSON.parse(globalDataStr);
+        if (parsed && typeof parsed === 'object') {
+          resultData = sanitizeLoadedData(parsed);
+        }
+      } catch (e) {
+        console.warn('Error parsing leton_global_data:', e);
       }
     }
 
-    // If no full payload was found, start from initial base
+    // 2. Check primary storage key
+    if (!resultData) {
+      const primary = localStorage.getItem(LETON_STORAGE_KEY);
+      if (primary) {
+        try {
+          const parsed = JSON.parse(primary);
+          if (parsed && typeof parsed === 'object') {
+            resultData = sanitizeLoadedData(parsed);
+          }
+        } catch (e) {
+          console.warn('Error parsing leton_cms_content_v1:', e);
+        }
+      }
+    }
+
+    // 3. Check backup key
+    if (!resultData) {
+      const backup = localStorage.getItem(LETON_BACKUP_KEY);
+      if (backup) {
+        try {
+          const parsed = JSON.parse(backup);
+          if (parsed && typeof parsed === 'object') {
+            resultData = sanitizeLoadedData(parsed);
+          }
+        } catch (e) {
+          console.warn('Error parsing leton_cached_content:', e);
+        }
+      }
+    }
+
+    // If no full object found, start from initial data base
     if (!resultData) {
       resultData = { ...initialLetonData };
     }
 
-    // 3. Overlay any granular specific keys if explicitly saved
+    // 4. Granular overlay check - Ensure any individual photos or sections are restored
     const specificLogo = localStorage.getItem(LETON_KEY_LOGO_URL);
     if (specificLogo && specificLogo.trim()) {
       resultData.siteSettings.logoUrl = specificLogo;
+    }
+
+    const specificHeroBg = localStorage.getItem(LETON_KEY_HERO_BG);
+    if (specificHeroBg && specificHeroBg.trim()) {
+      resultData.siteSettings.heroBgImage = specificHeroBg;
     }
 
     const specificSiteSettings = localStorage.getItem(LETON_KEY_SITE_SETTINGS);
@@ -207,34 +257,36 @@ export function loadStoredContent(): LetonData {
       } catch {}
     }
 
-    // If we loaded anything customized, return it
-    if (hasStoredContent()) {
-      return resultData;
-    }
+    // Return the persistent data
+    return resultData;
   } catch (err) {
     console.warn('[LocalStorage] Error reading stored Leton content:', err);
+    return initialLetonData;
   }
-
-  // Fallback to default initial data
-  return initialLetonData;
 }
 
 /**
  * Save CMS content permanently to browser localStorage with full and granular keys.
- * Ensures data is preserved across page refreshes, browser reopens, and redeployments.
+ * Ensures all photos (Logo, Chapters, Baristas, Menu, Hero) are preserved across refreshes.
  */
 export function saveStoredContent(data: LetonData): boolean {
   if (typeof window === 'undefined') return false;
 
   try {
     const serialized = JSON.stringify(data);
+    
+    // Save to primary global data key and backup keys
+    localStorage.setItem(LETON_GLOBAL_DATA_KEY, serialized);
     localStorage.setItem(LETON_STORAGE_KEY, serialized);
     localStorage.setItem(LETON_BACKUP_KEY, serialized);
     localStorage.setItem(LETON_LAST_SYNC_KEY, Date.now().toString());
 
-    // Also write granular keys for explicit individual access
+    // Save individual keys for explicit access
     if (data.siteSettings?.logoUrl) {
       localStorage.setItem(LETON_KEY_LOGO_URL, data.siteSettings.logoUrl);
+    }
+    if (data.siteSettings?.heroBgImage) {
+      localStorage.setItem(LETON_KEY_HERO_BG, data.siteSettings.heroBgImage);
     }
     if (data.siteSettings) {
       localStorage.setItem(LETON_KEY_SITE_SETTINGS, JSON.stringify(data.siteSettings));
@@ -278,10 +330,12 @@ export function clearStoredContent(): void {
   if (typeof window === 'undefined') return;
 
   try {
+    localStorage.removeItem(LETON_GLOBAL_DATA_KEY);
     localStorage.removeItem(LETON_STORAGE_KEY);
     localStorage.removeItem(LETON_BACKUP_KEY);
     localStorage.removeItem(LETON_LAST_SYNC_KEY);
     localStorage.removeItem(LETON_KEY_LOGO_URL);
+    localStorage.removeItem(LETON_KEY_HERO_BG);
     localStorage.removeItem(LETON_KEY_SITE_SETTINGS);
     localStorage.removeItem(LETON_KEY_BARISTAS);
     localStorage.removeItem(LETON_KEY_MENU_ITEMS);
@@ -297,15 +351,58 @@ export function clearStoredContent(): void {
 }
 
 /**
- * Checks whether custom content exists in localStorage
+ * Smart image compressor to safely resize uploaded files for local persistence
  */
-export function hasStoredContent(): boolean {
-  if (typeof window === 'undefined') return false;
-  return Boolean(
-    localStorage.getItem(LETON_STORAGE_KEY) ||
-    localStorage.getItem(LETON_BACKUP_KEY) ||
-    localStorage.getItem(LETON_KEY_LOGO_URL) ||
-    localStorage.getItem(LETON_KEY_BARISTAS) ||
-    localStorage.getItem(LETON_KEY_MENU_ITEMS)
-  );
+export async function optimizeImageFile(file: File, maxDimension = 1400, quality = 0.82): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const src = e.target?.result as string;
+      if (!src) {
+        resolve('');
+        return;
+      }
+
+      // If file is SVG or very small (< 100KB), return as-is
+      if (file.type === 'image/svg+xml' || file.size < 100 * 1024) {
+        resolve(src);
+        return;
+      }
+
+      const img = new Image();
+      img.src = src;
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(src);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedDataUrl);
+      };
+      img.onerror = () => {
+        resolve(src);
+      };
+    };
+    reader.onerror = () => {
+      resolve('');
+    };
+  });
 }

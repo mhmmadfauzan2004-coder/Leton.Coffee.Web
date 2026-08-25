@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useContent } from '../../context/ContentContext';
+import { optimizeImageFile } from '../../utils/storage';
 import { Upload, Link as LinkIcon, Image as ImageIcon, X, Loader2, Check, Sparkles } from 'lucide-react';
 
 interface ImageUploadFieldProps {
@@ -22,26 +23,18 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   const [urlInput, setUrlInput] = useState(value || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Convert File to Base64 Data URL
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
     try {
-      // 1. Immediately convert to Data URL (Base64) to ensure image is available instantly in state & local persistence
-      const base64Data = await fileToBase64(file);
-      onChange(base64Data);
-      setUrlInput(base64Data);
+      // 1. Convert to optimized Data URL to ensure instant local persistence and high performance
+      const base64Data = await optimizeImageFile(file, 1600, 0.85);
+      if (base64Data) {
+        onChange(base64Data);
+        setUrlInput(base64Data);
+      }
 
       // 2. Also attempt upload to backend server storage for permanent asset hosting
       try {

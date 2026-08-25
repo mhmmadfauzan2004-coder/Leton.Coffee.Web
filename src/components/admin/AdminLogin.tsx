@@ -126,13 +126,25 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToPublic }) => {
         </form>
 
         {/* Initial Credentials Hint */}
-        <div className="mt-6 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] text-slate-400 font-mono">
-          <div className="flex items-center gap-1.5 text-cyan-400 font-bold mb-1">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Kredensial Bawaan:</span>
+        <div className="mt-6 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] text-slate-400 font-mono flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-1.5 text-cyan-400 font-bold mb-1">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Kredensial Default (Lokal):</span>
+            </div>
+            <p>Username: <span className="text-white font-semibold">admin</span></p>
+            <p>Password: <span className="text-white font-semibold">LetonAdmin2026!</span></p>
           </div>
-          <p>User: <span className="text-slate-200">admin</span></p>
-          <p>Pass: <span className="text-slate-200">LetonAdmin2026!</span></p>
+          <button
+            type="button"
+            onClick={() => {
+              setUsername('admin');
+              setPassword('LetonAdmin2026!');
+            }}
+            className="px-2.5 py-1.5 rounded-lg bg-cyan-500/15 border border-cyan-400/30 hover:bg-cyan-400/30 text-[#00E5FF] text-[10px] font-bold uppercase transition-all cursor-pointer"
+          >
+            Gunakan
+          </button>
         </div>
       </div>
     </div>

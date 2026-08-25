@@ -35,10 +35,10 @@ export const MobileTruckSection: React.FC = () => {
           initial={{ opacity: 0, y: -15 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-cyan-400/40 text-[#00E5FF] text-xs sm:text-sm font-mono tracking-widest uppercase mb-4 shadow-md"
+          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#FDFBF7]/90 backdrop-blur-md border border-[#2563EB]/40 text-[#2563EB] text-xs sm:text-sm font-mono tracking-widest uppercase mb-4 shadow-lg shadow-black/40"
         >
-          <Truck className="w-4 h-4 text-[#00E5FF]" />
-          <span>04 — {mobileService.badge || 'MOBILE COFFEE EXPERIENCE'}</span>
+          <Truck className="w-4 h-4 text-[#2563EB]" />
+          <span className="font-bold">04 — {mobileService.badge || 'MOBILE COFFEE EXPERIENCE'}</span>
         </motion.div>
 
         {/* Title */}
@@ -58,7 +58,7 @@ export const MobileTruckSection: React.FC = () => {
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6, delay: 0.15 }}
-          className="mt-3 text-sm sm:text-base md:text-lg text-[#00E5FF] font-semibold tracking-wider uppercase drop-shadow-md"
+          className="mt-3 text-sm sm:text-base md:text-lg text-[#60A5FA] font-semibold tracking-wider uppercase drop-shadow-md"
         >
           {mobileService.subtitle}
         </motion.p>
@@ -84,21 +84,21 @@ export const MobileTruckSection: React.FC = () => {
         >
           {mobileService.serviceArea && (
             <div className="flex items-center justify-center gap-2.5 text-slate-100 drop-shadow-md">
-              <MapPin className="w-5 h-5 text-[#00E5FF] shrink-0" />
+              <MapPin className="w-5 h-5 text-[#60A5FA] shrink-0" />
               <span className="text-sm sm:text-base font-medium">{mobileService.serviceArea}</span>
             </div>
           )}
 
           {mobileService.eventInfo && (
             <div className="flex items-center justify-center gap-2.5 text-slate-100 drop-shadow-md">
-              <Calendar className="w-5 h-5 text-[#00E5FF] shrink-0" />
+              <Calendar className="w-5 h-5 text-[#60A5FA] shrink-0" />
               <span className="text-sm sm:text-base font-medium">{mobileService.eventInfo}</span>
             </div>
           )}
 
           {mobileService.serviceInfo && (
             <div className="flex items-center justify-center gap-2.5 text-slate-100 drop-shadow-md">
-              <Truck className="w-5 h-5 text-[#00E5FF] shrink-0" />
+              <Truck className="w-5 h-5 text-[#60A5FA] shrink-0" />
               <span className="text-sm sm:text-base font-medium">{mobileService.serviceInfo}</span>
             </div>
           )}
@@ -115,7 +115,7 @@ export const MobileTruckSection: React.FC = () => {
           >
             {mobileService.features.map((feat, idx) => (
               <div key={idx} className="flex items-center gap-2 drop-shadow-md">
-                <CheckCircle2 className="w-4 h-4 text-[#00E5FF] shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-[#60A5FA] shrink-0" />
                 <span>{feat}</span>
               </div>
             ))}
@@ -135,7 +135,7 @@ export const MobileTruckSection: React.FC = () => {
             target="_blank"
             rel="noopener noreferrer"
             id="letgo-book-event-cta"
-            className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-xl bg-[#00E5FF] hover:bg-[#3bf0ff] text-slate-950 font-display font-black text-xs sm:text-sm tracking-wider uppercase shadow-xl shadow-[#00E5FF]/30 hover:shadow-[#00E5FF]/50 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+            className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-display font-black text-xs sm:text-sm tracking-wider uppercase shadow-xl shadow-[#2563EB]/30 hover:shadow-[#2563EB]/50 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
           >
             <MessageCircle className="w-4 h-4" />
             <span>{mobileService.ctaText || 'BOOK FOR EVENT VIA WHATSAPP'}</span>

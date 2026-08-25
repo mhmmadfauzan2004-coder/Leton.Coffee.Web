@@ -54,9 +54,9 @@ export const HeroSection: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00E5FF]/10 border border-[#00E5FF]/30 text-[#00E5FF] text-xs font-mono tracking-widest uppercase mb-6 backdrop-blur-md"
+          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#2563EB]/20 border border-[#2563EB]/40 text-[#60A5FA] text-xs font-mono tracking-widest uppercase mb-6 backdrop-blur-md shadow-lg shadow-[#2563EB]/10"
         >
-          <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+          <Sparkles className="w-3.5 h-3.5 text-[#60A5FA] animate-pulse" />
           <span>01 — {siteSettings.tagline || 'EVERYDAY SPECIALTY COFFEE'}</span>
         </motion.div>
 
@@ -75,7 +75,7 @@ export const HeroSection: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.5 }}
-          className="mt-6 text-base sm:text-lg md:text-xl text-slate-300 max-w-2xl font-normal leading-relaxed text-balance"
+          className="mt-6 text-base sm:text-lg md:text-xl text-slate-200 max-w-2xl font-normal leading-relaxed text-balance"
         >
           {siteSettings.heroDescription}
         </motion.p>
@@ -91,7 +91,7 @@ export const HeroSection: React.FC = () => {
             href="#menu"
             onClick={scrollToMenu}
             id="hero-explore-menu-cta"
-            className="w-full sm:w-auto px-8 py-4 rounded-xl bg-white text-slate-950 font-display font-bold text-sm tracking-wider uppercase hover:bg-[#00E5FF] transition-all duration-200 transform hover:-translate-y-0.5 shadow-xl hover:shadow-[#00E5FF]/30 active:translate-y-0 text-center"
+            className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#FDFBF7] text-[#1E293B] font-display font-bold text-sm tracking-wider uppercase hover:bg-[#2563EB] hover:text-white transition-all duration-200 transform hover:-translate-y-0.5 shadow-xl hover:shadow-[#2563EB]/30 active:translate-y-0 text-center"
           >
             {siteSettings.heroCtaMenuText || 'EXPLORE MENU'}
           </a>
@@ -101,7 +101,7 @@ export const HeroSection: React.FC = () => {
             target="_blank"
             rel="noopener noreferrer"
             id="hero-order-wa-cta"
-            className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#00E5FF] text-slate-950 font-display font-bold text-sm tracking-wider uppercase hover:bg-[#3bf0ff] transition-all duration-200 transform hover:-translate-y-0.5 shadow-xl shadow-[#00E5FF]/20 hover:shadow-[#00E5FF]/40 active:translate-y-0 flex items-center justify-center gap-2"
+            className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#2563EB] text-white font-display font-bold text-sm tracking-wider uppercase hover:bg-[#1d4ed8] transition-all duration-200 transform hover:-translate-y-0.5 shadow-xl shadow-[#2563EB]/30 hover:shadow-[#2563EB]/50 active:translate-y-0 flex items-center justify-center gap-2"
           >
             <MessageCircle className="w-4 h-4" />
             <span>{siteSettings.heroCtaOrderText || 'ORDER VIA WHATSAPP'}</span>
@@ -114,7 +114,7 @@ export const HeroSection: React.FC = () => {
         <span className="text-[11px] font-mono tracking-widest text-slate-400 uppercase mb-2">
           SCROLL TO EXPLORE CHAPTERS
         </span>
-        <ArrowDown className="w-4 h-4 text-[#00E5FF] animate-bounce" />
+        <ArrowDown className="w-4 h-4 text-[#60A5FA] animate-bounce" />
       </div>
     </section>
   );

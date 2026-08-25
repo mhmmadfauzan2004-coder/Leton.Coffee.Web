@@ -5,6 +5,7 @@ import { HeroSection } from './components/public/HeroSection';
 import { ChapterSection } from './components/public/ChapterSection';
 import { MobileTruckSection } from './components/public/MobileTruckSection';
 import { MenuSection } from './components/public/MenuSection';
+import { BaristasSection } from './components/public/BaristasSection';
 import { AboutSection } from './components/public/AboutSection';
 import { ContactSection } from './components/public/ContactSection';
 import { AdminLayout } from './components/admin/AdminLayout';
@@ -102,10 +103,13 @@ const AppContent: React.FC = () => {
       {/* 05 — MENU */}
       <MenuSection />
 
-      {/* 06 — ABOUT */}
+      {/* 06 — BARISTAS TEAM */}
+      <BaristasSection />
+
+      {/* 07 — ABOUT */}
       <AboutSection />
 
-      {/* 07 — CONTACT & FOOTER */}
+      {/* 08 — CONTACT & FOOTER */}
       <ContactSection onOpenAdmin={openAdmin} />
 
       {/* Floating Action Button (Quick WhatsApp) */}

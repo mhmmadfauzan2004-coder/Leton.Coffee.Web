@@ -66,6 +66,24 @@ export interface AboutFact {
   value: string;
 }
 
+export interface BaristaItem {
+  id: string;
+  name: string;
+  role: string;
+  favoriteCoffee: string;
+  description: string;
+  image: string;
+  instagram?: string;
+  order: number;
+}
+
+export interface BaristasSectionContent {
+  title: string;
+  subtitle: string;
+  badge: string;
+  description: string;
+}
+
 export interface AboutContent {
   title: string;
   subtitle: string;
@@ -99,6 +117,8 @@ export interface LetonData {
   mobileService: MobileService;
   menuCategories: MenuCategory[];
   menuItems: MenuItem[];
+  baristasContent?: BaristasSectionContent;
+  baristas: BaristaItem[];
   aboutContent: AboutContent;
   contactSettings: ContactSettings;
   updatedAt?: number;

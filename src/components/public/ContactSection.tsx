@@ -20,10 +20,10 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenAdmin }) =
   return (
     <footer
       id="contact"
-      className="relative w-full bg-[#05080e] pt-28 sm:pt-36 pb-12 border-t border-cyan-500/20 overflow-hidden"
+      className="relative w-full bg-[#05080e] pt-28 sm:pt-36 pb-12 border-t border-[#2563EB]/25 overflow-hidden"
     >
       {/* Background Accent Grid */}
-      <div className="absolute inset-0 opacity-10 bg-[linear-gradient(to_right,#00E5FF_1px,transparent_1px),linear-gradient(to_bottom,#00E5FF_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none" />
+      <div className="absolute inset-0 opacity-10 bg-[linear-gradient(to_right,#2563EB_1px,transparent_1px),linear-gradient(to_bottom,#2563EB_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none" />
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
         {/* Main CTA Heading */}
@@ -32,10 +32,10 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenAdmin }) =
             initial={{ opacity: 0, y: 15 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#00E5FF]/10 border border-[#00E5FF]/30 text-[#00E5FF] text-xs font-mono tracking-widest uppercase mb-4"
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#60A5FA] text-xs font-mono tracking-widest uppercase mb-4 shadow-md"
           >
             <MessageCircle className="w-3.5 h-3.5" />
-            <span>07 — CONNECT WITH LETON</span>
+            <span>08 — CONNECT WITH LETON</span>
           </motion.div>
 
           <motion.h2
@@ -60,7 +60,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenAdmin }) =
           </motion.p>
         </div>
 
-        {/* Action Cards Grid */}
+        {/* Action Cards Grid - Soft Cream Containers with Dark Charcoal Text */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
           {/* WhatsApp Card */}
           <motion.div
@@ -68,25 +68,25 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenAdmin }) =
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="p-6 sm:p-8 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-cyan-500/50 transition-all flex flex-col justify-between group"
+            className="p-6 sm:p-8 rounded-3xl bg-[#FDFBF7]/95 backdrop-blur-md border border-[#2563EB]/20 hover:border-[#2563EB] transition-all flex flex-col justify-between group shadow-xl hover:shadow-2xl hover:shadow-[#2563EB]/15"
           >
             <div>
-              <div className="w-12 h-12 rounded-xl bg-cyan-500/10 text-[#00E5FF] flex items-center justify-center mb-5 group-hover:bg-[#00E5FF] group-hover:text-black transition-colors">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#2563EB] flex items-center justify-center mb-5 group-hover:bg-[#2563EB] group-hover:text-white transition-colors shadow-sm">
                 <MessageCircle className="w-6 h-6" />
               </div>
-              <h3 className="font-display font-bold text-xl text-white">WHATSAPP OFFICIAL</h3>
-              <p className="text-slate-400 text-xs sm:text-sm mt-2 leading-relaxed">
+              <h3 className="font-display font-black text-xl text-[#1E293B]">WHATSAPP OFFICIAL</h3>
+              <p className="text-slate-600 text-xs sm:text-sm mt-2 leading-relaxed font-normal">
                 Pemesanan take-away, delivery, konsultasi menu, dan layanan event.
               </p>
-              <p className="font-mono text-sm font-bold text-white mt-4">{contactSettings.whatsapp}</p>
+              <p className="font-mono text-sm font-bold text-[#2563EB] mt-4">{contactSettings.whatsapp}</p>
             </div>
-            <div className="mt-6 pt-4 border-t border-slate-800">
+            <div className="mt-6 pt-4 border-t border-slate-200">
               <a
                 href={contactWALink}
                 target="_blank"
                 rel="noopener noreferrer"
                 id="contact-wa-btn"
-                className="w-full py-3 px-4 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg shadow-[#00E5FF]/20 transition-all"
+                className="w-full py-3 px-4 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg shadow-[#2563EB]/20 transition-all"
               >
                 <MessageCircle className="w-4 h-4" />
                 <span>{contactSettings.ctaWhatsappText || 'CHAT VIA WHATSAPP'}</span>
@@ -100,27 +100,27 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenAdmin }) =
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="p-6 sm:p-8 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-pink-500/40 transition-all flex flex-col justify-between group"
+            className="p-6 sm:p-8 rounded-3xl bg-[#FDFBF7]/95 backdrop-blur-md border border-[#2563EB]/20 hover:border-pink-500 transition-all flex flex-col justify-between group shadow-xl hover:shadow-2xl hover:shadow-pink-500/15"
           >
             <div>
-              <div className="w-12 h-12 rounded-xl bg-pink-500/10 text-pink-400 flex items-center justify-center mb-5 group-hover:bg-pink-500 group-hover:text-white transition-colors">
+              <div className="w-12 h-12 rounded-2xl bg-pink-50 text-pink-600 flex items-center justify-center mb-5 group-hover:bg-pink-600 group-hover:text-white transition-colors shadow-sm">
                 <Instagram className="w-6 h-6" />
               </div>
-              <h3 className="font-display font-bold text-xl text-white">INSTAGRAM</h3>
-              <p className="text-slate-400 text-xs sm:text-sm mt-2 leading-relaxed">
+              <h3 className="font-display font-black text-xl text-[#1E293B]">INSTAGRAM</h3>
+              <p className="text-slate-600 text-xs sm:text-sm mt-2 leading-relaxed font-normal">
                 Update chapter terbaru, promo, event komunitas, dan live brewing.
               </p>
-              <p className="font-mono text-sm font-bold text-white mt-4">
+              <p className="font-mono text-sm font-bold text-pink-600 mt-4">
                 {contactSettings.instagramUsername}
               </p>
             </div>
-            <div className="mt-6 pt-4 border-t border-slate-800">
+            <div className="mt-6 pt-4 border-t border-slate-200">
               <a
                 href={contactSettings.instagramUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 id="contact-ig-btn"
-                className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-pink-600 text-white font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 border border-slate-700 hover:border-pink-600 transition-all"
+                className="w-full py-3 px-4 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg shadow-pink-600/20 transition-all"
               >
                 <Instagram className="w-4 h-4" />
                 <span>{contactSettings.ctaInstagramText || 'FOLLOW US'}</span>
@@ -134,28 +134,28 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenAdmin }) =
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.5, delay: 0.3 }}
-            className="p-6 sm:p-8 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-cyan-500/50 transition-all flex flex-col justify-between group"
+            className="p-6 sm:p-8 rounded-3xl bg-[#FDFBF7]/95 backdrop-blur-md border border-[#2563EB]/20 hover:border-[#2563EB] transition-all flex flex-col justify-between group shadow-xl hover:shadow-2xl hover:shadow-[#2563EB]/15"
           >
             <div>
-              <div className="w-12 h-12 rounded-xl bg-cyan-500/10 text-[#00E5FF] flex items-center justify-center mb-5 group-hover:bg-[#00E5FF] group-hover:text-black transition-colors">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#2563EB] flex items-center justify-center mb-5 group-hover:bg-[#2563EB] group-hover:text-white transition-colors shadow-sm">
                 <MapPin className="w-6 h-6" />
               </div>
-              <h3 className="font-display font-bold text-xl text-white">LOKASI UTAMA</h3>
-              <p className="text-slate-400 text-xs sm:text-sm mt-2 leading-relaxed">
+              <h3 className="font-display font-black text-xl text-[#1E293B]">LOKASI UTAMA</h3>
+              <p className="text-slate-600 text-xs sm:text-sm mt-2 leading-relaxed font-normal">
                 {contactSettings.address}
               </p>
-              <div className="flex items-center gap-2 text-xs text-slate-300 mt-4 font-mono">
-                <Clock className="w-3.5 h-3.5 text-[#00E5FF]" />
+              <div className="flex items-center gap-2 text-xs text-[#2563EB] mt-4 font-mono font-bold">
+                <Clock className="w-3.5 h-3.5 text-[#2563EB]" />
                 <span>{contactSettings.openingHours}</span>
               </div>
             </div>
-            <div className="mt-6 pt-4 border-t border-slate-800">
+            <div className="mt-6 pt-4 border-t border-slate-200">
               <a
                 href={contactSettings.googleMapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 id="contact-maps-btn"
-                className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-[#00E5FF] hover:text-slate-950 text-white font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 border border-slate-700 hover:border-[#00E5FF] transition-all"
+                className="w-full py-3 px-4 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg shadow-[#2563EB]/20 transition-all"
               >
                 <Navigation className="w-4 h-4" />
                 <span>{contactSettings.ctaMapsText || 'GET DIRECTIONS'}</span>
@@ -164,19 +164,29 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenAdmin }) =
           </motion.div>
         </div>
 
-        {/* Footer Sub-Bar */}
-        <div className="pt-8 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>{contactSettings.footerText}</p>
+        {/* Footer Sub-Bar with Logo */}
+        <div className="pt-8 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-full overflow-hidden border border-[#2563EB] shrink-0">
+              <img
+                src={siteSettings.logoUrl || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
+                alt={siteSettings.brandName}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <p>{contactSettings.footerText}</p>
+          </div>
 
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1 text-slate-400">
-              Crafted with <Heart className="w-3.5 h-3.5 text-cyan-400 fill-cyan-400 inline" /> for Leton Community
+              Crafted with <Heart className="w-3.5 h-3.5 text-[#60A5FA] fill-[#60A5FA] inline" /> for Leton Community
             </span>
 
             {onOpenAdmin && (
               <button
                 onClick={onOpenAdmin}
-                className="flex items-center gap-1.5 text-slate-500 hover:text-[#00E5FF] transition-colors font-mono text-[11px] cursor-pointer"
+                className="flex items-center gap-1.5 text-slate-400 hover:text-[#60A5FA] transition-colors font-mono text-[11px] cursor-pointer"
                 title="Admin Control Panel"
               >
                 <Lock className="w-3 h-3" />

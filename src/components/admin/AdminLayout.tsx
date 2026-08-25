@@ -6,6 +6,7 @@ import { ChapterEditor } from './ChapterEditor';
 import { LetGoEditor } from './LetGoEditor';
 import { MenuManager } from './MenuManager';
 import { AboutEditor } from './AboutEditor';
+import { BaristaManager } from './BaristaManager';
 import { ContactEditor } from './ContactEditor';
 import { SettingsEditor } from './SettingsEditor';
 import {
@@ -14,6 +15,7 @@ import {
   MapPin,
   Truck,
   UtensilsCrossed,
+  Users,
   Info,
   Phone,
   Settings,
@@ -40,6 +42,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
     { id: 'chapter-6', label: 'CHAPTER 6', icon: MapPin },
     { id: 'let-go', label: "LET'GO TRUCK", icon: Truck },
     { id: 'menu', label: 'MENU & KATEGORI', icon: UtensilsCrossed },
+    { id: 'baristas', label: 'TIM BARISTA', icon: Users },
     { id: 'about', label: 'ABOUT STORY', icon: Info },
     { id: 'contact', label: 'KONTAK & FOOTER', icon: Phone },
     { id: 'settings', label: 'PENGATURAN & AKUN', icon: Settings },
@@ -229,6 +232,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
         )}
         {activeTab === 'let-go' && <LetGoEditor />}
         {activeTab === 'menu' && <MenuManager />}
+        {activeTab === 'baristas' && <BaristaManager />}
         {activeTab === 'about' && <AboutEditor />}
         {activeTab === 'contact' && <ContactEditor />}
         {activeTab === 'settings' && <SettingsEditor />}

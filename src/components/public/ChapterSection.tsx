@@ -36,10 +36,10 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-cyan-400/40 text-[#00E5FF] text-xs sm:text-sm font-mono tracking-widest uppercase mb-4 shadow-md"
+          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#FDFBF7]/90 backdrop-blur-md border border-[#2563EB]/40 text-[#2563EB] text-xs sm:text-sm font-mono tracking-widest uppercase mb-4 shadow-lg shadow-black/40"
         >
-          <span>{branch.chapterNumber} — {branch.chapterName}</span>
-          {branch.badge && <span className="text-white/70">/ {branch.badge}</span>}
+          <span className="font-bold">{branch.chapterNumber} — {branch.chapterName}</span>
+          {branch.badge && <span className="text-[#1E293B]/70">/ {branch.badge}</span>}
         </motion.div>
 
         {/* Branch Headline */}
@@ -60,7 +60,7 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="mt-3 text-sm sm:text-base md:text-lg font-semibold tracking-wider text-[#00E5FF] uppercase drop-shadow-md"
+            className="mt-3 text-sm sm:text-base md:text-lg font-semibold tracking-wider text-[#60A5FA] uppercase drop-shadow-md"
           >
             {branch.tagline}
           </motion.p>
@@ -87,13 +87,13 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
         >
           {/* Address */}
           <div className="flex items-center justify-center gap-2.5 text-slate-100 drop-shadow-md">
-            <MapPin className="w-5 h-5 text-[#00E5FF] shrink-0" />
+            <MapPin className="w-5 h-5 text-[#60A5FA] shrink-0" />
             <span className="text-sm sm:text-base font-medium">{branch.address}</span>
           </div>
 
           {/* Hours */}
           <div className="flex items-center justify-center gap-2.5 text-slate-100 drop-shadow-md">
-            <Clock className="w-5 h-5 text-[#00E5FF] shrink-0" />
+            <Clock className="w-5 h-5 text-[#60A5FA] shrink-0" />
             <span className="text-sm sm:text-base font-medium">{branch.openingHours}</span>
           </div>
         </motion.div>
@@ -110,7 +110,7 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
             href={branchWALink}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-8 py-4 rounded-xl bg-[#00E5FF] hover:bg-[#3bf0ff] text-slate-950 font-display font-black text-xs sm:text-sm tracking-wider uppercase flex items-center gap-2.5 shadow-xl shadow-[#00E5FF]/30 hover:shadow-[#00E5FF]/50 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+            className="px-8 py-4 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-display font-black text-xs sm:text-sm tracking-wider uppercase flex items-center gap-2.5 shadow-xl shadow-[#2563EB]/30 hover:shadow-[#2563EB]/50 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
           >
             <MessageCircle className="w-4 h-4" />
             <span>CHAT WHATSAPP CABANG</span>
@@ -121,9 +121,9 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
               href={branch.mapsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-8 py-4 rounded-xl bg-black/60 hover:bg-black/80 border border-white/30 hover:border-cyan-400 text-white font-display font-bold text-xs sm:text-sm tracking-wider uppercase flex items-center gap-2.5 backdrop-blur-md transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-lg"
+              className="px-8 py-4 rounded-xl bg-black/60 hover:bg-black/80 border border-white/30 hover:border-[#60A5FA] text-white font-display font-bold text-xs sm:text-sm tracking-wider uppercase flex items-center gap-2.5 backdrop-blur-md transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-lg"
             >
-              <Navigation className="w-4 h-4 text-[#00E5FF]" />
+              <Navigation className="w-4 h-4 text-[#60A5FA]" />
               <span>PETUNJUK GOOGLE MAPS</span>
               <ExternalLink className="w-3.5 h-3.5 text-slate-300" />
             </a>

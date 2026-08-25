@@ -34,7 +34,7 @@ export const AboutSection: React.FC = () => {
 
             {/* Secondary Floating Image */}
             {aboutContent.secondaryImage && (
-              <div className="hidden sm:block absolute -bottom-8 -right-6 w-48 sm:w-60 h-48 sm:h-60 rounded-2xl overflow-hidden border-2 border-cyan-400/40 shadow-2xl shadow-cyan-950/60 z-20">
+              <div className="hidden sm:block absolute -bottom-8 -right-6 w-48 sm:w-60 h-48 sm:h-60 rounded-2xl overflow-hidden border-2 border-[#2563EB] shadow-2xl shadow-[#2563EB]/20 z-20">
                 <img
                   src={aboutContent.secondaryImage}
                   alt="Leton Community Vibes"
@@ -53,9 +53,9 @@ export const AboutSection: React.FC = () => {
             transition={{ duration: 0.7 }}
             className="lg:col-span-6 flex flex-col"
           >
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-400/30 text-[#00E5FF] text-xs font-mono tracking-widest uppercase mb-4 w-fit">
-              <Flame className="w-3.5 h-3.5" />
-              <span>06 — {aboutContent.badge || 'BRAND PROFILE & CULTURE'}</span>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#60A5FA] text-xs font-mono tracking-widest uppercase mb-4 w-fit shadow-md">
+              <Flame className="w-3.5 h-3.5 text-[#60A5FA]" />
+              <span>07 — {aboutContent.badge || 'BRAND PROFILE & CULTURE'}</span>
             </div>
 
             <h2 className="font-display font-black text-3xl sm:text-5xl md:text-6xl text-white tracking-tight uppercase leading-[1.08]">
@@ -63,7 +63,7 @@ export const AboutSection: React.FC = () => {
             </h2>
 
             {aboutContent.subtitle && (
-              <p className="mt-2 text-sm sm:text-base font-bold tracking-wider text-[#00E5FF] uppercase">
+              <p className="mt-2 text-sm sm:text-base font-bold tracking-wider text-[#60A5FA] uppercase">
                 {aboutContent.subtitle}
               </p>
             )}
@@ -78,21 +78,21 @@ export const AboutSection: React.FC = () => {
               </p>
             )}
 
-            {/* Facts Grid */}
+            {/* Facts Grid - Soft Cream Containers with Dark Charcoal Text */}
             {aboutContent.facts && aboutContent.facts.length > 0 && (
               <div className="mt-10 grid grid-cols-2 gap-4">
                 {aboutContent.facts.map((fact) => (
                   <div
                     key={fact.id}
-                    className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-sm"
+                    className="p-4 rounded-2xl bg-[#FDFBF7]/95 backdrop-blur-md border border-[#2563EB]/20 shadow-md flex flex-col justify-between"
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <Coffee className="w-3.5 h-3.5 text-[#00E5FF]" />
-                      <span className="text-[11px] font-mono tracking-wider text-slate-400 uppercase">
+                      <Coffee className="w-3.5 h-3.5 text-[#2563EB]" />
+                      <span className="text-[11px] font-mono tracking-wider text-slate-500 uppercase font-bold">
                         {fact.label}
                       </span>
                     </div>
-                    <p className="text-xl sm:text-2xl font-display font-black text-white">
+                    <p className="text-xl sm:text-2xl font-display font-black text-[#1E293B]">
                       {fact.value}
                     </p>
                   </div>

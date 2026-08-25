@@ -22,7 +22,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
         setIsScrolled(false);
       }
 
-      const sections = ['home', 'chapter-5', 'chapter-6', 'let-go', 'menu', 'about', 'contact'];
+      const sections = ['home', 'chapter-5', 'chapter-6', 'let-go', 'menu', 'baristas', 'about', 'contact'];
       for (const sectionId of sections) {
         const el = document.getElementById(sectionId);
         if (el) {
@@ -45,6 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
     { label: 'CHAPTER 6', href: '#chapter-6', id: 'chapter-6' },
     { label: "LET'GO", href: '#let-go', id: 'let-go' },
     { label: 'MENU', href: '#menu', id: 'menu' },
+    { label: 'BARISTAS', href: '#baristas', id: 'baristas' },
     { label: 'ABOUT', href: '#about', id: 'about' },
     { label: 'CONTACT', href: '#contact', id: 'contact' },
   ];
@@ -69,35 +70,31 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
         id="main-navbar"
         className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
           isScrolled
-            ? 'bg-[#070b12]/90 backdrop-blur-md border-b border-cyan-500/20 py-3 shadow-xl shadow-black/50'
-            : 'bg-gradient-to-b from-[#070b12]/80 to-transparent py-5'
+            ? 'bg-[#070b12]/92 backdrop-blur-md border-b border-[#2563EB]/25 py-3 shadow-xl shadow-black/50'
+            : 'bg-gradient-to-b from-[#070b12]/85 to-transparent py-4 sm:py-5'
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-          {/* Logo & Brand */}
+          {/* Logo & Brand - Real Profile Image */}
           <a
             href="#home"
             onClick={(e) => handleNavClick(e, '#home')}
             className="flex items-center gap-3 group focus:outline-none"
             id="navbar-brand-logo"
           >
-            {siteSettings.logoUrl ? (
+            <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden border-2 border-[#2563EB] shadow-md shadow-[#2563EB]/30 group-hover:border-[#60A5FA] transition-all bg-slate-900 shrink-0">
               <img
-                src={siteSettings.logoUrl}
+                src={siteSettings.logoUrl || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
                 alt={siteSettings.brandName}
-                className="h-9 w-auto object-contain transition-transform group-hover:scale-105"
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                 referrerPolicy="no-referrer"
               />
-            ) : (
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#00E5FF] to-blue-600 flex items-center justify-center font-display font-black text-black text-lg tracking-wider shadow-lg shadow-[#00E5FF]/20 group-hover:rotate-3 transition-transform">
-                L
-              </div>
-            )}
+            </div>
             <div className="flex flex-col">
-              <span className="font-display font-black text-lg sm:text-xl tracking-wider text-white group-hover:text-[#00E5FF] transition-colors leading-none">
+              <span className="font-display font-black text-lg sm:text-xl tracking-wider text-white group-hover:text-[#60A5FA] transition-colors leading-none">
                 {siteSettings.brandName}
               </span>
-              <span className="text-[10px] uppercase font-bold tracking-widest text-[#00E5FF]/80 mt-1">
+              <span className="text-[10px] uppercase font-bold tracking-widest text-[#60A5FA] mt-1">
                 DUMAI SCENE
               </span>
             </div>
@@ -115,13 +112,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
                   onClick={(e) => handleNavClick(e, item.href)}
                   className={`px-3 py-1.5 text-xs xl:text-sm font-semibold tracking-wider transition-all rounded-md relative ${
                     isActive
-                      ? 'text-[#00E5FF] font-bold'
+                      ? 'text-[#60A5FA] font-bold'
                       : 'text-slate-300 hover:text-white hover:bg-slate-800/40'
                   }`}
                 >
                   {item.label}
                   {isActive && (
-                    <span className="absolute bottom-0 left-3 right-3 h-0.5 bg-[#00E5FF] rounded-full shadow-sm shadow-[#00E5FF]" />
+                    <span className="absolute bottom-0 left-3 right-3 h-0.5 bg-[#2563EB] rounded-full shadow-sm shadow-[#2563EB]" />
                   )}
                 </a>
               );
@@ -135,7 +132,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
               target="_blank"
               rel="noopener noreferrer"
               id="navbar-wa-cta"
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold tracking-wider rounded-xl bg-[#00E5FF] hover:bg-[#38eeff] text-slate-950 shadow-lg shadow-[#00E5FF]/20 hover:shadow-[#00E5FF]/40 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold tracking-wider rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] text-white shadow-lg shadow-[#2563EB]/25 hover:shadow-[#2563EB]/40 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
             >
               <MessageCircle className="w-3.5 h-3.5" />
               <span>WHATSAPP</span>
@@ -146,7 +143,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
                 onClick={onOpenAdmin}
                 id="navbar-admin-btn"
                 title="Buka Admin CMS"
-                className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 text-slate-400 hover:text-[#00E5FF] transition-all cursor-pointer"
+                className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 text-slate-400 hover:text-[#60A5FA] transition-all cursor-pointer"
               >
                 <Lock className="w-4 h-4" />
               </button>
@@ -159,7 +156,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
               <button
                 onClick={onOpenAdmin}
                 title="Buka Admin CMS"
-                className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-[#00E5FF]"
+                className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-[#60A5FA]"
               >
                 <Lock className="w-4 h-4" />
               </button>
@@ -167,7 +164,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               id="mobile-menu-toggle-btn"
-              className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-200 hover:text-[#00E5FF] focus:outline-none"
+              className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-200 hover:text-[#60A5FA] focus:outline-none"
               aria-label="Toggle Navigation Menu"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -181,8 +178,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
         <div className="fixed inset-0 z-50 lg:hidden flex flex-col bg-[#070b12]/98 backdrop-blur-xl animate-fadeIn">
           <div className="flex items-center justify-between p-5 border-b border-slate-800">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#00E5FF] flex items-center justify-center font-display font-black text-black text-base">
-                L
+              <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-[#2563EB] shrink-0">
+                <img
+                  src={siteSettings.logoUrl || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
+                  alt={siteSettings.brandName}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
               </div>
               <span className="font-display font-black text-lg tracking-wider text-white">
                 {siteSettings.brandName}
@@ -203,10 +205,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
                   key={item.id}
                   href={item.href}
                   onClick={(e) => handleNavClick(e, item.href)}
-                  className="flex items-center justify-between py-3 text-xl font-display font-bold tracking-wider text-slate-200 hover:text-[#00E5FF] border-b border-slate-800/60"
+                  className="flex items-center justify-between py-3 text-xl font-display font-bold tracking-wider text-slate-200 hover:text-[#60A5FA] border-b border-slate-800/60"
                 >
                   <span>{item.label}</span>
-                  <span className="text-xs font-mono text-[#00E5FF]/60 font-normal">
+                  <span className="text-xs font-mono text-[#60A5FA]/60 font-normal">
                     0{idx + 1}
                   </span>
                 </a>
@@ -219,7 +221,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setMobileMenuOpen(false)}
-                className="w-full py-3.5 px-4 rounded-xl bg-[#00E5FF] text-slate-950 font-bold text-center flex items-center justify-center gap-2 shadow-lg shadow-[#00E5FF]/20"
+                className="w-full py-3.5 px-4 rounded-xl bg-[#2563EB] text-white font-bold text-center flex items-center justify-center gap-2 shadow-lg shadow-[#2563EB]/25"
               >
                 <MessageCircle className="w-5 h-5" />
                 <span>ORDER VIA WHATSAPP</span>
@@ -231,7 +233,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
                     setMobileMenuOpen(false);
                     onOpenAdmin();
                   }}
-                  className="w-full py-3 px-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-[#00E5FF] font-semibold text-sm flex items-center justify-center gap-2"
+                  className="w-full py-3 px-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-[#60A5FA] font-semibold text-sm flex items-center justify-center gap-2"
                 >
                   <Lock className="w-4 h-4" />
                   <span>MASUK ADMIN CMS</span>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useContent } from '../../context/ContentContext';
-import { UtensilsCrossed, Layers, MapPin, Truck, Sparkles, ArrowRight, ShieldCheck, RefreshCw } from 'lucide-react';
+import { UtensilsCrossed, Layers, MapPin, Truck, Sparkles, ArrowRight, ShieldCheck, RefreshCw, Users } from 'lucide-react';
 
 interface DashboardOverviewProps {
   onNavigateTab: (tab: string) => void;
@@ -8,7 +8,7 @@ interface DashboardOverviewProps {
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigateTab }) => {
   const { data, isRealtimeConnected, lastUpdated, refreshData } = useContent();
-  const { menuItems, menuCategories, branches } = data;
+  const { menuItems, menuCategories, branches, baristas = [] } = data;
 
   const quickActions = [
     {
@@ -24,6 +24,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
       tab: 'menu',
       icon: UtensilsCrossed,
       color: 'text-emerald-400',
+    },
+    {
+      title: 'KELOLA TIM BARISTA',
+      description: 'Atur profil artisan, foto barista, jabatan, dan kopi favorit.',
+      tab: 'baristas',
+      icon: Users,
+      color: 'text-rose-400',
     },
     {
       title: 'EDIT CHAPTER 5 (SUDIRMAN)',
@@ -86,7 +93,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {/* Metric 1 */}
         <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
           <div>
@@ -117,7 +124,22 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
           </div>
         </div>
 
-        {/* Metric 3 */}
+        {/* Metric 3: Baristas */}
+        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-mono tracking-wider text-slate-400 uppercase">
+              Tim Barista
+            </span>
+            <p className="text-2xl sm:text-3xl font-display font-black text-white mt-1">
+              {baristas.length}
+            </p>
+          </div>
+          <div className="p-3 rounded-xl bg-rose-500/10 text-rose-400">
+            <Users className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Metric 4 */}
         <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
           <div>
             <span className="text-[11px] font-mono tracking-wider text-slate-400 uppercase">
@@ -132,8 +154,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
           </div>
         </div>
 
-        {/* Metric 4 */}
-        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+        {/* Metric 5 */}
+        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between col-span-2 sm:col-span-1">
           <div>
             <span className="text-[11px] font-mono tracking-wider text-slate-400 uppercase">
               Status Server
@@ -144,7 +166,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
                   isRealtimeConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
                 }`}
               />
-              <span className="font-display font-bold text-xs sm:text-sm text-white">
+              <span className="font-display font-bold text-xs text-white">
                 {isRealtimeConnected ? 'REALTIME LIVE' : 'SYNC POLLING'}
               </span>
             </div>

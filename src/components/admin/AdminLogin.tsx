@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useContent } from '../../context/ContentContext';
-import { Lock, User, KeyRound, ArrowLeft, Loader2, Sparkles } from 'lucide-react';
+import { Lock, User, KeyRound, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 
 interface AdminLoginProps {
   onBackToPublic: () => void;
@@ -8,7 +8,7 @@ interface AdminLoginProps {
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToPublic }) => {
   const { login, data } = useContent();
-  const [username, setUsername] = useState('admin');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -17,7 +17,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToPublic }) => {
     e.preventDefault();
     setErrorMessage('');
     if (!username.trim() || !password) {
-      setErrorMessage('Harap isi username dan password');
+      setErrorMessage('Password atau Username salah, silakan coba lagi.');
       return;
     }
 
@@ -25,8 +25,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToPublic }) => {
     try {
       const res = await login(username.trim(), password);
       if (!res.success) {
-        setErrorMessage(res.error || 'Username atau password tidak valid');
+        setErrorMessage(res.error || 'Password atau Username salah, silakan coba lagi.');
       }
+    } catch {
+      setErrorMessage('Password atau Username salah, silakan coba lagi.');
     } finally {
       setIsLoading(false);
     }
@@ -50,22 +52,27 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToPublic }) => {
       <div className="relative z-10 w-full max-w-md p-8 rounded-3xl bg-slate-900/90 border border-slate-800/90 shadow-2xl backdrop-blur-xl">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-[#00E5FF] to-blue-600 flex items-center justify-center font-display font-black text-black text-2xl shadow-xl shadow-cyan-500/20">
-            L
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl overflow-hidden border-2 border-[#2563EB] shadow-xl shadow-[#2563EB]/25 bg-slate-950 flex items-center justify-center">
+            <img
+              src={data.siteSettings.logoUrl || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
+              alt={data.siteSettings.brandName}
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
           </div>
           <h1 className="font-display font-black text-2xl text-white tracking-tight uppercase">
             {data.siteSettings.brandName} CMS
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-[#60A5FA] mt-1 font-mono font-medium">
             Portal Pengelolaan Konten & Real-Time Sync
           </p>
         </div>
 
         {/* Error Alert */}
         {errorMessage && (
-          <div className="mb-6 p-4 rounded-xl bg-rose-950/80 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2.5">
-            <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
-            <p>{errorMessage}</p>
+          <div className="mb-6 p-4 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-3 animate-shake">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <p className="font-medium">{errorMessage}</p>
           </div>
         )}
 
@@ -80,10 +87,14 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToPublic }) => {
               <input
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin"
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (errorMessage) setErrorMessage('');
+                }}
+                placeholder="Masukkan username"
                 required
-                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF] transition-colors"
+                autoComplete="username"
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#2563EB] transition-colors placeholder:text-slate-600"
               />
             </div>
           </div>
@@ -97,10 +108,14 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToPublic }) => {
               <input
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••••"
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (errorMessage) setErrorMessage('');
+                }}
+                placeholder="Masukkan password"
                 required
-                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF] transition-colors"
+                autoComplete="current-password"
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#2563EB] transition-colors placeholder:text-slate-600"
               />
             </div>
           </div>
@@ -109,7 +124,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToPublic }) => {
             type="submit"
             disabled={isLoading}
             id="admin-login-submit-btn"
-            className="w-full mt-2 py-3.5 px-4 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] text-slate-950 font-display font-bold text-sm tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg shadow-[#00E5FF]/20 transition-all cursor-pointer disabled:opacity-50"
+            className="w-full mt-2 py-3.5 px-4 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-display font-bold text-sm tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg shadow-[#2563EB]/25 transition-all cursor-pointer disabled:opacity-50"
           >
             {isLoading ? (
               <>
@@ -124,28 +139,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToPublic }) => {
             )}
           </button>
         </form>
-
-        {/* Initial Credentials Hint */}
-        <div className="mt-6 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] text-slate-400 font-mono flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-1.5 text-cyan-400 font-bold mb-1">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Kredensial Default (Lokal):</span>
-            </div>
-            <p>Username: <span className="text-white font-semibold">admin</span></p>
-            <p>Password: <span className="text-white font-semibold">LetonAdmin2026!</span></p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setUsername('admin');
-              setPassword('LetonAdmin2026!');
-            }}
-            className="px-2.5 py-1.5 rounded-lg bg-cyan-500/15 border border-cyan-400/30 hover:bg-cyan-400/30 text-[#00E5FF] text-[10px] font-bold uppercase transition-all cursor-pointer"
-          >
-            Gunakan
-          </button>
-        </div>
       </div>
     </div>
   );

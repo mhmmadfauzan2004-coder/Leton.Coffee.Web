@@ -1,6 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { LetonData, AuthState } from '../types';
 import { initialLetonData } from '../data/initialData';
+import {
+  loadStoredContent,
+  saveStoredContent,
+  clearStoredContent,
+  hasStoredContent,
+  sanitizeLoadedData,
+  LETON_STORAGE_KEY,
+} from '../utils/storage';
 
 interface ToastInfo {
   id: string;
@@ -36,15 +44,19 @@ export const DEFAULT_ADMIN_USERNAME = 'admin';
 export const DEFAULT_ADMIN_PASSWORD = 'LetonAdmin2026!';
 
 export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [data, setData] = useState<LetonData>(initialLetonData);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  // 1. Initialize data strictly from localStorage first (or fallback to initialLetonData if localStorage is empty)
+  const [data, setData] = useState<LetonData>(() => {
+    return loadStoredContent();
+  });
+
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState<boolean>(false);
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
   const [toasts, setToasts] = useState<ToastInfo[]>([]);
 
   const [auth, setAuth] = useState<AuthState>(() => {
-    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
-    const username = localStorage.getItem(USERNAME_STORAGE_KEY);
+    const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_STORAGE_KEY) : null;
+    const username = typeof window !== 'undefined' ? localStorage.getItem(USERNAME_STORAGE_KEY) : null;
     return {
       isAuthenticated: Boolean(token),
       token: token || null,
@@ -64,22 +76,48 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Fetch content from server
+  // Fetch content from server, without overwriting existing local admin edits unless server is newer
   const refreshData = useCallback(async () => {
     try {
       const res = await fetch('/api/content', { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json && json.siteSettings) {
-          setData(json);
-          setLastUpdated(Date.now());
+          const sanitizedServerData = sanitizeLoadedData(json);
+          // If no local modifications exist yet in localStorage, hydrate from server
+          if (!hasStoredContent()) {
+            setData(sanitizedServerData);
+            saveStoredContent(sanitizedServerData);
+            setLastUpdated(Date.now());
+          }
         }
       }
     } catch (err) {
-      console.warn('Could not fetch initial content, using cached data:', err);
+      console.warn('Network sync notice (using local persistent storage):', err);
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  // Multi-tab sync via window storage event
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === LETON_STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          const sanitized = sanitizeLoadedData(parsed);
+          setData(sanitized);
+          setLastUpdated(Date.now());
+        } catch (err) {
+          console.error('Error syncing storage across tabs:', err);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, []);
 
   // Realtime Server-Sent Events listener
@@ -101,7 +139,9 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
           try {
             const payload = JSON.parse(e.data);
             if (payload && payload.data && payload.data.siteSettings) {
-              setData(payload.data);
+              const liveData = sanitizeLoadedData(payload.data);
+              setData(liveData);
+              saveStoredContent(liveData);
               setLastUpdated(Date.now());
             }
           } catch (err) {
@@ -112,25 +152,18 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         eventSource.onerror = () => {
           setIsRealtimeConnected(false);
           eventSource?.close();
-          // Retry connection after 4 seconds
-          retryTimeout = setTimeout(connectSSE, 4000);
+          retryTimeout = setTimeout(connectSSE, 5000);
         };
       } catch (err) {
-        console.warn('SSE connection failed:', err);
+        console.warn('SSE connection notice:', err);
       }
     }
 
     connectSSE();
 
-    // Secondary background periodic check as fallback
-    const interval = setInterval(() => {
-      refreshData();
-    }, 15000);
-
     return () => {
       if (eventSource) eventSource.close();
       if (retryTimeout) clearTimeout(retryTimeout);
-      clearInterval(interval);
     };
   }, [refreshData]);
 
@@ -143,7 +176,6 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         .then((res) => res.json())
         .then((result) => {
           if (!result.isAuthenticated) {
-            // Keep local session if token exists
             const localToken = localStorage.getItem(TOKEN_STORAGE_KEY);
             if (!localToken) {
               logout();
@@ -154,7 +186,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [auth.token]);
 
-  // Save content to backend with local state fallback
+  // Save content permanently to LocalStorage and server API
   const saveData = async (newData: LetonData): Promise<boolean> => {
     try {
       if (!auth.isAuthenticated) {
@@ -163,35 +195,38 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return false;
       }
 
-      // Always update local React state and LocalStorage backup first
-      setData(newData);
+      // 1. Immediately write to localStorage & React state for instant 100% persistent local storage
+      const sanitized = sanitizeLoadedData(newData);
+      saveStoredContent(sanitized);
+      setData(sanitized);
       setLastUpdated(Date.now());
+
+      // 2. Background server API synchronization
       try {
-        localStorage.setItem('leton_cached_content', JSON.stringify(newData));
-      } catch {}
+        const res = await fetch('/api/content', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${auth.token || 'leton_local_token'}`,
+          },
+          body: JSON.stringify(sanitized),
+        });
 
-      const res = await fetch('/api/content', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${auth.token || 'leton_local_token'}`,
-        },
-        body: JSON.stringify(newData),
-      });
-
-      const json = await res.json().catch(() => ({ success: true }));
-      if (res.ok && json.success) {
-        showToast('Perubahan berhasil disimpan & disinkronkan secara real-time!', 'success');
-        return true;
-      } else {
-        // Even if server is slow or errored, local save succeeded
-        showToast('Perubahan berhasil disimpan di state lokal!', 'success');
-        return true;
+        const json = await res.json().catch(() => ({ success: true }));
+        if (res.ok && json.success) {
+          showToast('Perubahan berhasil disimpan permanen ke localStorage & cloud server!', 'success');
+          return true;
+        }
+      } catch (networkErr) {
+        console.warn('Server sync notice (saved locally in localStorage):', networkErr);
       }
-    } catch (err: any) {
-      console.warn('Save network notice (saved locally):', err);
-      showToast('Perubahan berhasil disimpan di memori & browser!', 'success');
+
+      showToast('Perubahan berhasil disimpan permanen di LocalStorage browser!', 'success');
       return true;
+    } catch (err: any) {
+      console.error('Save error:', err);
+      showToast('Gagal menyimpan data.', 'error');
+      return false;
     }
   };
 
@@ -227,7 +262,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Local Hardcoded Login (bypasses Supabase / external auth delays)
+  // Local Hardcoded Login with immediate feedback
   const login = async (inputUser: string, inputPass: string): Promise<{ success: boolean; error?: string }> => {
     const trimmedUser = inputUser.trim();
     
@@ -263,10 +298,10 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         body: JSON.stringify({ username: activeUsername, password: inputPass }),
       })
         .then((r) => r.json())
-        .then((data) => {
-          if (data && data.token) {
-            localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
-            setAuth((prev) => ({ ...prev, token: data.token }));
+        .then((d) => {
+          if (d && d.token) {
+            localStorage.setItem(TOKEN_STORAGE_KEY, d.token);
+            setAuth((prev) => ({ ...prev, token: d.token }));
           }
         })
         .catch(() => {});
@@ -277,7 +312,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     return {
       success: false,
-      error: 'Username atau password salah. Masukkan username: admin dan password: LetonAdmin2026!',
+      error: 'Password atau Username salah, silakan coba lagi.',
     };
   };
 
@@ -310,7 +345,6 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return { success: false, error: 'Silakan login terlebih dahulu' };
       }
 
-      // Check current password
       const storedPass = localStorage.getItem('leton_custom_pass') || DEFAULT_ADMIN_PASSWORD;
       if (currentPassword !== storedPass && currentPassword !== DEFAULT_ADMIN_PASSWORD) {
         return { success: false, error: 'Password saat ini salah' };
@@ -319,7 +353,6 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const updatedUser = newUsername?.trim() || auth.username || DEFAULT_ADMIN_USERNAME;
       const updatedPass = newPassword || currentPassword;
 
-      // Update local storage
       localStorage.setItem('leton_custom_user', updatedUser);
       localStorage.setItem('leton_custom_pass', updatedPass);
       localStorage.setItem(USERNAME_STORAGE_KEY, updatedUser);
@@ -329,7 +362,6 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         username: updatedUser,
       }));
 
-      // Also try updating backend
       fetch('/api/auth/change-credentials', {
         method: 'POST',
         headers: {
@@ -346,21 +378,21 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Reset data to defaults
+  // Reset data to defaults and clear localStorage
   const resetToDefaults = async (): Promise<boolean> => {
     try {
-      if (!auth.token) return false;
-      const res = await fetch('/api/reset-defaults', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${auth.token}` },
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setData(initialLetonData);
-        showToast('Data website berhasil direset ke konfigurasi awal.', 'info');
-        return true;
+      clearStoredContent();
+      setData(initialLetonData);
+
+      if (auth.token) {
+        fetch('/api/reset-defaults', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${auth.token}` },
+        }).catch(() => {});
       }
-      return false;
+
+      showToast('Data website berhasil direset ke konfigurasi awal.', 'info');
+      return true;
     } catch {
       return false;
     }

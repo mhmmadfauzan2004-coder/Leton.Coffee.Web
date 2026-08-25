@@ -4,7 +4,7 @@ export const initialLetonData: LetonData = {
   siteSettings: {
     brandName: "LETON COFFEE",
     tagline: "EVERYDAY SPECIALTY COFFEE & YOUTH CULTURE",
-    logoUrl: "",
+    logoUrl: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80",
     heroTitle: "ENERGY, COMMUNITY & SPECIALTY COFFEE",
     heroSubtitle: "DUMAI'S FAVORITE COFFEE SCENE",
     heroDescription: "Ruang temu generasi muda dengan sajian kopi spesialti berkarakter, atmosfer dinamis, dan semangat komunitas kreatif tanpa batas.",
@@ -155,6 +155,54 @@ export const initialLetonData: LetonData = {
       image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80",
       isAvailable: true,
       order: 8
+    }
+  ],
+  baristasContent: {
+    title: "MEET OUR BARISTAS",
+    subtitle: "THE CRAFTSMEN, ROASTERS & CREATIVE BREWERS",
+    badge: "06 — THE ARTISAN TEAM",
+    description: "Di balik setiap tegukan kopi Leton, ada dedikasi, keahlian teknik seduh, dan senyuman hangat dari tim barista kami yang siap menemani hari dan obrolanmu."
+  },
+  baristas: [
+    {
+      id: "barista-1",
+      name: "Farhan \"Aan\" Pratama",
+      role: "Head Barista & Roaster",
+      favoriteCoffee: "Leton Aren Signature",
+      description: "Mendedikasikan 6+ tahun mengeksplorasi profil sangrai spesialti dan menjaga konsistensi rasa di setiap cup Leton.",
+      image: "https://images.unsplash.com/photo-1577219491135-ce391730fb2c?auto=format&fit=crop&w=800&q=80",
+      instagram: "https://instagram.com",
+      order: 1
+    },
+    {
+      id: "barista-2",
+      name: "Dinda Kirana",
+      role: "Manual Brew Specialist",
+      favoriteCoffee: "Filter V60 Single Origin",
+      description: "Fokus pada ekstraksi presisi dan pouring technique untuk menonjolkan aroma floral dan keasaman manis alami biji kopi nusantara.",
+      image: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80",
+      instagram: "https://instagram.com",
+      order: 2
+    },
+    {
+      id: "barista-3",
+      name: "Rian Saputra",
+      role: "Mixologist & Latte Artist",
+      favoriteCoffee: "Cyan Ocean Cold Brew",
+      description: "Pecinta kreasi signature drink yang memadukan espresso segar dengan infusi buah tropis dan visual latte art presisi.",
+      image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=800&q=80",
+      instagram: "https://instagram.com",
+      order: 3
+    },
+    {
+      id: "barista-4",
+      name: "Bayu Andika",
+      role: "Let'GO Fleet Lead Barista",
+      favoriteCoffee: "Caramel Macchiato Chill",
+      description: "Menghadirkan keseruan mobile coffee bar Let'GO ke berbagai festival dan event berkesan di seluruh Dumai.",
+      image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=800&q=80",
+      instagram: "https://instagram.com",
+      order: 4
     }
   ],
   aboutContent: {

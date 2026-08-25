@@ -41,7 +41,7 @@ export const MenuSection: React.FC = () => {
       className="relative min-h-screen w-full bg-[#070b12] py-28 sm:py-36 border-t border-slate-800/60"
     >
       {/* Ambient background glow */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-[#2563EB]/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
         {/* Section Header */}
@@ -50,7 +50,7 @@ export const MenuSection: React.FC = () => {
             initial={{ opacity: 0, y: 15 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#00E5FF]/10 border border-[#00E5FF]/30 text-[#00E5FF] text-xs font-mono tracking-widest uppercase mb-4"
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#60A5FA] text-xs font-mono tracking-widest uppercase mb-4 shadow-md"
           >
             <UtensilsCrossed className="w-3.5 h-3.5" />
             <span>05 — CRAFTED MENU & SPECIALTY BEVERAGES</span>
@@ -85,7 +85,7 @@ export const MenuSection: React.FC = () => {
               onClick={() => setSelectedCategory('all')}
               className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-display font-bold tracking-wider uppercase whitespace-nowrap transition-all cursor-pointer ${
                 selectedCategory === 'all'
-                  ? 'bg-[#00E5FF] text-slate-950 shadow-md shadow-[#00E5FF]/30'
+                  ? 'bg-[#2563EB] text-white shadow-md shadow-[#2563EB]/30'
                   : 'bg-slate-900/90 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700'
               }`}
             >
@@ -101,7 +101,7 @@ export const MenuSection: React.FC = () => {
                   onClick={() => setSelectedCategory(cat.id)}
                   className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-display font-bold tracking-wider uppercase whitespace-nowrap transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-[#00E5FF] text-slate-950 shadow-md shadow-[#00E5FF]/30'
+                      ? 'bg-[#2563EB] text-white shadow-md shadow-[#2563EB]/30'
                       : 'bg-slate-900/90 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700'
                   }`}
                 >
@@ -118,7 +118,7 @@ export const MenuSection: React.FC = () => {
               placeholder="Cari menu favorit..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 placeholder-slate-500 text-xs focus:outline-none focus:border-[#00E5FF] transition-colors"
+              className="w-full px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 placeholder-slate-500 text-xs focus:outline-none focus:border-[#2563EB] transition-colors"
             />
           </div>
         </div>
@@ -133,7 +133,7 @@ export const MenuSection: React.FC = () => {
                 setSelectedCategory('all');
                 setSearchQuery('');
               }}
-              className="mt-4 px-4 py-2 text-xs font-bold text-[#00E5FF] hover:underline"
+              className="mt-4 px-4 py-2 text-xs font-bold text-[#60A5FA] hover:underline"
             >
               Reset Filter
             </button>
@@ -147,7 +147,7 @@ export const MenuSection: React.FC = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: (idx % 4) * 0.1 }}
-                className="group rounded-2xl bg-slate-900/70 border border-slate-800/80 hover:border-cyan-500/40 overflow-hidden flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:shadow-cyan-950/30 transform hover:-translate-y-1"
+                className="group rounded-2xl bg-[#FDFBF7]/95 backdrop-blur-md border border-[#2563EB]/20 hover:border-[#2563EB] overflow-hidden flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:shadow-[#2563EB]/15 transform hover:-translate-y-1 shadow-lg"
               >
                 <div>
                   {/* Image container */}
@@ -158,11 +158,11 @@ export const MenuSection: React.FC = () => {
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       referrerPolicy="no-referrer"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-60" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60" />
 
                     {/* Badge */}
                     {item.badge && (
-                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-[#00E5FF] text-slate-950 text-[10px] font-black font-mono tracking-wider uppercase shadow-md">
+                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-[#2563EB] text-white text-[10px] font-black font-mono tracking-wider uppercase shadow-md">
                         {item.badge}
                       </div>
                     )}
@@ -177,18 +177,18 @@ export const MenuSection: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Body Content */}
+                  {/* Body Content - High Contrast Dark Charcoal Text on Soft Cream */}
                   <div className="p-5">
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-display font-bold text-lg text-white group-hover:text-[#00E5FF] transition-colors leading-snug">
+                      <h3 className="font-display font-black text-lg text-[#1E293B] group-hover:text-[#2563EB] transition-colors leading-snug">
                         {item.name}
                       </h3>
-                      <span className="font-mono font-bold text-sm text-[#00E5FF] whitespace-nowrap">
+                      <span className="font-mono font-bold text-sm text-[#2563EB] whitespace-nowrap">
                         {formatRupiah(item.price)}
                       </span>
                     </div>
 
-                    <p className="mt-2.5 text-xs sm:text-sm text-slate-400 leading-relaxed line-clamp-2">
+                    <p className="mt-2.5 text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-2 font-normal">
                       {item.description}
                     </p>
                   </div>
@@ -202,8 +202,8 @@ export const MenuSection: React.FC = () => {
                     id={`order-wa-btn-${item.id}`}
                     className={`w-full py-2.5 px-4 rounded-xl font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       item.isAvailable
-                        ? 'bg-slate-800 hover:bg-[#00E5FF] text-slate-200 hover:text-slate-950 border border-slate-700/80 hover:border-[#00E5FF] shadow-sm'
-                        : 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed'
+                        ? 'bg-[#2563EB] hover:bg-[#1d4ed8] text-white shadow-sm shadow-[#2563EB]/25'
+                        : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                     }`}
                   >
                     <MessageCircle className="w-3.5 h-3.5" />

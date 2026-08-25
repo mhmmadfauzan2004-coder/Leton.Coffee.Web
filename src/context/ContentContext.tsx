@@ -54,6 +54,13 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
   const [toasts, setToasts] = useState<ToastInfo[]>([]);
 
+  // Automatically sync any data state changes to LocalStorage immediately
+  useEffect(() => {
+    if (data && data.siteSettings) {
+      saveStoredContent(data);
+    }
+  }, [data]);
+
   const [auth, setAuth] = useState<AuthState>(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_STORAGE_KEY) : null;
     const username = typeof window !== 'undefined' ? localStorage.getItem(USERNAME_STORAGE_KEY) : null;

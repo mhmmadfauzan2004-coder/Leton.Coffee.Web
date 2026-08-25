@@ -1,0 +1,190 @@
+import { LetonData } from '../types';
+
+export const initialLetonData: LetonData = {
+  siteSettings: {
+    brandName: "LETON COFFEE",
+    tagline: "EVERYDAY SPECIALTY COFFEE & YOUTH CULTURE",
+    logoUrl: "",
+    heroTitle: "ENERGY, COMMUNITY & SPECIALTY COFFEE",
+    heroSubtitle: "DUMAI'S FAVORITE COFFEE SCENE",
+    heroDescription: "Ruang temu generasi muda dengan sajian kopi spesialti berkarakter, atmosfer dinamis, dan semangat komunitas kreatif tanpa batas.",
+    heroBgImage: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=2000&q=85",
+    heroCtaMenuText: "EXPLORE MENU",
+    heroCtaOrderText: "ORDER VIA WHATSAPP"
+  },
+  branches: [
+    {
+      id: "chapter-5",
+      chapterNumber: "02",
+      chapterName: "CHAPTER 5",
+      branchName: "DUMAI SUDIRMAN",
+      badge: "THE URBAN HUB",
+      tagline: "Vibrant community scene in the heart of the city",
+      description: "Berlokasi strategis di pusat kota Sudirman, Chapter 5 adalah episentrum kreasi, diskusi santai, dan ritual ngopi harian anak muda Dumai dengan interior industrial modern dan outdoor space yang asyik.",
+      address: "Jl. Jend. Sudirman No. 88, Dumai Kota, Riau",
+      openingHours: "Setiap Hari: 08:00 – 23:00 WIB",
+      whatsapp: "6281234567890",
+      mapsUrl: "https://maps.google.com/?q=Leton+Coffee+Sudirman+Dumai",
+      bgImage: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1920&q=80",
+      buttonText: "PETUNJUK ARAH & DETAIL"
+    },
+    {
+      id: "chapter-6",
+      chapterNumber: "03",
+      chapterName: "CHAPTER 6",
+      branchName: "DUMAI RATU SIMA",
+      badge: "THE CHILL OUT SPOT",
+      tagline: "Open-air breeze, cozy seating & late night conversations",
+      description: "Menghadirkan suasana open-space yang lebih rileks di kawasan Ratu Sima. Tempat ternyaman untuk sunset hangout, acoustic vibes, dan menikmati sajian signature mocktail serta cold brew segar bersama teman.",
+      address: "Jl. Ratu Sima, Dumai Barat, Riau",
+      openingHours: "Setiap Hari: 09:00 – 23:30 WIB",
+      whatsapp: "6281234567890",
+      mapsUrl: "https://maps.google.com/?q=Leton+Coffee+Ratu+Sima+Dumai",
+      bgImage: "https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=1920&q=80",
+      buttonText: "PETUNJUK ARAH & DETAIL"
+    }
+  ],
+  mobileService: {
+    title: "LET'GO",
+    subtitle: "LETON COFFEE ON THE MOVE",
+    badge: "MOBILE COFFEE EXPERIENCE",
+    description: "Bawa atmosfer segar dan racikan barista Leton Coffee langsung ke titik acaramu! Solusi coffee pop-up berkelas untuk pesta, festival, dan kolaborasi brand.",
+    serviceInfo: "Unit mobile truck estetik dengan mesin espresso komersial, generator independen, dan barista profesional berpengalaman.",
+    eventInfo: "Melayani Wedding, Corporate Gathering, Music Concert, Birthday Party, Sports Event, hingga Community Meetup.",
+    serviceArea: "Area Jangkauan: Dumai Kota, Bukit Kapur, Sungai Sembilan, hingga Pekanbaru.",
+    whatsapp: "6281234567890",
+    whatsappMessage: "Halo Leton Coffee, saya tertarik menggunakan layanan Let’GO untuk event.",
+    ctaText: "BOOK FOR EVENT",
+    bgImage: "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=1920&q=80",
+    truckImage: "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=1200&q=80",
+    features: [
+      "Custom Branded Cups & Sleeves",
+      "Full Specialty Espresso Bar",
+      "High Capacity: 500+ Cups / Day",
+      "Signature Mocktails & Non-Coffee"
+    ]
+  },
+  menuCategories: [
+    { id: "signature", name: "SIGNATURE", order: 1 },
+    { id: "coffee", name: "COFFEE SERIES", order: 2 },
+    { id: "fruity", name: "FRUITY & MOCKTAIL", order: 3 },
+    { id: "non-coffee", name: "NON-COFFEE", order: 4 },
+    { id: "food", name: "FOOD & SNACKS", order: 5 }
+  ],
+  menuItems: [
+    {
+      id: "menu-1",
+      name: "Leton Aren Signature",
+      categoryId: "signature",
+      price: 22000,
+      description: "Espresso ganda berpadu dengan susu creamy segar dan sirup aren organik khas Leton.",
+      image: "https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&w=800&q=80",
+      isAvailable: true,
+      badge: "BESTSELLER",
+      order: 1
+    },
+    {
+      id: "menu-2",
+      name: "Cyan Ocean Cold Brew",
+      categoryId: "signature",
+      price: 25000,
+      description: "Cold brew 16 jam dengan infusi blue curacao citrus, sparkling soda, dan aroma daun mint segar.",
+      image: "https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=800&q=80",
+      isAvailable: true,
+      badge: "SIGNATURE",
+      order: 2
+    },
+    {
+      id: "menu-3",
+      name: "Caramel Macchiato Chill",
+      categoryId: "coffee",
+      price: 26000,
+      description: "Layer vanilla milk, shot espresso aromatik, disiram saus karamel butterscotch kental.",
+      image: "https://images.unsplash.com/photo-1485808191679-5f86510681a2?auto=format&fit=crop&w=800&q=80",
+      isAvailable: true,
+      order: 3
+    },
+    {
+      id: "menu-4",
+      name: "Americano Ice Bold",
+      categoryId: "coffee",
+      price: 18000,
+      description: "Single origin espresso shot dengan air murni dingin, menghadirkan rasa floral dan clean aftertaste.",
+      image: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=800&q=80",
+      isAvailable: true,
+      order: 4
+    },
+    {
+      id: "menu-5",
+      name: "Berry Sparkling Burst",
+      categoryId: "fruity",
+      price: 24000,
+      description: "Kombinasi raspberry compote, ekstrak leci segar, soda water berkarbonasi tinggi, dan lime.",
+      image: "https://images.unsplash.com/photo-1536935338788-846bb9981813?auto=format&fit=crop&w=800&q=80",
+      isAvailable: true,
+      badge: "REFRESHING",
+      order: 5
+    },
+    {
+      id: "menu-6",
+      name: "Kyoto Matcha Cream",
+      categoryId: "non-coffee",
+      price: 26000,
+      description: "Matcha premium asal Uji Kyoto berpadu dengan susu oat lembut dan foam vanila gurih.",
+      image: "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=800&q=80",
+      isAvailable: true,
+      badge: "POPULAR",
+      order: 6
+    },
+    {
+      id: "menu-7",
+      name: "Artisan Truffle Fries",
+      categoryId: "food",
+      price: 25000,
+      description: "Kentang goreng renyah dengan taburan keju parmesan dan siraman minyak truffle wangi.",
+      image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=800&q=80",
+      isAvailable: true,
+      order: 7
+    },
+    {
+      id: "menu-8",
+      name: "Croissant Smoked Beef Toast",
+      categoryId: "food",
+      price: 32000,
+      description: "Croissant panggang buttery dengan isian daging asap premium, keju leleh, dan mustard mayo.",
+      image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80",
+      isAvailable: true,
+      order: 8
+    }
+  ],
+  aboutContent: {
+    title: "MORE THAN JUST COFFEE.",
+    subtitle: "A COMMUNITY CULTURE BUILT ON PASSION & YOUTH SPIRIT",
+    badge: "OUR STORY",
+    description: "Leton Coffee bermula dari sebuah ide sederhana: bagaimana secangkir kopi berkualitas tinggi dapat menjadi titik temu untuk percakapan jujur, pertukaran ide kreatif, dan ruang bertumbuh bagi anak muda.",
+    secondaryDescription: "Dari Chapter 5 di Sudirman hingga Chapter 6 di Ratu Sima dan armada mobile Let'GO, kami terus berkomitmen menyajikan biji kopi pilihan terbaik dari petani Nusantara dengan teknik seduh presisi dan keramahan yang tulus.",
+    mainImage: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80",
+    secondaryImage: "https://images.unsplash.com/photo-1509785307050-d4066910ec1e?auto=format&fit=crop&w=1200&q=80",
+    facts: [
+      { id: "f1", label: "Cabang & Mobile Truck", value: "3 Lokasi" },
+      { id: "f2", label: "Cangkir Kopi Terjual / Hari", value: "1,200+" },
+      { id: "f3", label: "Komunitas & Event Aktif", value: "85+" },
+      { id: "f4", label: "Specialty Beans Quality", value: "100% Arabica" }
+    ]
+  },
+  contactSettings: {
+    title: "LET'S GET COFFEE.",
+    subtitle: "Kunjungi Chapter kami, undang Let'GO truck ke eventmu, atau pesan langsung ke meja/rumahmu.",
+    whatsapp: "6281234567890",
+    instagramUsername: "@letoncoffee",
+    instagramUrl: "https://instagram.com/letoncoffee",
+    googleMapsUrl: "https://maps.google.com/?q=Leton+Coffee+Dumai",
+    address: "Dumai, Riau — Indonesia",
+    openingHours: "Senin – Minggu: 08:00 – 23:30 WIB",
+    email: "halo@letoncoffee.com",
+    ctaWhatsappText: "CHAT VIA WHATSAPP",
+    ctaInstagramText: "FOLLOW INSTAGRAM",
+    ctaMapsText: "PETUNJUK GOOGLE MAPS",
+    footerText: "© 2026 Leton Coffee. Seluruh hak cipta dilindungi. Proudly brewed for the youth culture."
+  }
+};

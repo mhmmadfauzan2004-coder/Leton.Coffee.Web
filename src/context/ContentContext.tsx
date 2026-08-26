@@ -299,36 +299,42 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       // 1. Try uploading to Supabase Storage ('leton-images' bucket)
-      const supabaseUpload = await uploadImageToSupabase(file);
-      if (supabaseUpload.success && supabaseUpload.url) {
-        showToast('Foto berhasil diupload ke Supabase Storage!', 'success');
-        return supabaseUpload.url;
+      if (isSupabaseConfigured()) {
+        const supabaseUpload = await uploadImageToSupabase(file);
+        if (supabaseUpload.success && supabaseUpload.url) {
+          showToast('Foto berhasil diupload ke Supabase Storage!', 'success');
+          return supabaseUpload.url;
+        }
       }
 
-      // 2. Fallback to Express backend disk storage
-      const formData = new FormData();
-      formData.append('image', file);
+      // 2. Fallback to Express backend disk storage if available
+      try {
+        const formData = new FormData();
+        formData.append('image', file);
 
-      const res = await fetch(getApiUrl('/api/upload-image'), {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${auth.token || 'leton_local_token'}`,
-        },
-        body: formData,
-      });
+        const res = await fetch(getApiUrl('/api/upload-image'), {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${auth.token || 'leton_local_token'}`,
+          },
+          body: formData,
+        });
 
-      const json = await res.json();
-      if (res.ok && json.success && (json.url || json.fullUrl)) {
-        showToast('Foto berhasil diupload ke server!', 'success');
-        return json.url || json.fullUrl;
-      } else {
-        const errorMsg = supabaseUpload.error || json.error || 'Gagal mengupload foto.';
-        showToast(errorMsg, 'error');
-        return null;
+        if (res.ok) {
+          const json = await res.json().catch(() => null);
+          if (json && json.success && (json.url || json.fullUrl)) {
+            showToast('Foto berhasil diupload ke server!', 'success');
+            return json.url || json.fullUrl;
+          }
+        }
+      } catch (backendErr) {
+        // Silent fallback to local Base64 processing
       }
+
+      // Return null so ImageUploadField converts to high-quality compressed Base64
+      return null;
     } catch (err: any) {
-      console.warn('Upload error:', err);
-      showToast('Terjadi kesalahan saat upload foto. Pastikan koneksi dan Supabase Storage aktif.', 'error');
+      console.warn('Upload fallback to Base64:', err);
       return null;
     }
   };

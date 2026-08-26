@@ -1,9 +1,74 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
-import { KeyRound, User, RotateCcw, AlertTriangle, ShieldCheck, Check, Loader2 } from 'lucide-react';
+import {
+  getSupabaseAnonKey,
+  getSupabaseUrl,
+  setCustomSupabaseCredentials,
+  isSupabaseConfigured,
+  SUPABASE_STORAGE_BUCKET,
+  SUPABASE_TABLE_NAME,
+  fetchContentFromSupabase,
+} from '../../utils/supabase';
+import {
+  KeyRound,
+  User,
+  RotateCcw,
+  AlertTriangle,
+  ShieldCheck,
+  Check,
+  Loader2,
+  Database,
+  CloudUpload,
+  Radio,
+} from 'lucide-react';
 
 export const SettingsEditor: React.FC = () => {
-  const { auth, changeCredentials, resetToDefaults } = useContent();
+  const { auth, changeCredentials, resetToDefaults, showToast, isRealtimeConnected } = useContent();
+
+  // Supabase Cloud Config State
+  const [supabaseKeyInput, setSupabaseKeyInput] = useState('');
+  const [supabaseUrlInput, setSupabaseUrlInput] = useState('');
+  const [isTestingSupabase, setIsTestingSupabase] = useState(false);
+  const [supabaseStatusMsg, setSupabaseStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    setSupabaseUrlInput(getSupabaseUrl());
+    const currentKey = getSupabaseAnonKey();
+    if (currentKey && currentKey !== 'GANTI_DENGAN_ANON_KEY_YANG_SUDAH_DIKOPY') {
+      setSupabaseKeyInput(currentKey);
+    }
+  }, []);
+
+  const handleSaveSupabaseCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSupabaseStatusMsg(null);
+
+    if (!supabaseKeyInput.trim() || supabaseKeyInput.trim().length < 20) {
+      setSupabaseStatusMsg({
+        type: 'error',
+        text: 'Anon Key tidak valid. Silakan salin "anon public key" dari Supabase Dashboard > Settings > API.',
+      });
+      return;
+    }
+
+    setIsTestingSupabase(true);
+    try {
+      setCustomSupabaseCredentials(supabaseKeyInput.trim(), supabaseUrlInput.trim());
+      const testData = await fetchContentFromSupabase();
+      setSupabaseStatusMsg({
+        type: 'success',
+        text: 'Koneksi Supabase aktif & berhasil terhubung ke database dan cloud storage!',
+      });
+      showToast('Kredensial Supabase berhasil disimpan!', 'success');
+    } catch (err: any) {
+      setSupabaseStatusMsg({
+        type: 'error',
+        text: 'Gagal menguji koneksi: ' + (err?.message || 'Pastikan Anon Key benar'),
+      });
+    } finally {
+      setIsTestingSupabase(false);
+    }
+  };
 
   // Password change form
   const [newUsername, setNewUsername] = useState(auth.username || 'admin');
@@ -73,6 +138,88 @@ export const SettingsEditor: React.FC = () => {
         <p className="text-xs text-slate-400 mt-1">
           Kelola kredensial login admin CMS, keamanan autentikasi, dan opsi reset data.
         </p>
+      </div>
+
+      {/* Supabase Cloud Connection Card */}
+      <div className="p-6 sm:p-8 rounded-3xl bg-slate-900/80 border border-[#2563EB]/40 space-y-6 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-[#2563EB]/20 border border-[#2563EB]/40 text-[#60A5FA]">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display font-bold text-lg text-white">KONEKSI SUPABASE CLOUD</h3>
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                  isRealtimeConnected ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                }`}>
+                  <Radio className="w-2.5 h-2.5 animate-pulse" />
+                  {isRealtimeConnected ? 'TERHUBUNG' : 'PERIKSA KEY'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Database Tabel: <code className="text-cyan-300 font-mono">{SUPABASE_TABLE_NAME}</code> • Storage Bucket: <code className="text-cyan-300 font-mono">{SUPABASE_STORAGE_BUCKET}</code>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {supabaseStatusMsg && (
+          <div className={`p-4 rounded-xl border text-xs flex items-center gap-2 ${
+            supabaseStatusMsg.type === 'success'
+              ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300'
+              : 'bg-rose-950/80 border-rose-500/40 text-rose-300'
+          }`}>
+            {supabaseStatusMsg.type === 'success' ? <Check className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+            <span>{supabaseStatusMsg.text}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSaveSupabaseCredentials} className="space-y-4">
+          <div>
+            <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
+              Supabase Project URL
+            </label>
+            <input
+              type="text"
+              value={supabaseUrlInput}
+              onChange={(e) => setSupabaseUrlInput(e.target.value)}
+              placeholder="https://galwyavdonfzuibrmswt.supabase.co"
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs font-mono focus:outline-none focus:border-[#2563EB]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
+              Supabase Anon Public API Key (Dari Dashboard Supabase &gt; Project Settings &gt; API)
+            </label>
+            <input
+              type="text"
+              value={supabaseKeyInput}
+              onChange={(e) => setSupabaseKeyInput(e.target.value)}
+              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs font-mono focus:outline-none focus:border-[#2563EB]"
+            />
+            <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+              Anda bisa menyalin Anon Key ini langsung dari Supabase Dashboard &gt; <b>Project Settings</b> &gt; <b>API</b> &gt; <b>Project API keys (anon public)</b>.
+            </p>
+          </div>
+
+          <div className="pt-2 flex justify-end">
+            <button
+              type="submit"
+              disabled={isTestingSupabase}
+              className="px-6 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#3b82f6] text-white font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 shadow-lg shadow-[#2563EB]/20 cursor-pointer disabled:opacity-50 transition-all"
+            >
+              {isTestingSupabase ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <CloudUpload className="w-4 h-4" />
+              )}
+              <span>{isTestingSupabase ? 'Menghubungkan...' : 'Simpan & Tes Koneksi Supabase'}</span>
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Account Credentials Card */}

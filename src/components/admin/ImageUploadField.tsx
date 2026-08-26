@@ -48,7 +48,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
           onChange(fallbackData);
           setUrlInput(fallbackData);
           setTempPreview(null);
-          showToast('Foto berhasil dimuat (Base64). Klik tombol "Simpan Perubahan" di bagian bawah untuk menyimpan!', 'info');
+          showToast('Foto berhasil dimuat. Klik tombol "Simpan Perubahan" untuk menyimpan!', 'info');
         }
       }
     } catch (err) {

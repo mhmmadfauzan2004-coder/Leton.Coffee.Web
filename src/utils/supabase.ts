@@ -4,23 +4,45 @@ import { initialLetonData } from '../data/initialData';
 import { sanitizeLoadedData } from './storage';
 
 // 1. Supabase Credentials Configuration
-export const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL || 'https://galwyavdonfzuibrmswt.supabase.co';
+export const getSupabaseUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    const customUrl = localStorage.getItem('leton_custom_supabase_url');
+    if (customUrl && customUrl.trim().length > 10) return customUrl.trim();
+  }
+  return import.meta.env.VITE_SUPABASE_URL || 'https://galwyavdonfzuibrmswt.supabase.co';
+};
 
-export const SUPABASE_ANON_KEY =
-  import.meta.env.VITE_SUPABASE_ANON_KEY || 'GANTI_DENGAN_ANON_KEY_YANG_SUDAH_DIKOPY';
+export const getSupabaseAnonKey = (): string => {
+  if (typeof window !== 'undefined') {
+    const customKey = localStorage.getItem('leton_custom_supabase_anon_key');
+    if (customKey && customKey.trim().length > 20) return customKey.trim();
+  }
+  return import.meta.env.VITE_SUPABASE_ANON_KEY || 'GANTI_DENGAN_ANON_KEY_YANG_SUDAH_DIKOPY';
+};
 
+export const setCustomSupabaseCredentials = (anonKey: string, url?: string) => {
+  if (typeof window !== 'undefined') {
+    if (anonKey) localStorage.setItem('leton_custom_supabase_anon_key', anonKey.trim());
+    if (url) localStorage.setItem('leton_custom_supabase_url', url.trim());
+    supabaseInstance = null; // reset client instance
+  }
+};
+
+export const SUPABASE_URL = getSupabaseUrl();
+export const SUPABASE_ANON_KEY = getSupabaseAnonKey();
 export const SUPABASE_STORAGE_BUCKET = 'leton-images';
 export const SUPABASE_TABLE_NAME = 'leton_content';
 export const SUPABASE_ROW_ID = 'default';
 
 // Check if Supabase has a valid production anonymous key
 export function isSupabaseConfigured(): boolean {
+  const key = getSupabaseAnonKey();
+  const url = getSupabaseUrl();
   return Boolean(
-    SUPABASE_URL &&
-      SUPABASE_ANON_KEY &&
-      SUPABASE_ANON_KEY !== 'GANTI_DENGAN_ANON_KEY_YANG_SUDAH_DIKOPY' &&
-      SUPABASE_ANON_KEY.length > 20
+    url &&
+      key &&
+      key !== 'GANTI_DENGAN_ANON_KEY_YANG_SUDAH_DIKOPY' &&
+      key.length > 20
   );
 }
 
@@ -29,7 +51,9 @@ let supabaseInstance: SupabaseClient | null = null;
 
 export function getSupabase(): SupabaseClient {
   if (!supabaseInstance) {
-    supabaseInstance = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    const url = getSupabaseUrl();
+    const key = getSupabaseAnonKey();
+    supabaseInstance = createClient(url, key, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,

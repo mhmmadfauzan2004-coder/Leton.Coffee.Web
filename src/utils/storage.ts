@@ -114,7 +114,7 @@ export function loadStoredContent(): LetonData {
       try {
         const parsed = JSON.parse(globalDataStr);
         if (parsed && typeof parsed === 'object') {
-          resultData = sanitizeLoadedData(parsed);
+          return sanitizeLoadedData(parsed);
         }
       } catch (e) {
         console.warn('Error parsing leton_global_data:', e);
@@ -122,26 +122,22 @@ export function loadStoredContent(): LetonData {
     }
 
     // 2. Check legacy storage key if primary was empty
-    if (!resultData) {
-      const primary = localStorage.getItem(LETON_STORAGE_KEY);
-      if (primary) {
-        try {
-          const parsed = JSON.parse(primary);
-          if (parsed && typeof parsed === 'object') {
-            resultData = sanitizeLoadedData(parsed);
-          }
-        } catch (e) {
-          console.warn('Error parsing leton_cms_content_v1:', e);
+    const primary = localStorage.getItem(LETON_STORAGE_KEY);
+    if (primary) {
+      try {
+        const parsed = JSON.parse(primary);
+        if (parsed && typeof parsed === 'object') {
+          return sanitizeLoadedData(parsed);
         }
+      } catch (e) {
+        console.warn('Error parsing leton_cms_content_v1:', e);
       }
     }
 
-    // If no full object found, start from initial data base
-    if (!resultData) {
-      resultData = { ...initialLetonData };
-    }
+    // Fallback starting from initial data base
+    resultData = { ...initialLetonData };
 
-    // 3. Granular overlay check - Ensure any individual photos or sections are restored
+    // 3. Granular check only if no global JSON existed
     const specificLogo = localStorage.getItem(LETON_KEY_LOGO_URL);
     if (specificLogo && specificLogo.trim()) {
       resultData.siteSettings.logoUrl = specificLogo;

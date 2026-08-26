@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { ContactSettings } from '../../types';
 import { Save, Loader2, RotateCcw } from 'lucide-react';
@@ -7,6 +7,12 @@ export const ContactEditor: React.FC = () => {
   const { data, saveData } = useContent();
   const [form, setForm] = useState<ContactSettings>({ ...data.contactSettings });
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (data && data.contactSettings) {
+      setForm({ ...data.contactSettings });
+    }
+  }, [data.contactSettings]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

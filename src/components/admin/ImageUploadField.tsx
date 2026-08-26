@@ -17,8 +17,9 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   onChange,
   description,
 }) => {
-  const { uploadImage } = useContent();
+  const { uploadImage, showToast } = useContent();
   const [isUploading, setIsUploading] = useState(false);
+  const [tempPreview, setTempPreview] = useState<string | null>(null);
   const [mode, setMode] = useState<'upload' | 'url'>('upload');
   const [urlInput, setUrlInput] = useState(value || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -27,27 +28,29 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Fast temporary preview
+    const localBlobUrl = URL.createObjectURL(file);
+    setTempPreview(localBlobUrl);
     setIsUploading(true);
-    try {
-      // 1. Convert to optimized Data URL to ensure instant local persistence and high performance
-      const base64Data = await optimizeImageFile(file, 1600, 0.85);
-      if (base64Data) {
-        onChange(base64Data);
-        setUrlInput(base64Data);
-      }
 
-      // 2. Also attempt upload to backend server storage for permanent asset hosting
-      try {
-        const serverUrl = await uploadImage(file);
-        if (serverUrl) {
-          onChange(serverUrl);
-          setUrlInput(serverUrl);
+    try {
+      // Direct upload to server storage
+      const serverUrl = await uploadImage(file);
+      if (serverUrl) {
+        onChange(serverUrl);
+        setUrlInput(serverUrl);
+        setTempPreview(null);
+      } else {
+        // Fallback: If network/auth fails, try compressed data
+        const fallbackData = await optimizeImageFile(file, 1200, 0.75);
+        if (fallbackData) {
+          onChange(fallbackData);
+          setUrlInput(fallbackData);
         }
-      } catch (err) {
-        console.log('Server upload fallback to Base64 data URL', err);
       }
     } catch (err) {
-      console.error('File conversion error:', err);
+      console.error('File upload error:', err);
+      showToast('Gagal mengunggah foto ke server. Silakan coba lagi.', 'error');
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -57,13 +60,17 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   const handleApplyUrl = () => {
     if (urlInput.trim()) {
       onChange(urlInput.trim());
+      setTempPreview(null);
     }
   };
 
   const handleRemove = () => {
     onChange('');
     setUrlInput('');
+    setTempPreview(null);
   };
+
+  const displayImage = tempPreview || value;
 
   return (
     <div className="space-y-2.5">
@@ -102,17 +109,17 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
       <div className="flex flex-col sm:flex-row gap-4 items-start pt-1">
         {/* Preview Box */}
         <div className="relative w-full sm:w-56 h-36 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center shrink-0 group">
-          {value ? (
+          {displayImage ? (
             <>
               <img
-                src={value}
+                src={displayImage}
                 alt="Preview Background"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 referrerPolicy="no-referrer"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
                 <span className="text-[9px] font-mono text-cyan-300 truncate max-w-full">
-                  {value.startsWith('data:') ? 'Base64 Data Image' : value}
+                  {displayImage.startsWith('data:') ? 'Local Image' : displayImage}
                 </span>
               </div>
               <button

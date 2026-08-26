@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { SiteSettings } from '../../types';
 import { ImageUploadField } from './ImageUploadField';
@@ -8,6 +8,12 @@ export const HomeEditor: React.FC = () => {
   const { data, saveData } = useContent();
   const [form, setForm] = useState<SiteSettings>({ ...data.siteSettings });
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (data && data.siteSettings) {
+      setForm({ ...data.siteSettings });
+    }
+  }, [data.siteSettings]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

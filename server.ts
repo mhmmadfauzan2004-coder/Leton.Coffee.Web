@@ -17,6 +17,7 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 // Directories
 const DATA_DIR = path.join(process.cwd(), 'data');
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads');
+const UPLOAD_ROOT_DIR = path.join(process.cwd(), 'uploads');
 const CONTENT_FILE = path.join(DATA_DIR, 'leton_content.json');
 const AUTH_FILE = path.join(DATA_DIR, 'admin_auth.json');
 
@@ -26,9 +27,13 @@ if (!fs.existsSync(DATA_DIR)) {
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
+if (!fs.existsSync(UPLOAD_ROOT_DIR)) {
+  fs.mkdirSync(UPLOAD_ROOT_DIR, { recursive: true });
+}
 
-// Serve uploaded images statically
+// Serve uploaded images statically with proper caching headers
 app.use('/uploads', express.static(UPLOAD_DIR));
+app.use('/uploads', express.static(UPLOAD_ROOT_DIR));
 app.use('/public/uploads', express.static(UPLOAD_DIR));
 
 // Setup Multer for secure image uploads
@@ -45,7 +50,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
@@ -61,18 +66,52 @@ function getContent(): LetonData {
     if (fs.existsSync(CONTENT_FILE)) {
       const raw = fs.readFileSync(CONTENT_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
-      if (!parsed.baristas || !Array.isArray(parsed.baristas)) {
-        parsed.baristas = initialLetonData.baristas;
+      if (parsed && typeof parsed === 'object' && parsed.siteSettings) {
+        return {
+          siteSettings: {
+            ...initialLetonData.siteSettings,
+            ...(parsed.siteSettings || {}),
+          },
+          branches:
+            Array.isArray(parsed.branches) && parsed.branches.length > 0
+              ? parsed.branches
+              : initialLetonData.branches,
+          mobileService: {
+            ...initialLetonData.mobileService,
+            ...(parsed.mobileService || {}),
+          },
+          menuCategories:
+            Array.isArray(parsed.menuCategories) && parsed.menuCategories.length > 0
+              ? parsed.menuCategories
+              : initialLetonData.menuCategories,
+          menuItems:
+            Array.isArray(parsed.menuItems) && parsed.menuItems.length > 0
+              ? parsed.menuItems
+              : initialLetonData.menuItems,
+          baristas:
+            Array.isArray(parsed.baristas) && parsed.baristas.length > 0
+              ? parsed.baristas
+              : initialLetonData.baristas,
+          baristasContent: {
+            ...initialLetonData.baristasContent,
+            ...(parsed.baristasContent || {}),
+          },
+          aboutContent: {
+            ...initialLetonData.aboutContent,
+            ...(parsed.aboutContent || {}),
+          },
+          contactSettings: {
+            ...initialLetonData.contactSettings,
+            ...(parsed.contactSettings || {}),
+          },
+          updatedAt: parsed.updatedAt || Date.now(),
+        };
       }
-      if (!parsed.baristasContent) {
-        parsed.baristasContent = initialLetonData.baristasContent;
-      }
-      return parsed;
     }
   } catch (err) {
     console.error('Error reading content file, using initial data:', err);
   }
-  // Initialize with initialLetonData
+  // Initialize with initialLetonData if not existing or corrupted
   saveContent(initialLetonData);
   return initialLetonData;
 }
@@ -310,10 +349,10 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// 9. Upload image endpoint (Protected)
-app.post('/api/upload', (req, res) => {
+// 9. Upload image endpoint (Protected) - supports both /api/upload and /api/upload-image
+const handleImageUpload = (req: express.Request, res: express.Response) => {
   if (!verifyAuthHeader(req)) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ error: 'Unauthorized: Silakan login terlebih dahulu' });
   }
 
   upload.single('image')(req, res, (err) => {
@@ -334,7 +373,10 @@ app.post('/api/upload', (req, res) => {
       size: req.file.size,
     });
   });
-});
+};
+
+app.post('/api/upload', handleImageUpload);
+app.post('/api/upload-image', handleImageUpload);
 
 // 10. Reset content to defaults (Protected)
 app.post('/api/reset-defaults', (req, res) => {

@@ -83,7 +83,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Fetch content from server, without overwriting existing local admin edits unless server is newer
+  // Fetch content from server and hydrate state
   const refreshData = useCallback(async () => {
     try {
       const res = await fetch('/api/content', { cache: 'no-store' });
@@ -91,16 +91,13 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const json = await res.json();
         if (json && json.siteSettings) {
           const sanitizedServerData = sanitizeLoadedData(json);
-          // If no local modifications exist yet in localStorage, hydrate from server
-          if (!hasStoredContent()) {
-            setData(sanitizedServerData);
-            saveStoredContent(sanitizedServerData);
-            setLastUpdated(Date.now());
-          }
+          setData(sanitizedServerData);
+          saveStoredContent(sanitizedServerData);
+          setLastUpdated(Date.now());
         }
       }
     } catch (err) {
-      console.warn('Network sync notice (using local persistent storage):', err);
+      console.warn('Network sync notice (using local storage):', err);
     } finally {
       setIsLoading(false);
     }
@@ -149,21 +146,10 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
           try {
             const payload = JSON.parse(e.data);
             if (payload && payload.data && payload.data.siteSettings) {
-              // Only apply INITIAL_SYNC if localStorage is clean/empty, to protect user edited photos & content
-              if (payload.type === 'INITIAL_SYNC') {
-                if (!hasStoredContent()) {
-                  const liveData = sanitizeLoadedData(payload.data);
-                  setData(liveData);
-                  saveStoredContent(liveData);
-                  setLastUpdated(Date.now());
-                }
-              } else if (payload.type === 'CONTENT_UPDATE') {
-                // Live update from active admin action
-                const liveData = sanitizeLoadedData(payload.data);
-                setData(liveData);
-                saveStoredContent(liveData);
-                setLastUpdated(Date.now());
-              }
+              const liveData = sanitizeLoadedData(payload.data);
+              setData(liveData);
+              saveStoredContent(liveData);
+              setLastUpdated(Date.now());
             }
           } catch (err) {
             console.error('Error parsing SSE event:', err);
@@ -207,7 +193,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [auth.token]);
 
-  // Save content permanently to LocalStorage and server API
+  // Save content permanently to server API and local cache
   const saveData = async (newData: LetonData): Promise<boolean> => {
     try {
       if (!auth.isAuthenticated) {
@@ -216,13 +202,10 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return false;
       }
 
-      // 1. Immediately write to localStorage & React state for instant 100% persistent local storage
       const sanitized = sanitizeLoadedData(newData);
-      saveStoredContent(sanitized);
-      setData(sanitized);
-      setLastUpdated(Date.now());
 
-      // 2. Background server API synchronization
+      // 1. Send to server API
+      let serverSaved = false;
       try {
         const res = await fetch('/api/content', {
           method: 'POST',
@@ -235,14 +218,22 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         const json = await res.json().catch(() => ({ success: true }));
         if (res.ok && json.success) {
-          showToast('Perubahan berhasil disimpan permanen ke localStorage & cloud server!', 'success');
-          return true;
+          serverSaved = true;
         }
       } catch (networkErr) {
-        console.warn('Server sync notice (saved locally in localStorage):', networkErr);
+        console.warn('Server sync notice (saved locally in storage):', networkErr);
       }
 
-      showToast('Perubahan berhasil disimpan permanen di LocalStorage browser!', 'success');
+      // 2. Update local state and storage cache
+      setData(sanitized);
+      saveStoredContent(sanitized);
+      setLastUpdated(Date.now());
+
+      if (serverSaved) {
+        showToast('Perubahan berhasil disimpan permanen ke server!', 'success');
+      } else {
+        showToast('Perubahan disimpan di browser.', 'info');
+      }
       return true;
     } catch (err: any) {
       console.error('Save error:', err);
@@ -251,11 +242,11 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Upload image to server with base64 fallback
+  // Upload image to server disk storage
   const uploadImage = async (file: File): Promise<string | null> => {
     try {
       if (!auth.isAuthenticated) {
-        showToast('Sesi tidak valid untuk upload gambar.', 'error');
+        showToast('Sesi tidak valid untuk upload gambar. Silakan login terlebih dahulu.', 'error');
         return null;
       }
 
@@ -272,13 +263,15 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       const json = await res.json();
       if (res.ok && json.success && json.url) {
-        showToast('Foto berhasil diupload!', 'success');
+        showToast('Foto berhasil diupload ke server!', 'success');
         return json.url;
       } else {
+        showToast(json.error || 'Gagal mengupload foto.', 'error');
         return null;
       }
     } catch (err: any) {
-      console.warn('Upload fallback to direct base64:', err);
+      console.warn('Upload error:', err);
+      showToast('Terjadi kesalahan koneksi saat upload foto.', 'error');
       return null;
     }
   };

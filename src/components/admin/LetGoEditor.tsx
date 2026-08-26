@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { MobileService } from '../../types';
 import { ImageUploadField } from './ImageUploadField';
@@ -9,6 +9,12 @@ export const LetGoEditor: React.FC = () => {
   const [form, setForm] = useState<MobileService>({ ...data.mobileService });
   const [newFeature, setNewFeature] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (data && data.mobileService) {
+      setForm({ ...data.mobileService });
+    }
+  }, [data.mobileService]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { BaristaItem, BaristasSectionContent } from '../../types';
 import { ImageUploadField } from './ImageUploadField';
@@ -39,6 +39,15 @@ export const BaristaManager: React.FC = () => {
   const [baristasList, setBaristasList] = useState<BaristaItem[]>(() => {
     return [...(data.baristas || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
   });
+
+  useEffect(() => {
+    if (data.baristasContent) {
+      setHeaderForm(data.baristasContent);
+    }
+    if (data.baristas) {
+      setBaristasList([...data.baristas].sort((a, b) => (a.order || 0) - (b.order || 0)));
+    }
+  }, [data.baristasContent, data.baristas]);
 
   // Modal State for Add / Edit Barista
   const [isModalOpen, setIsModalOpen] = useState(false);

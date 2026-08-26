@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { AboutContent, AboutFact } from '../../types';
 import { ImageUploadField } from './ImageUploadField';
@@ -8,6 +8,12 @@ export const AboutEditor: React.FC = () => {
   const { data, saveData } = useContent();
   const [form, setForm] = useState<AboutContent>({ ...data.aboutContent });
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (data && data.aboutContent) {
+      setForm({ ...data.aboutContent });
+    }
+  }, [data.aboutContent]);
 
   const [newStatLabel, setNewStatLabel] = useState('');
   const [newStatValue, setNewStatValue] = useState('');

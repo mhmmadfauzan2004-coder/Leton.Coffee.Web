@@ -7,11 +7,11 @@ import { Truck, MessageCircle, Calendar, MapPin, CheckCircle2 } from 'lucide-rea
 
 export const MobileTruckSection: React.FC = () => {
   const { data } = useContent();
-  const { mobileService } = data;
+  const { mobileService, contactSettings } = data;
 
   const eventWhatsAppLink = createWhatsAppLink(
-    mobileService.whatsapp,
-    mobileService.whatsappMessage || 'Halo Leton Coffee, saya tertarik menggunakan layanan Let’GO untuk event.'
+    contactSettings.whatsapp,
+    'Halo Leton Coffee, saya tertarik menggunakan layanan Let’GO untuk event.'
   );
 
   const bgPhoto = resolveMediaUrl(mobileService.bgImage || mobileService.truckImage);

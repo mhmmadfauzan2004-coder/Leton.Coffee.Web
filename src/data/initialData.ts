@@ -23,7 +23,6 @@ export const initialLetonData: LetonData = {
       description: "Berlokasi strategis di pusat kota Sudirman, Chapter 5 adalah episentrum kreasi, diskusi santai, dan ritual ngopi harian anak muda Dumai dengan interior industrial modern dan outdoor space yang asyik.",
       address: "Jl. Jend. Sudirman No. 88, Dumai Kota, Riau",
       openingHours: "Setiap Hari: 08:00 – 23:00 WIB",
-      whatsapp: "6281234567890",
       mapsUrl: "https://maps.google.com/?q=Leton+Coffee+Sudirman+Dumai",
       bgImage: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1920&q=80",
       buttonText: "PETUNJUK ARAH & DETAIL"
@@ -38,7 +37,6 @@ export const initialLetonData: LetonData = {
       description: "Menghadirkan suasana open-space yang lebih rileks di kawasan Ratu Sima. Tempat ternyaman untuk sunset hangout, acoustic vibes, dan menikmati sajian signature mocktail serta cold brew segar bersama teman.",
       address: "Jl. Ratu Sima, Dumai Barat, Riau",
       openingHours: "Setiap Hari: 09:00 – 23:30 WIB",
-      whatsapp: "6281234567890",
       mapsUrl: "https://maps.google.com/?q=Leton+Coffee+Ratu+Sima+Dumai",
       bgImage: "https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=1920&q=80",
       buttonText: "PETUNJUK ARAH & DETAIL"
@@ -52,8 +50,6 @@ export const initialLetonData: LetonData = {
     serviceInfo: "Unit mobile truck estetik dengan mesin espresso komersial, generator independen, dan barista profesional berpengalaman.",
     eventInfo: "Melayani Wedding, Corporate Gathering, Music Concert, Birthday Party, Sports Event, hingga Community Meetup.",
     serviceArea: "Area Jangkauan: Dumai Kota, Bukit Kapur, Sungai Sembilan, hingga Pekanbaru.",
-    whatsapp: "6281234567890",
-    whatsappMessage: "Halo Leton Coffee, saya tertarik menggunakan layanan Let’GO untuk event.",
     ctaText: "BOOK FOR EVENT",
     bgImage: "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=1920&q=80",
     truckImage: "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=1200&q=80",

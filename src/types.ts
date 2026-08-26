@@ -19,7 +19,6 @@ export interface BranchItem {
   description: string;
   address: string;
   openingHours: string;
-  whatsapp: string;
   mapsUrl: string;
   bgImage: string;
   buttonText: string;
@@ -34,8 +33,6 @@ export interface MobileService {
   serviceInfo: string;
   eventInfo: string;
   serviceArea: string;
-  whatsapp: string;
-  whatsappMessage: string;
   ctaText: string;
   bgImage: string;
   truckImage: string;

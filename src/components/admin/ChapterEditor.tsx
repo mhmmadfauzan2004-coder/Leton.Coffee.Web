@@ -24,7 +24,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
       description: '',
       address: '',
       openingHours: '',
-      whatsapp: '',
       mapsUrl: '',
       bgImage: '',
       buttonText: 'PETUNJUK ARAH',
@@ -175,7 +174,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
         />
       </div>
 
-      {/* Location, Hours, WhatsApp, Maps URL */}
+      {/* Location, Hours, Maps URL & Central WhatsApp Info */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
@@ -203,23 +202,9 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
           />
         </div>
 
-        <div>
+        <div className="sm:col-span-2">
           <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
-            Nomor WhatsApp Cabang
-          </label>
-          <input
-            type="text"
-            value={form.whatsapp}
-            onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-            required
-            placeholder="6281234567890"
-            className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
-            Link Google Maps
+            Link Google Maps Cabang
           </label>
           <input
             type="url"
@@ -229,6 +214,21 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
             className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
           />
         </div>
+      </div>
+
+      {/* Central WhatsApp Notice */}
+      <div className="p-4 rounded-xl bg-[#2563EB]/10 border border-[#2563EB]/30 flex items-center justify-between gap-4">
+        <div>
+          <span className="text-xs font-mono font-bold text-[#60A5FA] uppercase tracking-wider block">
+            Koneksi Kontak WhatsApp Terpusat
+          </span>
+          <p className="text-xs text-slate-300 mt-0.5">
+            Tombol chat cabang ini otomatis terhubung ke Nomor WhatsApp Pusat Leton Coffee: <span className="font-mono text-white font-bold">{data.contactSettings.whatsapp}</span>.
+          </p>
+        </div>
+        <span className="px-2.5 py-1 rounded-md bg-[#2563EB]/20 text-[#60A5FA] text-[10px] font-mono font-bold tracking-wider uppercase shrink-0">
+          1 NOMOR PUSAT
+        </span>
       </div>
 
       <div className="pt-4 flex justify-end">

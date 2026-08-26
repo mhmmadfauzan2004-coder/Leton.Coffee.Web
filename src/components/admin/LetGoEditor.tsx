@@ -167,7 +167,7 @@ export const LetGoEditor: React.FC = () => {
         </div>
       </div>
 
-      {/* Area & WhatsApp */}
+      {/* Area & CTA Text */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
@@ -184,20 +184,7 @@ export const LetGoEditor: React.FC = () => {
 
         <div>
           <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
-            Nomor WhatsApp Booking
-          </label>
-          <input
-            type="text"
-            value={form.whatsapp}
-            onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-            required
-            className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
-            Teks Tombol CTA
+            Teks Tombol CTA Booking
           </label>
           <input
             type="text"
@@ -208,20 +195,21 @@ export const LetGoEditor: React.FC = () => {
             className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
           />
         </div>
+      </div>
 
+      {/* Central WhatsApp Notice for Let'GO */}
+      <div className="p-4 rounded-xl bg-[#2563EB]/10 border border-[#2563EB]/30 flex items-center justify-between gap-4">
         <div>
-          <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
-            Pesan Otomatis WhatsApp
-          </label>
-          <input
-            type="text"
-            value={form.whatsappMessage}
-            onChange={(e) => setForm({ ...form, whatsappMessage: e.target.value })}
-            required
-            placeholder="Halo Leton Coffee, saya tertarik menggunakan layanan Let’GO untuk event."
-            className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
-          />
+          <span className="text-xs font-mono font-bold text-[#60A5FA] uppercase tracking-wider block">
+            Nomor WhatsApp Booking Terpusat
+          </span>
+          <p className="text-xs text-slate-300 mt-0.5">
+            Tombol booking armada LET'GO terhubung langsung ke Nomor WhatsApp Pusat: <span className="font-mono text-white font-bold">{data.contactSettings.whatsapp}</span> (dikelola di menu Pengaturan / Kontak).
+          </p>
         </div>
+        <span className="px-2.5 py-1 rounded-md bg-[#2563EB]/20 text-[#60A5FA] text-[10px] font-mono font-bold tracking-wider uppercase shrink-0">
+          1 NOMOR PUSAT
+        </span>
       </div>
 
       {/* Image Uploads */}

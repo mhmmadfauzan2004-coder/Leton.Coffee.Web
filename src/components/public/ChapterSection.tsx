@@ -11,8 +11,11 @@ interface ChapterSectionProps {
 }
 
 export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
+  const { data } = useContent();
+  const { contactSettings } = data;
+
   const branchWALink = createWhatsAppLink(
-    branch.whatsapp,
+    contactSettings.whatsapp,
     `Halo Leton Coffee ${branch.branchName}, saya ingin menanyakan meja dan pemesanan kopi.`
   );
 

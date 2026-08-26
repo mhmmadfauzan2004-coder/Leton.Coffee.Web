@@ -95,18 +95,28 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Fetch content from Supabase (primary) or server API and hydrate state
   const refreshData = useCallback(async () => {
     try {
-      // 1. Try Supabase database first
-      const supabaseData = await fetchContentFromSupabase();
-      if (supabaseData && supabaseData.siteSettings) {
-        const sanitizedData = sanitizeLoadedData(supabaseData);
-        setData(sanitizedData);
-        saveStoredContent(sanitizedData);
-        setLastUpdated(Date.now());
+      // 1. Try Supabase database if configured
+      if (isSupabaseConfigured()) {
+        const supabaseData = await fetchContentFromSupabase();
+        if (supabaseData && supabaseData.siteSettings) {
+          const sanitizedData = sanitizeLoadedData(supabaseData);
+          setData(sanitizedData);
+          saveStoredContent(sanitizedData);
+          setLastUpdated(Date.now());
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // 2. If user already has saved content in localStorage, prioritize it!
+      const currentStored = loadStoredContent();
+      if (hasStoredContent() && currentStored) {
+        setData(currentStored);
         setIsLoading(false);
         return;
       }
 
-      // 2. Fallback to Express backend API
+      // 3. Fallback to Express backend API only if local storage has never been edited
       const res = await fetch(getApiUrl('/api/content'), { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();

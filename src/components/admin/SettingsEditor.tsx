@@ -8,6 +8,7 @@ import {
   SUPABASE_STORAGE_BUCKET,
   SUPABASE_TABLE_NAME,
   fetchContentFromSupabase,
+  saveContentToSupabase,
 } from '../../utils/supabase';
 import {
   KeyRound,
@@ -23,12 +24,13 @@ import {
 } from 'lucide-react';
 
 export const SettingsEditor: React.FC = () => {
-  const { auth, changeCredentials, resetToDefaults, showToast, isRealtimeConnected } = useContent();
+  const { auth, data, changeCredentials, resetToDefaults, showToast, isRealtimeConnected, saveData } = useContent();
 
   // Supabase Cloud Config State
   const [supabaseKeyInput, setSupabaseKeyInput] = useState('');
   const [supabaseUrlInput, setSupabaseUrlInput] = useState('');
   const [isTestingSupabase, setIsTestingSupabase] = useState(false);
+  const [isSyncingData, setIsSyncingData] = useState(false);
   const [supabaseStatusMsg, setSupabaseStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -43,23 +45,36 @@ export const SettingsEditor: React.FC = () => {
     e.preventDefault();
     setSupabaseStatusMsg(null);
 
-    if (!supabaseKeyInput.trim() || supabaseKeyInput.trim().length < 20) {
+    const cleanKey = supabaseKeyInput.trim();
+    const cleanUrl = supabaseUrlInput.trim() || 'https://galwyavdonfzuibrmswt.supabase.co';
+
+    if (!cleanKey || cleanKey.length < 20) {
       setSupabaseStatusMsg({
         type: 'error',
-        text: 'Anon Key tidak valid. Silakan salin "anon public key" dari Supabase Dashboard > Settings > API.',
+        text: 'Anon Key tidak valid. Silakan salin "anon public key" dari Supabase Dashboard > Project Settings > API.',
       });
       return;
     }
 
     setIsTestingSupabase(true);
     try {
-      setCustomSupabaseCredentials(supabaseKeyInput.trim(), supabaseUrlInput.trim());
-      const testData = await fetchContentFromSupabase();
-      setSupabaseStatusMsg({
-        type: 'success',
-        text: 'Koneksi Supabase aktif & berhasil terhubung ke database dan cloud storage!',
-      });
-      showToast('Kredensial Supabase berhasil disimpan!', 'success');
+      setCustomSupabaseCredentials(cleanKey, cleanUrl);
+      
+      // Also automatically push current data to initialize table
+      const res = await saveContentToSupabase(data);
+      if (res.success) {
+        setSupabaseStatusMsg({
+          type: 'success',
+          text: 'Koneksi Supabase aktif & seluruh data CMS saat ini berhasil disinkronkan ke cloud!',
+        });
+        showToast('Koneksi Supabase berhasil disimpan & disinkronkan!', 'success');
+      } else {
+        setSupabaseStatusMsg({
+          type: 'success',
+          text: 'Kredensial disimpan! (Catatan: Pastikan tabel "leton_content" sudah dibuat di SQL Editor).',
+        });
+        showToast('Kredensial Supabase berhasil disimpan!', 'info');
+      }
     } catch (err: any) {
       setSupabaseStatusMsg({
         type: 'error',
@@ -67,6 +82,33 @@ export const SettingsEditor: React.FC = () => {
       });
     } finally {
       setIsTestingSupabase(false);
+    }
+  };
+
+  const handleManualSyncToCloud = async () => {
+    setIsSyncingData(true);
+    try {
+      const res = await saveContentToSupabase(data);
+      if (res.success) {
+        setSupabaseStatusMsg({
+          type: 'success',
+          text: 'Semua foto, menu, dan teks berhasil di-upload & disinkronkan ke Supabase Cloud!',
+        });
+        showToast('Semua data berhasil disinkronkan ke Supabase!', 'success');
+      } else {
+        setSupabaseStatusMsg({
+          type: 'error',
+          text: 'Gagal sinkronisasi: ' + (res.error || 'Pastikan tabel leton_content memiliki izin RLS public'),
+        });
+        showToast('Gagal sinkronisasi ke Supabase', 'error');
+      }
+    } catch (err: any) {
+      setSupabaseStatusMsg({
+        type: 'error',
+        text: 'Error saat sinkronisasi: ' + (err?.message || 'Periksa koneksi internet'),
+      });
+    } finally {
+      setIsSyncingData(false);
     }
   };
 
@@ -205,11 +247,25 @@ export const SettingsEditor: React.FC = () => {
             </p>
           </div>
 
-          <div className="pt-2 flex justify-end">
+          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={handleManualSyncToCloud}
+              disabled={isSyncingData || !supabaseKeyInput.trim()}
+              className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 transition-all"
+            >
+              {isSyncingData ? (
+                <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+              ) : (
+                <RotateCcw className="w-4 h-4 text-cyan-400" />
+              )}
+              <span>{isSyncingData ? 'Menyinkronkan...' : 'Sinkronkan Semua Data CMS ke Cloud'}</span>
+            </button>
+
             <button
               type="submit"
               disabled={isTestingSupabase}
-              className="px-6 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#3b82f6] text-white font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 shadow-lg shadow-[#2563EB]/20 cursor-pointer disabled:opacity-50 transition-all"
+              className="px-6 py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#3b82f6] text-white font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg shadow-[#2563EB]/20 cursor-pointer disabled:opacity-50 transition-all"
             >
               {isTestingSupabase ? (
                 <Loader2 className="w-4 h-4 animate-spin" />

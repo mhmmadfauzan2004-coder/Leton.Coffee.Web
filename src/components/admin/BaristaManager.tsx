@@ -411,14 +411,12 @@ export const BaristaManager: React.FC = () => {
             <form onSubmit={handleFormSubmit} className="space-y-4">
               {/* Image Upload */}
               <div>
-                <label className="block text-xs font-mono font-semibold text-slate-300 uppercase mb-1.5">
-                  Foto Barista
-                </label>
                 <ImageUploadField
                   value={baristaForm.image}
                   onChange={(url) => setBaristaForm({ ...baristaForm, image: url })}
-                  label="Upload / Masukkan URL Foto Barista"
-                  placeholder="https://images.unsplash.com/... atau upload dari HP/Laptop"
+                  label="Foto Barista (Potret / Profil)"
+                  aspectRatio="1:1"
+                  description="Rekomendasi rasio persegi 1:1 untuk potret wajah barista."
                 />
               </div>
 

@@ -585,7 +585,8 @@ export const MenuManager: React.FC = () => {
                   label="Foto Menu"
                   value={itemForm.image}
                   onChange={(url) => setItemForm({ ...itemForm, image: url })}
-                  description="Upload foto menu berkualitas tajam."
+                  aspectRatio="4:3"
+                  description="Upload foto menu dengan rasio 4:3 atau 1:1."
                 />
               </div>
 

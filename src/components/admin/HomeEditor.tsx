@@ -100,7 +100,8 @@ export const HomeEditor: React.FC = () => {
           label="Logo Brand Leton (Opsional - Kosongkan jika menggunakan teks)"
           value={form.logoUrl || ''}
           onChange={(url) => setForm({ ...form, logoUrl: url })}
-          description="Rekomendasi format PNG transparan atau SVG dengan tinggi sekitar 80px - 120px."
+          aspectRatio="1:1"
+          description="Rekomendasi format PNG transparan atau SVG dengan rasio persegi 1:1."
         />
       </div>
 
@@ -110,7 +111,8 @@ export const HomeEditor: React.FC = () => {
           label="Foto Background Hero Section"
           value={form.heroBgImage}
           onChange={(url) => setForm({ ...form, heroBgImage: url })}
-          description="Foto lanskap beresolusi tinggi yang menjadi background scene utama saat website pertama kali dibuka."
+          aspectRatio="16:9"
+          description="Foto lanskap 16:9 beresolusi tinggi yang menjadi background scene utama saat website pertama kali dibuka."
         />
       </div>
 

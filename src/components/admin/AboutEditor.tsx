@@ -167,7 +167,8 @@ export const AboutEditor: React.FC = () => {
             label="Foto Utama Story (Barista / Brewing)"
             value={form.mainImage}
             onChange={(url) => setForm({ ...form, mainImage: url })}
-            description="Foto berukuran besar di bagian kiri cerita."
+            aspectRatio="4:3"
+            description="Foto berukuran besar di bagian kiri cerita (Rasio 4:3)."
           />
         </div>
 
@@ -176,7 +177,8 @@ export const AboutEditor: React.FC = () => {
             label="Foto Sekunder (Komunitas / Detail Kopi)"
             value={form.secondaryImage || ''}
             onChange={(url) => setForm({ ...form, secondaryImage: url })}
-            description="Foto floating di sudut bawah foto utama."
+            aspectRatio="4:3"
+            description="Foto floating di sudut bawah foto utama (Rasio 4:3)."
           />
         </div>
       </div>

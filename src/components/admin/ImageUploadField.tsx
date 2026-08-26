@@ -2,7 +2,17 @@ import React, { useState, useRef } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { optimizeImageFile } from '../../utils/storage';
 import { resolveMediaUrl } from '../../utils/api';
-import { Upload, Link as LinkIcon, Image as ImageIcon, X, Loader2, Check, Sparkles } from 'lucide-react';
+import { ImageCropperModal } from './ImageCropperModal';
+import {
+  Upload,
+  Link as LinkIcon,
+  Image as ImageIcon,
+  X,
+  Loader2,
+  Check,
+  Sparkles,
+  Crop as CropIcon,
+} from 'lucide-react';
 
 interface ImageUploadFieldProps {
   label: string;
@@ -17,6 +27,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   value,
   onChange,
   description,
+  aspectRatio = 'free',
 }) => {
   const { uploadImage, showToast } = useContent();
   const [isUploading, setIsUploading] = useState(false);
@@ -25,25 +36,23 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   const [urlInput, setUrlInput] = useState(value || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Cropper state
+  const [cropperSource, setCropperSource] = useState<string | null>(null);
+  const [originalFile, setOriginalFile] = useState<File | null>(null);
 
-    // Fast temporary preview
-    const localBlobUrl = URL.createObjectURL(file);
-    setTempPreview(localBlobUrl);
+  const processAndUploadFile = async (fileToUpload: File, fallbackDataUrl?: string) => {
     setIsUploading(true);
-
     try {
-      // Direct upload to server storage
-      const serverUrl = await uploadImage(file);
+      // 1. Direct upload to server storage / Supabase
+      const serverUrl = await uploadImage(fileToUpload);
       if (serverUrl) {
         onChange(serverUrl);
         setUrlInput(serverUrl);
         setTempPreview(null);
+        showToast('Foto berhasil diunggah & disesuaikan!', 'success');
       } else {
         // Fallback: If cloud storage is not yet configured, compress into high-quality local Base64
-        const fallbackData = await optimizeImageFile(file, 1200, 0.75);
+        const fallbackData = fallbackDataUrl || (await optimizeImageFile(fileToUpload, 1200, 0.75));
         if (fallbackData) {
           onChange(fallbackData);
           setUrlInput(fallbackData);
@@ -53,10 +62,56 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
       }
     } catch (err) {
       console.error('File upload error:', err);
-      showToast('Gagal mengunggah foto ke server. Silakan coba lagi.', 'error');
+      showToast('Gagal memproses foto. Silakan coba lagi.', 'error');
     } finally {
       setIsUploading(false);
+      setCropperSource(null);
+      setOriginalFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setOriginalFile(file);
+
+    // Read file as Data URL to show in ImageCropperModal
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (reader.result && typeof reader.result === 'string') {
+        setCropperSource(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCropComplete = (croppedFile: File, croppedDataUrl: string) => {
+    setTempPreview(croppedDataUrl);
+    processAndUploadFile(croppedFile, croppedDataUrl);
+  };
+
+  const handleSkipCrop = () => {
+    if (originalFile) {
+      const localBlobUrl = URL.createObjectURL(originalFile);
+      setTempPreview(localBlobUrl);
+      processAndUploadFile(originalFile);
+    } else {
+      setCropperSource(null);
+    }
+  };
+
+  const handleCancelCrop = () => {
+    setCropperSource(null);
+    setOriginalFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleOpenCropperForExisting = () => {
+    if (displayImage) {
+      setCropperSource(resolveMediaUrl(displayImage));
+      setOriginalFile(null);
     }
   };
 
@@ -77,6 +132,18 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
 
   return (
     <div className="space-y-2.5">
+      {/* Cropper Modal */}
+      {cropperSource && (
+        <ImageCropperModal
+          imageSrc={cropperSource}
+          fileName={originalFile?.name || 'leton-image.jpg'}
+          defaultAspectRatio={aspectRatio}
+          onCropComplete={handleCropComplete}
+          onSkipCrop={handleSkipCrop}
+          onCancel={handleCancelCrop}
+        />
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <label className="text-xs font-mono tracking-wider text-slate-200 uppercase font-bold flex items-center gap-1.5">
           <Sparkles className="w-3.5 h-3.5 text-[#00E5FF]" />
@@ -120,11 +187,22 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 referrerPolicy="no-referrer"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-                <span className="text-[9px] font-mono text-cyan-300 truncate max-w-full">
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-2 gap-2">
+                <span className="text-[9px] font-mono text-cyan-300 truncate max-w-[120px]">
                   {displayImage.startsWith('data:') ? 'Local Image' : displayImage}
                 </span>
+
+                <button
+                  type="button"
+                  onClick={handleOpenCropperForExisting}
+                  title="Potong / Sesuaikan Foto Ini"
+                  className="px-2 py-1 rounded-md bg-[#00E5FF] text-slate-950 hover:bg-white text-[10px] font-mono font-bold flex items-center gap-1 shadow-md cursor-pointer transition-all shrink-0"
+                >
+                  <CropIcon className="w-2.5 h-2.5" />
+                  <span>Crop</span>
+                </button>
               </div>
+
               <button
                 type="button"
                 onClick={handleRemove}
@@ -137,7 +215,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
           ) : (
             <div className="flex flex-col items-center gap-2 text-slate-600 p-4 text-center">
               <ImageIcon className="w-8 h-8 text-slate-700" />
-              <span className="text-[10px] font-mono text-slate-500 uppercase">Belum ada foto latar</span>
+              <span className="text-[10px] font-mono text-slate-500 uppercase">Belum ada foto</span>
             </div>
           )}
 
@@ -170,9 +248,11 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
                 <Upload className="w-4 h-4 text-[#00E5FF] group-hover:scale-110 transition-transform" />
                 <span>Pilih Foto dari Perangkat / Kamera</span>
               </button>
-              <div className="flex items-center justify-between text-[10px] text-slate-500 px-1">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[10px] text-slate-500 px-1 gap-1">
                 <span>Mendukung format JPG, PNG, WEBP</span>
-                <span className="font-mono text-cyan-400/80">Otomatis Convert Base64 / Cloud Storage</span>
+                <span className="font-mono text-cyan-400/90 flex items-center gap-1">
+                  <CropIcon className="w-3 h-3 text-[#00E5FF]" /> Auto-Crop Tool & Cloud Sync Aktif
+                </span>
               </div>
             </div>
           ) : (

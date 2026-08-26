@@ -170,7 +170,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
           label={`FOTO LATAR BELAKANG CHAPTER (${form.branchName || form.chapterName})`}
           value={form.bgImage}
           onChange={(url) => setForm({ ...form, bgImage: url })}
-          description="Foto full-screen resolusi tinggi yang akan dijadikan latar belakang utama halaman chapter ini dengan efek dark overlay otomatis."
+          aspectRatio="16:9"
+          description="Foto full-screen 16:9 resolusi tinggi yang akan dijadikan latar belakang utama halaman chapter ini dengan efek dark overlay otomatis."
         />
       </div>
 

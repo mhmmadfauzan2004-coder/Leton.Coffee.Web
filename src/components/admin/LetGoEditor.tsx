@@ -231,7 +231,8 @@ export const LetGoEditor: React.FC = () => {
             label="FOTO LATAR BELAKANG CHAPTER (LET'GO)"
             value={form.bgImage}
             onChange={(url) => setForm({ ...form, bgImage: url })}
-            description="Foto full-screen suasana outdoor event untuk background utama halaman LET'GO."
+            aspectRatio="16:9"
+            description="Foto full-screen suasana outdoor event untuk background utama halaman LET'GO (Rasio 16:9)."
           />
         </div>
 
@@ -240,7 +241,8 @@ export const LetGoEditor: React.FC = () => {
             label="FOTO COFFEE TRUCK / SHOWCASE UTAMA"
             value={form.truckImage}
             onChange={(url) => setForm({ ...form, truckImage: url })}
-            description="Foto showcase kartu armada mobile / booth event Let'GO."
+            aspectRatio="4:3"
+            description="Foto showcase kartu armada mobile / booth event Let'GO (Rasio 4:3)."
           />
         </div>
       </div>

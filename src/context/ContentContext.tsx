@@ -9,6 +9,15 @@ import {
   sanitizeLoadedData,
   LETON_STORAGE_KEY,
 } from '../utils/storage';
+import { getApiUrl } from '../utils/api';
+import {
+  fetchContentFromSupabase,
+  saveContentToSupabase,
+  uploadImageToSupabase,
+  subscribeToSupabaseRealtime,
+  isSupabaseConfigured,
+  SUPABASE_STORAGE_BUCKET,
+} from '../utils/supabase';
 
 interface ToastInfo {
   id: string;
@@ -83,10 +92,22 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Fetch content from server and hydrate state
+  // Fetch content from Supabase (primary) or server API and hydrate state
   const refreshData = useCallback(async () => {
     try {
-      const res = await fetch('/api/content', { cache: 'no-store' });
+      // 1. Try Supabase database first
+      const supabaseData = await fetchContentFromSupabase();
+      if (supabaseData && supabaseData.siteSettings) {
+        const sanitizedData = sanitizeLoadedData(supabaseData);
+        setData(sanitizedData);
+        saveStoredContent(sanitizedData);
+        setLastUpdated(Date.now());
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Fallback to Express backend API
+      const res = await fetch(getApiUrl('/api/content'), { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json && json.siteSettings) {
@@ -97,7 +118,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       }
     } catch (err) {
-      console.warn('Network sync notice (using local storage):', err);
+      console.warn('Network sync notice (using local cache):', err);
     } finally {
       setIsLoading(false);
     }
@@ -127,16 +148,34 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, []);
 
-  // Realtime Server-Sent Events listener
+  // Realtime Supabase Channel + SSE fallback listener
   useEffect(() => {
     refreshData();
 
+    // 1. Setup Supabase Realtime Channel
+    const unsubscribeSupabase = subscribeToSupabaseRealtime(
+      (liveData) => {
+        setIsRealtimeConnected(true);
+        setData(liveData);
+        saveStoredContent(liveData);
+        setLastUpdated(Date.now());
+      },
+      (status) => {
+        if (status === 'SUBSCRIBED') {
+          setIsRealtimeConnected(true);
+        } else if (status === 'CLOSED' || status === 'ERROR') {
+          setIsRealtimeConnected(false);
+        }
+      }
+    );
+
+    // 2. Secondary fallback: Server-Sent Events listener
     let eventSource: EventSource | null = null;
     let retryTimeout: any = null;
 
     function connectSSE() {
       try {
-        eventSource = new EventSource('/api/events');
+        eventSource = new EventSource(getApiUrl('/api/events'));
 
         eventSource.onopen = () => {
           setIsRealtimeConnected(true);
@@ -157,18 +196,18 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         };
 
         eventSource.onerror = () => {
-          setIsRealtimeConnected(false);
           eventSource?.close();
-          retryTimeout = setTimeout(connectSSE, 5000);
+          retryTimeout = setTimeout(connectSSE, 10000);
         };
       } catch (err) {
-        console.warn('SSE connection notice:', err);
+        // SSE optional notice
       }
     }
 
     connectSSE();
 
     return () => {
+      unsubscribeSupabase();
       if (eventSource) eventSource.close();
       if (retryTimeout) clearTimeout(retryTimeout);
     };
@@ -177,7 +216,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Check auth validity on mount (local session preservation)
   useEffect(() => {
     if (auth.token && !auth.token.startsWith('leton_local_')) {
-      fetch('/api/auth/verify', {
+      fetch(getApiUrl('/api/auth/verify'), {
         headers: { Authorization: `Bearer ${auth.token}` },
       })
         .then((res) => res.json())
@@ -193,7 +232,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [auth.token]);
 
-  // Save content permanently to server API and local cache
+  // Save content permanently to Supabase Database, server API, and local storage cache
   const saveData = async (newData: LetonData): Promise<boolean> => {
     try {
       if (!auth.isAuthenticated) {
@@ -204,10 +243,17 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       const sanitized = sanitizeLoadedData(newData);
 
-      // 1. Send to server API
+      // 1. Save directly to Supabase Database (Primary)
+      let supabaseSaved = false;
+      const supabaseRes = await saveContentToSupabase(sanitized);
+      if (supabaseRes.success) {
+        supabaseSaved = true;
+      }
+
+      // 2. Also send to Express backend API (Secondary fallback)
       let serverSaved = false;
       try {
-        const res = await fetch('/api/content', {
+        const res = await fetch(getApiUrl('/api/content'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -221,16 +267,18 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
           serverSaved = true;
         }
       } catch (networkErr) {
-        console.warn('Server sync notice (saved locally in storage):', networkErr);
+        // Optional backend fallback notice
       }
 
-      // 2. Update local state and storage cache
+      // 3. Update local state and storage cache
       setData(sanitized);
       saveStoredContent(sanitized);
       setLastUpdated(Date.now());
 
-      if (serverSaved) {
-        showToast('Perubahan berhasil disimpan permanen ke server!', 'success');
+      if (supabaseSaved) {
+        showToast('Perubahan berhasil disimpan permanen ke Supabase Database & tersinkron Realtime!', 'success');
+      } else if (serverSaved) {
+        showToast('Perubahan berhasil disimpan permanen ke server backend!', 'success');
       } else {
         showToast('Perubahan disimpan di browser.', 'info');
       }
@@ -242,7 +290,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Upload image to server disk storage
+  // Upload image to Supabase Storage Bucket ('leton-images') with fallback to server
   const uploadImage = async (file: File): Promise<string | null> => {
     try {
       if (!auth.isAuthenticated) {
@@ -250,10 +298,18 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return null;
       }
 
+      // 1. Try uploading to Supabase Storage ('leton-images' bucket)
+      const supabaseUpload = await uploadImageToSupabase(file);
+      if (supabaseUpload.success && supabaseUpload.url) {
+        showToast('Foto berhasil diupload ke Supabase Storage!', 'success');
+        return supabaseUpload.url;
+      }
+
+      // 2. Fallback to Express backend disk storage
       const formData = new FormData();
       formData.append('image', file);
 
-      const res = await fetch('/api/upload', {
+      const res = await fetch(getApiUrl('/api/upload-image'), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${auth.token || 'leton_local_token'}`,
@@ -262,16 +318,17 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
 
       const json = await res.json();
-      if (res.ok && json.success && json.url) {
+      if (res.ok && json.success && (json.url || json.fullUrl)) {
         showToast('Foto berhasil diupload ke server!', 'success');
-        return json.url;
+        return json.url || json.fullUrl;
       } else {
-        showToast(json.error || 'Gagal mengupload foto.', 'error');
+        const errorMsg = supabaseUpload.error || json.error || 'Gagal mengupload foto.';
+        showToast(errorMsg, 'error');
         return null;
       }
     } catch (err: any) {
       console.warn('Upload error:', err);
-      showToast('Terjadi kesalahan koneksi saat upload foto.', 'error');
+      showToast('Terjadi kesalahan saat upload foto. Pastikan koneksi dan Supabase Storage aktif.', 'error');
       return null;
     }
   };
@@ -306,7 +363,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
 
       // Synchronize with server in background if available
-      fetch('/api/auth/login', {
+      fetch(getApiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: activeUsername, password: inputPass }),
@@ -333,7 +390,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Logout
   const logout = () => {
     if (auth.token) {
-      fetch('/api/auth/logout', {
+      fetch(getApiUrl('/api/auth/logout'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${auth.token}` },
       }).catch(() => {});
@@ -376,7 +433,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         username: updatedUser,
       }));
 
-      fetch('/api/auth/change-credentials', {
+      fetch(getApiUrl('/api/auth/change-credentials'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -399,7 +456,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setData(initialLetonData);
 
       if (auth.token) {
-        fetch('/api/reset-defaults', {
+        fetch(getApiUrl('/api/reset-defaults'), {
           method: 'POST',
           headers: { Authorization: `Bearer ${auth.token}` },
         }).catch(() => {});

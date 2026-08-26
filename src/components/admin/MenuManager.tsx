@@ -3,6 +3,7 @@ import { useContent } from '../../context/ContentContext';
 import { MenuItem, MenuCategory } from '../../types';
 import { ImageUploadField } from './ImageUploadField';
 import { formatRupiah } from '../../utils/formatters';
+import { resolveMediaUrl } from '../../utils/api';
 import {
   Plus,
   Edit2,
@@ -311,7 +312,7 @@ export const MenuManager: React.FC = () => {
                         {/* Thumbnail */}
                         <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-950 shrink-0 border border-slate-800 relative">
                           <img
-                            src={item.image}
+                            src={resolveMediaUrl(item.image)}
                             alt={item.name}
                             className="w-full h-full object-cover"
                             referrerPolicy="no-referrer"

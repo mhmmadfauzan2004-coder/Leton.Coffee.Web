@@ -1,6 +1,25 @@
 import React from 'react';
 import { useContent } from '../../context/ContentContext';
-import { UtensilsCrossed, Layers, MapPin, Truck, Sparkles, ArrowRight, ShieldCheck, RefreshCw, Users } from 'lucide-react';
+import { resolveMediaUrl } from '../../utils/api';
+import {
+  isSupabaseConfigured,
+  SUPABASE_STORAGE_BUCKET,
+  SUPABASE_TABLE_NAME,
+} from '../../utils/supabase';
+import {
+  UtensilsCrossed,
+  Layers,
+  MapPin,
+  Truck,
+  Sparkles,
+  ArrowRight,
+  ShieldCheck,
+  RefreshCw,
+  Users,
+  Database,
+  Radio,
+  CheckCircle2,
+} from 'lucide-react';
 
 interface DashboardOverviewProps {
   onNavigateTab: (tab: string) => void;
@@ -197,7 +216,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
               <div className="h-44 w-full relative overflow-hidden bg-slate-950">
                 {branch.bgImage ? (
                   <img
-                    src={branch.bgImage}
+                    src={resolveMediaUrl(branch.bgImage)}
                     alt={branch.branchName}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     referrerPolicy="no-referrer"
@@ -237,7 +256,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
             <div className="h-44 w-full relative overflow-hidden bg-slate-950">
               {data.mobileService.bgImage ? (
                 <img
-                  src={data.mobileService.bgImage}
+                  src={resolveMediaUrl(data.mobileService.bgImage)}
                   alt={data.mobileService.title}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   referrerPolicy="no-referrer"
@@ -309,10 +328,42 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
         </div>
       </div>
 
+      {/* Supabase Status Banner */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/90 border border-[#2563EB]/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-[#2563EB]/20 border border-[#2563EB]/50 flex items-center justify-center text-[#60A5FA] shrink-0">
+            <Database className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-display font-bold text-sm text-white uppercase tracking-wider">
+                SUPABASE DATABASE & STORAGE
+              </span>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                isRealtimeConnected ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+              }`}>
+                <Radio className="w-2.5 h-2.5 animate-pulse" />
+                {isRealtimeConnected ? 'REALTIME ACTIVE' : 'CONNECTING / STANDBY'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Tabel: <code className="text-[#60A5FA] font-mono">{SUPABASE_TABLE_NAME}</code> • Storage Bucket: <code className="text-[#60A5FA] font-mono">{SUPABASE_STORAGE_BUCKET}</code>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end text-xs text-slate-400 font-mono">
+          <span className="flex items-center gap-1 text-emerald-400">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Supabase Client Connected
+          </span>
+        </div>
+      </div>
+
       {/* Sync footer info */}
-      <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-500 font-mono flex items-center justify-between">
+      <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-500 font-mono flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <span>Terakhir disinkronkan: {new Date(lastUpdated).toLocaleTimeString('id-ID')}</span>
-        <span>Storage Backend: JSON Disk + Realtime SSE</span>
+        <span>Storage: Supabase ('{SUPABASE_TABLE_NAME}') + Bucket ('{SUPABASE_STORAGE_BUCKET}')</span>
       </div>
     </div>
   );

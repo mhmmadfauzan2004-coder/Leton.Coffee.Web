@@ -5,11 +5,29 @@ import { createServer as createViteServer } from 'vite';
 import multer from 'multer';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import cors from 'cors';
 import { initialLetonData } from './src/data/initialData';
 import { LetonData } from './src/types';
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+// CORS configuration supporting external frontend hosting (Cloudflare Pages, Vercel, Netlify, etc.)
+const corsOriginEnv = process.env.CORS_ORIGIN;
+const allowedOrigins = corsOriginEnv
+  ? corsOriginEnv.includes(',')
+    ? corsOriginEnv.split(',').map((s) => s.trim())
+    : corsOriginEnv.trim()
+  : '*';
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With', 'X-Accel-Buffering'],
+    credentials: true,
+  })
+);
 
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
@@ -31,10 +49,19 @@ if (!fs.existsSync(UPLOAD_ROOT_DIR)) {
   fs.mkdirSync(UPLOAD_ROOT_DIR, { recursive: true });
 }
 
-// Serve uploaded images statically with proper caching headers
-app.use('/uploads', express.static(UPLOAD_DIR));
-app.use('/uploads', express.static(UPLOAD_ROOT_DIR));
-app.use('/public/uploads', express.static(UPLOAD_DIR));
+// Serve uploaded images statically with cross-origin headers
+const staticImageOptions = {
+  maxAge: '7d',
+  setHeaders: (res: express.Response) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+  },
+};
+
+app.use('/uploads', express.static(UPLOAD_DIR, staticImageOptions));
+app.use('/uploads', express.static(UPLOAD_ROOT_DIR, staticImageOptions));
+app.use('/public/uploads', express.static(UPLOAD_DIR, staticImageOptions));
 
 // Setup Multer for secure image uploads
 const storage = multer.diskStorage({
@@ -212,12 +239,13 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
-// 2. Realtime SSE Stream Endpoint
-app.get('/api/events', (req, res) => {
+// 2. Realtime SSE Stream Endpoint (supports /api/events and /api/content/events)
+const handleSseEvents = (req: express.Request, res: express.Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.flushHeaders();
 
   // Send initial ping and current content
@@ -232,7 +260,10 @@ app.get('/api/events', (req, res) => {
       sseClients.splice(index, 1);
     }
   });
-});
+};
+
+app.get('/api/events', handleSseEvents);
+app.get('/api/content/events', handleSseEvents);
 
 // 3. Get Public Content
 app.get('/api/content', (_req, res) => {

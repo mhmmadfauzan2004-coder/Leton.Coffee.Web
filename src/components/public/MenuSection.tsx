@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { formatRupiah, createWhatsAppLink } from '../../utils/formatters';
+import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
 import { UtensilsCrossed, MessageCircle, Sparkles, AlertCircle } from 'lucide-react';
 
@@ -153,7 +154,7 @@ export const MenuSection: React.FC = () => {
                   {/* Image container */}
                   <div className="relative aspect-4/3 overflow-hidden bg-slate-950">
                     <img
-                      src={item.image}
+                      src={resolveMediaUrl(item.image)}
                       alt={item.name}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       referrerPolicy="no-referrer"

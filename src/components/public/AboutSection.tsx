@@ -1,5 +1,6 @@
 import React from 'react';
 import { useContent } from '../../context/ContentContext';
+import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
 import { Coffee, Flame } from 'lucide-react';
 
@@ -24,7 +25,7 @@ export const AboutSection: React.FC = () => {
           >
             <div className="relative rounded-2xl overflow-hidden border border-slate-700/80 shadow-2xl">
               <img
-                src={aboutContent.mainImage}
+                src={resolveMediaUrl(aboutContent.mainImage)}
                 alt="Leton Coffee Story"
                 className="w-full h-80 sm:h-96 lg:h-[450px] object-cover"
                 referrerPolicy="no-referrer"
@@ -36,7 +37,7 @@ export const AboutSection: React.FC = () => {
             {aboutContent.secondaryImage && (
               <div className="hidden sm:block absolute -bottom-8 -right-6 w-48 sm:w-60 h-48 sm:h-60 rounded-2xl overflow-hidden border-2 border-[#2563EB] shadow-2xl shadow-[#2563EB]/20 z-20">
                 <img
-                  src={aboutContent.secondaryImage}
+                  src={resolveMediaUrl(aboutContent.secondaryImage)}
                   alt="Leton Community Vibes"
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"

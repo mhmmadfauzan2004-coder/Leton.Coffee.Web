@@ -1,0 +1,226 @@
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { LetonData } from '../types';
+import { initialLetonData } from '../data/initialData';
+import { sanitizeLoadedData } from './storage';
+
+// 1. Supabase Credentials Configuration
+export const SUPABASE_URL =
+  import.meta.env.VITE_SUPABASE_URL || 'https://galwyavdonfzuibrmswt.supabase.co';
+
+export const SUPABASE_ANON_KEY =
+  import.meta.env.VITE_SUPABASE_ANON_KEY || 'GANTI_DENGAN_ANON_KEY_YANG_SUDAH_DIKOPY';
+
+export const SUPABASE_STORAGE_BUCKET = 'leton-images';
+export const SUPABASE_TABLE_NAME = 'leton_content';
+export const SUPABASE_ROW_ID = 'default';
+
+// Check if Supabase has a valid production anonymous key
+export function isSupabaseConfigured(): boolean {
+  return Boolean(
+    SUPABASE_URL &&
+      SUPABASE_ANON_KEY &&
+      SUPABASE_ANON_KEY !== 'GANTI_DENGAN_ANON_KEY_YANG_SUDAH_DIKOPY' &&
+      SUPABASE_ANON_KEY.length > 20
+  );
+}
+
+// 2. Initialize Supabase Client
+let supabaseInstance: SupabaseClient | null = null;
+
+export function getSupabase(): SupabaseClient {
+  if (!supabaseInstance) {
+    supabaseInstance = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10,
+        },
+      },
+    });
+  }
+  return supabaseInstance;
+}
+
+export const supabase = getSupabase();
+
+/**
+ * 3. Fetch CMS Content from Supabase Database
+ * Reads from table 'leton_content' (record with id 'default' or first row).
+ */
+export async function fetchContentFromSupabase(): Promise<LetonData | null> {
+  try {
+    const client = getSupabase();
+    
+    // Try querying by primary row id 'default'
+    const { data, error } = await client
+      .from(SUPABASE_TABLE_NAME)
+      .select('*')
+      .eq('id', SUPABASE_ROW_ID)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('Supabase fetch query note/warning:', error.message);
+      // Fallback: try fetching any row in the table if specific id not found
+      const { data: anyRow, error: anyError } = await client
+        .from(SUPABASE_TABLE_NAME)
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+
+      if (!anyError && anyRow) {
+        const rawContent = anyRow.content || anyRow.data || anyRow;
+        if (rawContent && typeof rawContent === 'object' && rawContent.siteSettings) {
+          return sanitizeLoadedData(rawContent);
+        }
+      }
+      return null;
+    }
+
+    if (data) {
+      const rawContent = data.content || data.data || data;
+      if (rawContent && typeof rawContent === 'object' && rawContent.siteSettings) {
+        return sanitizeLoadedData(rawContent);
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.warn('Failed to fetch from Supabase:', err);
+    return null;
+  }
+}
+
+/**
+ * 4. Save/Update CMS Content in Supabase Database
+ * Upserts content into 'leton_content' table.
+ */
+export async function saveContentToSupabase(contentData: LetonData): Promise<{ success: boolean; error?: string }> {
+  try {
+    const client = getSupabase();
+    const cleanData = sanitizeLoadedData(contentData);
+
+    const payload = {
+      id: SUPABASE_ROW_ID,
+      content: cleanData,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await client
+      .from(SUPABASE_TABLE_NAME)
+      .upsert(payload, { onConflict: 'id' });
+
+    if (error) {
+      console.error('Supabase upsert error:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('saveContentToSupabase exception:', err);
+    return { success: false, error: err?.message || 'Gagal menyimpan data ke Supabase.' };
+  }
+}
+
+/**
+ * 5. Upload Image to Supabase Storage Bucket ('leton-images')
+ * Accepts File, uploads to bucket with auto-generated clean name,
+ * and returns the permanent public URL.
+ */
+export async function uploadImageToSupabase(
+  file: File,
+  folder: string = 'uploads'
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  try {
+    const client = getSupabase();
+
+    // Clean filename and generate unique timestamped path
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const cleanFileName = file.name
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 30);
+    const uniquePath = `${folder}/${Date.now()}_${cleanFileName}.${fileExt}`;
+
+    // Upload to 'leton-images' bucket
+    const { error: uploadError } = await client.storage
+      .from(SUPABASE_STORAGE_BUCKET)
+      .upload(uniquePath, file, {
+        cacheControl: '3600',
+        upsert: true,
+        contentType: file.type || 'image/jpeg',
+      });
+
+    if (uploadError) {
+      console.error('Supabase Storage upload error:', uploadError);
+      return { success: false, error: uploadError.message };
+    }
+
+    // Retrieve public URL from bucket
+    const { data: urlData } = client.storage
+      .from(SUPABASE_STORAGE_BUCKET)
+      .getPublicUrl(uniquePath);
+
+    if (!urlData || !urlData.publicUrl) {
+      return { success: false, error: 'Gagal mendapatkan Public URL dari Supabase Storage.' };
+    }
+
+    return { success: true, url: urlData.publicUrl };
+  } catch (err: any) {
+    console.error('uploadImageToSupabase exception:', err);
+    return { success: false, error: err?.message || 'Gagal mengupload foto ke Supabase Storage.' };
+  }
+}
+
+/**
+ * 6. Setup Supabase Realtime Listener (supabase.channel)
+ * Listens for INSERT, UPDATE, or DELETE on 'leton_content' table.
+ * Instant broadcast update across all devices and browsers!
+ */
+export function subscribeToSupabaseRealtime(
+  onUpdate: (newData: LetonData) => void,
+  onStatusChange?: (status: 'SUBSCRIBED' | 'CONNECTING' | 'CLOSED' | 'ERROR') => void
+): () => void {
+  try {
+    const client = getSupabase();
+
+    const channel = client
+      .channel('leton_realtime_channel_' + Math.random().toString(36).substring(2, 9))
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: SUPABASE_TABLE_NAME,
+        },
+        (payload: any) => {
+          if (payload && payload.new) {
+            const rawContent = payload.new.content || payload.new.data || payload.new;
+            if (rawContent && typeof rawContent === 'object' && rawContent.siteSettings) {
+              const sanitized = sanitizeLoadedData(rawContent);
+              onUpdate(sanitized);
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          if (onStatusChange) onStatusChange('SUBSCRIBED');
+        } else if (status === 'CHANNEL_ERROR') {
+          if (onStatusChange) onStatusChange('ERROR');
+        } else if (status === 'CLOSED') {
+          if (onStatusChange) onStatusChange('CLOSED');
+        }
+      });
+
+    // Return cleanup function
+    return () => {
+      client.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('Realtime subscription error:', err);
+    return () => {};
+  }
+}

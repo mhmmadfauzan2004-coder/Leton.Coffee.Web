@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
+import { resolveMediaUrl } from '../../utils/api';
 import { Menu, X, MessageCircle, Lock } from 'lucide-react';
 
 interface NavbarProps {
@@ -84,7 +85,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
           >
             <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden border-2 border-[#2563EB] shadow-md shadow-[#2563EB]/30 group-hover:border-[#60A5FA] transition-all bg-slate-900 shrink-0">
               <img
-                src={siteSettings.logoUrl || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
+                src={resolveMediaUrl(siteSettings.logoUrl) || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
                 alt={siteSettings.brandName}
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                 referrerPolicy="no-referrer"
@@ -180,7 +181,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-[#2563EB] shrink-0">
                 <img
-                  src={siteSettings.logoUrl || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
+                  src={resolveMediaUrl(siteSettings.logoUrl) || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
                   alt={siteSettings.brandName}
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"

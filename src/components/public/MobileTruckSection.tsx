@@ -1,6 +1,7 @@
 import React from 'react';
 import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
+import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
 import { Truck, MessageCircle, Calendar, MapPin, CheckCircle2 } from 'lucide-react';
 
@@ -13,7 +14,7 @@ export const MobileTruckSection: React.FC = () => {
     mobileService.whatsappMessage || 'Halo Leton Coffee, saya tertarik menggunakan layanan Let’GO untuk event.'
   );
 
-  const bgPhoto = mobileService.bgImage || mobileService.truckImage;
+  const bgPhoto = resolveMediaUrl(mobileService.bgImage || mobileService.truckImage);
 
   return (
     <section

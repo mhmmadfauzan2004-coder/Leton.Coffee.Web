@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useContent } from '../../context/ContentContext';
+import { resolveMediaUrl } from '../../utils/api';
 import { Lock, User, KeyRound, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 
 interface AdminLoginProps {
@@ -54,7 +55,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToPublic }) => {
         <div className="text-center mb-8">
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl overflow-hidden border-2 border-[#2563EB] shadow-xl shadow-[#2563EB]/25 bg-slate-950 flex items-center justify-center">
             <img
-              src={data.siteSettings.logoUrl || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
+              src={resolveMediaUrl(data.siteSettings.logoUrl) || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
               alt={data.siteSettings.brandName}
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"

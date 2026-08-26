@@ -1,6 +1,7 @@
 import React from 'react';
 import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
+import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
 import { MessageCircle, ArrowDown, Sparkles } from 'lucide-react';
 
@@ -35,7 +36,7 @@ export const HeroSection: React.FC = () => {
           className="w-full h-full"
         >
           <img
-            src={siteSettings.heroBgImage}
+            src={resolveMediaUrl(siteSettings.heroBgImage)}
             alt={siteSettings.brandName}
             className="w-full h-full object-cover object-center filter brightness-60 contrast-110"
             referrerPolicy="no-referrer"

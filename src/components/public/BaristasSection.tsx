@@ -1,5 +1,6 @@
 import React from 'react';
 import { useContent } from '../../context/ContentContext';
+import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
 import { Sparkles, Instagram, Users } from 'lucide-react';
 
@@ -96,7 +97,7 @@ export const BaristasSection: React.FC = () => {
                 <div className="relative aspect-[3/4] w-full rounded-2xl sm:rounded-3xl overflow-hidden bg-slate-900 border border-slate-800/80 group-hover:border-[#2563EB]/60 transition-all duration-300 shadow-xl group-hover:shadow-2xl group-hover:shadow-[#2563EB]/10">
                   {barista.image ? (
                     <img
-                      src={barista.image}
+                      src={resolveMediaUrl(barista.image)}
                       alt={barista.name}
                       className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
                       referrerPolicy="no-referrer"

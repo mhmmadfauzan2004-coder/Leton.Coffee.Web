@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { optimizeImageFile } from '../../utils/storage';
+import { resolveMediaUrl } from '../../utils/api';
 import { Upload, Link as LinkIcon, Image as ImageIcon, X, Loader2, Check, Sparkles } from 'lucide-react';
 
 interface ImageUploadFieldProps {
@@ -112,7 +113,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
           {displayImage ? (
             <>
               <img
-                src={displayImage}
+                src={resolveMediaUrl(displayImage)}
                 alt="Preview Background"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 referrerPolicy="no-referrer"

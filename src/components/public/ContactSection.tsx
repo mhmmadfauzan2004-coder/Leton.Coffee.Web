@@ -1,6 +1,7 @@
 import React from 'react';
 import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
+import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
 import { MessageCircle, Instagram, MapPin, Clock, Mail, Navigation, Heart, Lock } from 'lucide-react';
 
@@ -169,7 +170,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenAdmin }) =
           <div className="flex items-center gap-3">
             <div className="w-7 h-7 rounded-full overflow-hidden border border-[#2563EB] shrink-0">
               <img
-                src={siteSettings.logoUrl || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
+                src={resolveMediaUrl(siteSettings.logoUrl) || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
                 alt={siteSettings.brandName}
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"

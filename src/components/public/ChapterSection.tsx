@@ -1,6 +1,7 @@
 import React from 'react';
 import { BranchItem } from '../../types';
 import { createWhatsAppLink } from '../../utils/formatters';
+import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
 import { MapPin, Clock, MessageCircle, ExternalLink, Navigation } from 'lucide-react';
 
@@ -15,13 +16,15 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
     `Halo Leton Coffee ${branch.branchName}, saya ingin menanyakan meja dan pemesanan kopi.`
   );
 
+  const resolvedBg = resolveMediaUrl(branch.bgImage);
+
   return (
     <section
       id={branch.id}
       className="relative min-h-screen w-full flex items-center justify-center overflow-hidden py-28 sm:py-36 px-4 sm:px-6 lg:px-8"
       style={{
-        backgroundImage: branch.bgImage
-          ? `linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url("${branch.bgImage}")`
+        backgroundImage: resolvedBg
+          ? `linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url("${resolvedBg}")`
           : 'linear-gradient(rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.85))',
         backgroundSize: 'cover',
         backgroundPosition: 'center',

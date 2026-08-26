@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { BaristaItem, BaristasSectionContent } from '../../types';
 import { ImageUploadField } from './ImageUploadField';
+import { resolveMediaUrl } from '../../utils/api';
 import {
   Users,
   Plus,
@@ -286,7 +287,7 @@ export const BaristaManager: React.FC = () => {
                   <div className="h-56 w-full relative bg-slate-950 overflow-hidden">
                     {barista.image ? (
                       <img
-                        src={barista.image}
+                        src={resolveMediaUrl(barista.image)}
                         alt={barista.name}
                         className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
                         referrerPolicy="no-referrer"

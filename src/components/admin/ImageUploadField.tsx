@@ -42,11 +42,13 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
         setUrlInput(serverUrl);
         setTempPreview(null);
       } else {
-        // Fallback: If network/auth fails, try compressed data
+        // Fallback: If cloud storage is not yet configured, compress into high-quality local Base64
         const fallbackData = await optimizeImageFile(file, 1200, 0.75);
         if (fallbackData) {
           onChange(fallbackData);
           setUrlInput(fallbackData);
+          setTempPreview(null);
+          showToast('Foto berhasil dimuat (Base64). Klik tombol "Simpan Perubahan" di bagian bawah untuk menyimpan!', 'info');
         }
       }
     } catch (err) {

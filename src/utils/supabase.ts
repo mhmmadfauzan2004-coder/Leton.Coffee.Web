@@ -248,3 +248,27 @@ export function subscribeToSupabaseRealtime(
     return () => {};
   }
 }
+
+/**
+ * 7. Update User Password in Supabase Auth
+ * Calls supabase.auth.updateUser({ password: newPassword })
+ */
+export async function updateSupabaseAuthPassword(newPassword: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const client = getSupabase();
+    const { data, error } = await client.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (error) {
+      console.warn('Supabase auth.updateUser error:', error.message);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.warn('updateSupabaseAuthPassword exception:', err);
+    return { success: false, error: err?.message || 'Gagal mengubah password di Supabase Auth' };
+  }
+}
+

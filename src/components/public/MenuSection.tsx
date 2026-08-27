@@ -148,18 +148,18 @@ export const MenuSection: React.FC = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: (idx % 4) * 0.1 }}
-                className="group rounded-2xl bg-[#FDFBF7]/95 backdrop-blur-md border border-[#2563EB]/20 hover:border-[#2563EB] overflow-hidden flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:shadow-[#2563EB]/15 transform hover:-translate-y-1 shadow-lg"
+                className="group rounded-2xl bg-[#121824]/90 backdrop-blur-md border border-slate-800/90 hover:border-[#2563EB]/80 overflow-hidden flex flex-col justify-between transition-all duration-300 hover:shadow-2xl hover:shadow-[#2563EB]/20 transform hover:-translate-y-1.5 shadow-lg shadow-black/50"
               >
-                <div>
+                <div className="flex-1 flex flex-col">
                   {/* Image container */}
-                  <div className="relative aspect-4/3 overflow-hidden bg-slate-950">
+                  <div className="relative aspect-4/3 overflow-hidden bg-slate-950 shrink-0">
                     <img
                       src={resolveMediaUrl(item.image)}
                       alt={item.name}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       referrerPolicy="no-referrer"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#121824] via-black/20 to-transparent opacity-80" />
 
                     {/* Badge */}
                     {item.badge && (
@@ -170,7 +170,7 @@ export const MenuSection: React.FC = () => {
 
                     {/* Availability Tag */}
                     {!item.isAvailable && (
-                      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center">
+                      <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs flex items-center justify-center">
                         <span className="px-3 py-1 rounded-md bg-rose-950/90 border border-rose-500/50 text-rose-300 font-mono text-xs font-bold uppercase tracking-wider">
                           HABIS / SOLD OUT
                         </span>
@@ -178,20 +178,22 @@ export const MenuSection: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Body Content - High Contrast Dark Charcoal Text on Soft Cream */}
-                  <div className="p-5">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-display font-black text-lg text-[#1E293B] group-hover:text-[#2563EB] transition-colors leading-snug">
-                        {item.name}
-                      </h3>
-                      <span className="font-mono font-bold text-sm text-[#2563EB] whitespace-nowrap">
-                        {formatRupiah(item.price)}
-                      </span>
-                    </div>
+                  {/* Body Content - High Contrast Light Text on Dark Glassmorphism */}
+                  <div className="p-5 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-display font-black text-lg text-white group-hover:text-[#60A5FA] transition-colors leading-snug">
+                          {item.name}
+                        </h3>
+                        <span className="font-mono font-bold text-sm sm:text-base text-[#60A5FA] whitespace-nowrap">
+                          {formatRupiah(item.price)}
+                        </span>
+                      </div>
 
-                    <p className="mt-2.5 text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-2 font-normal">
-                      {item.description}
-                    </p>
+                      <p className="mt-2.5 text-xs sm:text-sm text-slate-300 leading-relaxed line-clamp-2 font-normal">
+                        {item.description}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -203,8 +205,8 @@ export const MenuSection: React.FC = () => {
                     id={`order-wa-btn-${item.id}`}
                     className={`w-full py-2.5 px-4 rounded-xl font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       item.isAvailable
-                        ? 'bg-[#2563EB] hover:bg-[#1d4ed8] text-white shadow-sm shadow-[#2563EB]/25'
-                        : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        ? 'bg-[#2563EB] hover:bg-[#1d4ed8] text-white shadow-md shadow-[#2563EB]/25 hover:shadow-lg hover:shadow-[#2563EB]/40'
+                        : 'bg-slate-800/80 text-slate-500 border border-slate-700/50 cursor-not-allowed'
                     }`}
                   >
                     <MessageCircle className="w-3.5 h-3.5" />

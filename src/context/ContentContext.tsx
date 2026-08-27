@@ -16,6 +16,7 @@ import {
   uploadImageToSupabase,
   subscribeToSupabaseRealtime,
   isSupabaseConfigured,
+  updateSupabaseAuthPassword,
   SUPABASE_STORAGE_BUCKET,
 } from '../utils/supabase';
 
@@ -440,6 +441,18 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       const updatedUser = newUsername?.trim() || auth.username || DEFAULT_ADMIN_USERNAME;
       const updatedPass = newPassword || currentPassword;
+
+      // 1. Update Supabase Auth user password if new password is provided and Supabase is configured
+      if (newPassword && isSupabaseConfigured()) {
+        try {
+          const supabaseAuthRes = await updateSupabaseAuthPassword(newPassword);
+          if (!supabaseAuthRes.success) {
+            console.warn('Supabase auth.updateUser response:', supabaseAuthRes.error);
+          }
+        } catch (supabaseErr) {
+          console.warn('Supabase auth.updateUser call error:', supabaseErr);
+        }
+      }
 
       localStorage.setItem('leton_custom_user', updatedUser);
       localStorage.setItem('leton_custom_pass', updatedPass);

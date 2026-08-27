@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 
 export const SettingsEditor: React.FC = () => {
-  const { auth, data, changeCredentials, resetToDefaults, showToast, isRealtimeConnected, saveData } = useContent();
+  const { auth, data, changeCredentials, resetToDefaults, showToast, isRealtimeConnected, saveData, logout } = useContent();
 
   // Supabase Cloud Config State
   const [supabaseKeyInput, setSupabaseKeyInput] = useState('');
@@ -32,6 +32,35 @@ export const SettingsEditor: React.FC = () => {
   const [isTestingSupabase, setIsTestingSupabase] = useState(false);
   const [isSyncingData, setIsSyncingData] = useState(false);
   const [supabaseStatusMsg, setSupabaseStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Password change form
+  const [newUsername, setNewUsername] = useState(auth.username || 'admin');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPass, setIsChangingPass] = useState(false);
+  const [passError, setPassError] = useState('');
+  const [passSuccess, setPassSuccess] = useState('');
+  const [logoutCountdown, setLogoutCountdown] = useState<number | null>(null);
+
+  // Reset confirmation
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  // Auto-logout countdown timer when password changes
+  useEffect(() => {
+    if (logoutCountdown === null) return;
+
+    if (logoutCountdown > 0) {
+      const timer = setTimeout(() => {
+        setLogoutCountdown((prev) => (prev !== null ? prev - 1 : null));
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (logoutCountdown === 0) {
+      showToast('Sesi login ditutup untuk keamanan. Silakan login kembali dengan password baru.', 'info');
+      logout();
+    }
+  }, [logoutCountdown, logout, showToast]);
 
   useEffect(() => {
     setSupabaseUrlInput(getSupabaseUrl());
@@ -112,19 +141,6 @@ export const SettingsEditor: React.FC = () => {
     }
   };
 
-  // Password change form
-  const [newUsername, setNewUsername] = useState(auth.username || 'admin');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [isChangingPass, setIsChangingPass] = useState(false);
-  const [passError, setPassError] = useState('');
-  const [passSuccess, setPassSuccess] = useState('');
-
-  // Reset confirmation
-  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPassError('');
@@ -149,10 +165,18 @@ export const SettingsEditor: React.FC = () => {
     try {
       const res = await changeCredentials(currentPassword, newUsername, newPassword || undefined);
       if (res.success) {
-        setPassSuccess('Kredensial login berhasil diperbarui!');
-        setCurrentPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
+        if (newPassword) {
+          setPassSuccess(
+            'Password login berhasil diperbarui di Supabase Auth & database lokal! Anda akan otomatis logout dalam 3 detik untuk login ulang dengan password baru...'
+          );
+          setLogoutCountdown(3);
+          setCurrentPassword('');
+          setNewPassword('');
+          setConfirmPassword('');
+        } else {
+          setPassSuccess('Username admin berhasil diperbarui!');
+          setCurrentPassword('');
+        }
       } else {
         setPassError(res.error || 'Gagal mengubah kredensial.');
       }
@@ -300,9 +324,17 @@ export const SettingsEditor: React.FC = () => {
         )}
 
         {passSuccess && (
-          <div className="p-4 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
-            <Check className="w-4 h-4 shrink-0" />
-            <span>{passSuccess}</span>
+          <div className="p-4 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <Check className="w-4 h-4 shrink-0 text-emerald-400" />
+              <span className="font-semibold">{passSuccess}</span>
+            </div>
+            {logoutCountdown !== null && (
+              <div className="flex items-center gap-2 pl-6 text-emerald-400 font-mono text-[11px]">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#00E5FF]" />
+                <span>Otomatis logout dalam {logoutCountdown} detik...</span>
+              </div>
+            )}
           </div>
         )}
 

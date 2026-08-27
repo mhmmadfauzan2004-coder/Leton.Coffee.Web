@@ -10,7 +10,8 @@ import { AboutSection } from './components/public/AboutSection';
 import { ContactSection } from './components/public/ContactSection';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminLogin } from './components/admin/AdminLogin';
-import { MessageCircle, Lock, Loader2 } from 'lucide-react';
+import { PageSkeletonLoader } from './components/public/PageSkeletonLoader';
+import { MessageCircle, Lock } from 'lucide-react';
 import { createWhatsAppLink } from './utils/formatters';
 
 const AppContent: React.FC = () => {
@@ -52,17 +53,7 @@ const AppContent: React.FC = () => {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen w-full bg-[#070b12] flex flex-col items-center justify-center gap-4 text-cyan-400">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#00E5FF] to-blue-600 flex items-center justify-center font-display font-black text-black text-2xl shadow-xl shadow-cyan-500/20 animate-pulse">
-          L
-        </div>
-        <div className="flex items-center gap-2 text-xs font-mono tracking-widest uppercase">
-          <Loader2 className="w-4 h-4 animate-spin text-[#00E5FF]" />
-          <span>MEMUAT LETON COFFEE...</span>
-        </div>
-      </div>
-    );
+    return <PageSkeletonLoader />;
   }
 
   // If Admin View is active

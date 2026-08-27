@@ -58,7 +58,8 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return loadStoredContent();
   });
 
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  // Start with isLoading true to prevent flash of old/default fallback data
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState<boolean>(false);
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
   const [toasts, setToasts] = useState<ToastInfo[]>([]);
@@ -95,7 +96,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Fetch content from Supabase (primary) or server API and hydrate state
   const refreshData = useCallback(async () => {
     try {
-      // 1. Try Supabase database if configured
+      // 1. Try Supabase database if configured (Primary Source of Truth)
       if (isSupabaseConfigured()) {
         const supabaseData = await fetchContentFromSupabase();
         if (supabaseData && supabaseData.siteSettings) {

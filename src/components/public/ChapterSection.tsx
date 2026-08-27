@@ -1,5 +1,6 @@
 import React from 'react';
 import { BranchItem } from '../../types';
+import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';

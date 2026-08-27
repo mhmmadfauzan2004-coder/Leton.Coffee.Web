@@ -23,6 +23,7 @@ export interface BranchItem {
   bgImage: string;
   buttonText: string;
   badge: string;
+  bgOverlay?: number; // 0 - 100% overlay opacity, default 45%
 }
 
 export interface MobileService {

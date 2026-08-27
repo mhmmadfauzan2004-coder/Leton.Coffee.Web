@@ -21,20 +21,28 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
   );
 
   const resolvedBg = resolveMediaUrl(branch.bgImage);
+  const overlayPercent = typeof branch.bgOverlay === 'number' ? branch.bgOverlay : 45;
+  const overlayOpacity = Math.max(0, Math.min(100, overlayPercent)) / 100;
 
   return (
     <section
       id={branch.id}
-      className="relative min-h-screen w-full flex items-center justify-center overflow-hidden py-28 sm:py-36 px-4 sm:px-6 lg:px-8"
-      style={{
-        backgroundImage: resolvedBg
-          ? `linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url("${resolvedBg}")`
-          : 'linear-gradient(rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.85))',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-      }}
+      className="relative min-h-screen w-full flex items-center justify-center overflow-hidden py-28 sm:py-36 px-4 sm:px-6 lg:px-8 bg-[#070b12]"
     >
+      {/* Background Image Layer (Original high quality photo) */}
+      {resolvedBg && (
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-300 pointer-events-none"
+          style={{ backgroundImage: `url("${resolvedBg}")` }}
+        />
+      )}
+
+      {/* Dynamic CSS Dark Overlay Layer (Controlled per Chapter from Admin 0% - 100%) */}
+      <div
+        className="absolute inset-0 bg-black pointer-events-none transition-opacity duration-300"
+        style={{ opacity: overlayOpacity }}
+      />
+
       {/* Main Content Layout - Center Aligned Minimalist Floating Over Wallpaper */}
       <div className="relative z-10 max-w-4xl mx-auto w-full text-center flex flex-col items-center">
         {/* Chapter Pill */}

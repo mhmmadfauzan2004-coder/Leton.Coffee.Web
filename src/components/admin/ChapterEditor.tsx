@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { BranchItem } from '../../types';
 import { ImageUploadField } from './ImageUploadField';
-import { Save, Loader2, RotateCcw } from 'lucide-react';
+import { resolveMediaUrl } from '../../utils/api';
+import { Save, Loader2, RotateCcw, Sliders, Sun, Moon, Sparkles } from 'lucide-react';
 
 interface ChapterEditorProps {
   branchId: string;
@@ -27,6 +28,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
       mapsUrl: '',
       bgImage: '',
       buttonText: 'PETUNJUK ARAH',
+      bgOverlay: 45,
     }
   );
 
@@ -35,7 +37,10 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
   useEffect(() => {
     const branch = data.branches.find((b) => b.id === branchId);
     if (branch) {
-      setForm(branch);
+      setForm({
+        ...branch,
+        bgOverlay: typeof branch.bgOverlay === 'number' ? branch.bgOverlay : 45,
+      });
     }
   }, [branchId, data.branches]);
 
@@ -43,7 +48,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
     e.preventDefault();
     setIsSaving(true);
     try {
-      const updatedBranches = data.branches.map((b) => (b.id === branchId ? form : b));
+      const updatedBranches = data.branches.map((b) =>
+        b.id === branchId
+          ? { ...form, bgOverlay: typeof form.bgOverlay === 'number' ? form.bgOverlay : 45 }
+          : b
+      );
       await saveData({
         ...data,
         branches: updatedBranches,
@@ -55,9 +64,15 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
 
   const handleReset = () => {
     if (currentBranch) {
-      setForm({ ...currentBranch });
+      setForm({
+        ...currentBranch,
+        bgOverlay: typeof currentBranch.bgOverlay === 'number' ? currentBranch.bgOverlay : 45,
+      });
     }
   };
+
+  const currentOverlay = typeof form.bgOverlay === 'number' ? form.bgOverlay : 45;
+  const resolvedBgImage = resolveMediaUrl(form.bgImage);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8 max-w-4xl">
@@ -164,14 +179,126 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
       </div>
 
       {/* Background Image Upload */}
-      <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-md">
+      <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-md space-y-6">
         <ImageUploadField
           label={`FOTO LATAR BELAKANG CHAPTER (${form.branchName || form.chapterName})`}
           value={form.bgImage}
           onChange={(url) => setForm({ ...form, bgImage: url })}
           aspectRatio="16:9"
-          description="Foto full-screen 16:9 resolusi tinggi yang akan dijadikan latar belakang utama halaman chapter ini dengan efek dark overlay otomatis."
+          description="Foto full-screen 16:9 resolusi tinggi yang akan dijadikan latar belakang utama halaman chapter ini."
         />
+
+        {/* Overlay / Pencahayaan Foto Slider Control */}
+        <div className="pt-6 border-t border-slate-800/80 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-[#00E5FF]" />
+                <label className="text-xs font-mono font-bold tracking-wider text-white uppercase">
+                  Overlay / Pencahayaan Foto
+                </label>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Atur tingkat kegelapan overlay di atas foto background agar foto tetap tampak jernih dan teks cabang mudah dibaca.
+              </p>
+            </div>
+
+            {/* Current Value Display Badge */}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs font-mono text-slate-400">Tingkat Overlay:</span>
+              <span className="px-3 py-1 rounded-lg bg-[#00E5FF]/10 border border-[#00E5FF]/40 text-[#00E5FF] font-mono font-bold text-sm">
+                {currentOverlay}%
+              </span>
+            </div>
+          </div>
+
+          {/* Slider Bar */}
+          <div className="space-y-2 bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+              <span className="flex items-center gap-1">
+                <Sun className="w-3.5 h-3.5 text-amber-400" />
+                <span>0% (Terang / Tanpa Overlay)</span>
+              </span>
+              <span className="text-[#00E5FF] font-bold">45% (Default)</span>
+              <span className="flex items-center gap-1">
+                <span>100% (Sangat Gelap)</span>
+                <Moon className="w-3.5 h-3.5 text-indigo-400" />
+              </span>
+            </div>
+
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={currentOverlay}
+              onChange={(e) => setForm({ ...form, bgOverlay: parseInt(e.target.value, 10) })}
+              className="w-full h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-[#00E5FF] focus:outline-none focus:ring-2 focus:ring-[#00E5FF]/40"
+            />
+
+            {/* Quick Preset Buttons */}
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider mr-1">
+                Preset Cepat:
+              </span>
+              {[
+                { label: '0% (Asli)', val: 0 },
+                { label: '35% (Terang)', val: 35 },
+                { label: '45% (Default)', val: 45 },
+                { label: '60% (Kontras Teks)', val: 60 },
+                { label: '75% (Sangat Gelap)', val: 75 },
+              ].map((preset) => (
+                <button
+                  key={preset.val}
+                  type="button"
+                  onClick={() => setForm({ ...form, bgOverlay: preset.val })}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-medium transition-all cursor-pointer ${
+                    currentOverlay === preset.val
+                      ? 'bg-[#00E5FF] text-slate-950 font-bold shadow-sm shadow-[#00E5FF]/30'
+                      : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Live Visual Preview of Overlay */}
+          {resolvedBgImage && (
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">
+                Preview Tampilan Live Background ({form.chapterName}):
+              </span>
+              <div className="relative h-44 rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center text-center p-4">
+                {/* Background Image */}
+                <div
+                  className="absolute inset-0 bg-cover bg-center transition-all duration-300"
+                  style={{ backgroundImage: `url("${resolvedBgImage}")` }}
+                />
+
+                {/* Dark Overlay Layer based on slider */}
+                <div
+                  className="absolute inset-0 bg-black pointer-events-none transition-opacity duration-200"
+                  style={{ opacity: currentOverlay / 100 }}
+                />
+
+                {/* Foreground Sample Text (stays on top unaffected) */}
+                <div className="relative z-10 space-y-1 max-w-md">
+                  <span className="inline-block px-3 py-0.5 rounded-full bg-[#FDFBF7]/90 text-[#2563EB] text-[10px] font-mono font-bold uppercase tracking-wider mb-1">
+                    {form.chapterNumber} — {form.chapterName}
+                  </span>
+                  <h4 className="font-display font-black text-lg sm:text-xl text-white tracking-tight uppercase drop-shadow-md">
+                    {form.branchName || 'NAMA CABANG'}
+                  </h4>
+                  <p className="text-xs text-slate-200 font-sans line-clamp-2 drop-shadow">
+                    {form.description || 'Deskripsi suasana cabang dan informasi ruangan.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Location, Hours, Maps URL & Central WhatsApp Info */}

@@ -25,7 +25,8 @@ export const initialLetonData: LetonData = {
       openingHours: "Setiap Hari: 08:00 – 23:00 WIB",
       mapsUrl: "https://maps.google.com/?q=Leton+Coffee+Sudirman+Dumai",
       bgImage: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1920&q=80",
-      buttonText: "PETUNJUK ARAH & DETAIL"
+      buttonText: "PETUNJUK ARAH & DETAIL",
+      bgOverlay: 45
     },
     {
       id: "chapter-6",
@@ -39,7 +40,8 @@ export const initialLetonData: LetonData = {
       openingHours: "Setiap Hari: 09:00 – 23:30 WIB",
       mapsUrl: "https://maps.google.com/?q=Leton+Coffee+Ratu+Sima+Dumai",
       bgImage: "https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=1920&q=80",
-      buttonText: "PETUNJUK ARAH & DETAIL"
+      buttonText: "PETUNJUK ARAH & DETAIL",
+      bgOverlay: 45
     }
   ],
   mobileService: {

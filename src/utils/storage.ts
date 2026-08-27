@@ -46,7 +46,10 @@ export function sanitizeLoadedData(raw: any): LetonData {
     },
     branches:
       Array.isArray(raw.branches) && raw.branches.length > 0
-        ? raw.branches
+        ? raw.branches.map((b: any) => ({
+            ...b,
+            bgOverlay: typeof b?.bgOverlay === 'number' ? b.bgOverlay : 45,
+          }))
         : initialLetonData.branches,
     mobileService: {
       ...initialLetonData.mobileService,

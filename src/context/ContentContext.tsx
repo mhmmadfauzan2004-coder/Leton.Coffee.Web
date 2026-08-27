@@ -96,6 +96,17 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Fetch content from Supabase (primary) or server API and hydrate state
   const refreshData = useCallback(async () => {
+    const startTime = Date.now();
+    const minAnimationTime = 2200; // 2.2s for cinematic product opening
+
+    const completeLoading = () => {
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, minAnimationTime - elapsed);
+      setTimeout(() => {
+        setIsLoading(false);
+      }, remaining);
+    };
+
     try {
       // 1. Try Supabase database if configured (Primary Source of Truth)
       if (isSupabaseConfigured()) {
@@ -105,7 +116,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
           setData(sanitizedData);
           saveStoredContent(sanitizedData);
           setLastUpdated(Date.now());
-          setIsLoading(false);
+          completeLoading();
           return;
         }
       }
@@ -114,7 +125,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const currentStored = loadStoredContent();
       if (hasStoredContent() && currentStored) {
         setData(currentStored);
-        setIsLoading(false);
+        completeLoading();
         return;
       }
 
@@ -132,7 +143,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch (err) {
       console.warn('Network sync notice (using local cache):', err);
     } finally {
-      setIsLoading(false);
+      completeLoading();
     }
   }, []);
 

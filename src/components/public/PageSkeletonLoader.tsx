@@ -25,7 +25,11 @@ const BeanIcon: React.FC<{ active: boolean }> = ({ active }) => (
   </svg>
 );
 
-export const PageSkeletonLoader: React.FC = () => {
+export interface PageSkeletonLoaderProps {
+  onComplete?: () => void;
+}
+
+export const PageSkeletonLoader: React.FC<PageSkeletonLoaderProps> = ({ onComplete }) => {
   const { data } = useContent();
   const { siteSettings } = data || {};
   const brandName = siteSettings?.brandName || 'LETON COFFEE';
@@ -33,7 +37,7 @@ export const PageSkeletonLoader: React.FC = () => {
   // Exact source used in Navbar/Header for dynamic admin-configured logo
   const logoUrl = siteSettings?.logoUrl
     ? resolveMediaUrl(siteSettings.logoUrl)
-    : 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80';
+    : resolveMediaUrl('https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80');
 
   // Smooth 0% -> 100% Progress State
   const [progress, setProgress] = useState(0);
@@ -41,9 +45,10 @@ export const PageSkeletonLoader: React.FC = () => {
 
   useEffect(() => {
     const startTime = performance.now();
-    const duration = 1450; // 1.45s smooth progress fill
+    const duration = 1600; // 1.6s smooth progress fill
 
     let animationFrameId: number;
+    let completionTimeout: any = null;
 
     const updateProgress = (currentTime: number) => {
       const elapsed = currentTime - startTime;
@@ -51,16 +56,27 @@ export const PageSkeletonLoader: React.FC = () => {
       
       // Smooth easeOutQuad progress curve
       const easedProgress = 1 - Math.pow(1 - progressFraction, 2);
-      setProgress(Math.round(easedProgress * 100));
+      const currentPct = Math.round(easedProgress * 100);
+      setProgress(currentPct);
 
       if (progressFraction < 1) {
         animationFrameId = requestAnimationFrame(updateProgress);
+      } else {
+        // When 100% reached, pause briefly for 250ms then notify completion
+        completionTimeout = setTimeout(() => {
+          if (onComplete) {
+            onComplete();
+          }
+        }, 250);
       }
     };
 
     animationFrameId = requestAnimationFrame(updateProgress);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, []);
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      if (completionTimeout) clearTimeout(completionTimeout);
+    };
+  }, [onComplete]);
 
   return (
     <motion.div

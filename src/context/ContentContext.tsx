@@ -10,6 +10,7 @@ import {
   LETON_STORAGE_KEY,
 } from '../utils/storage';
 import { getApiUrl } from '../utils/api';
+import { preloadImage } from '../utils/imagePreloader';
 import {
   fetchContentFromSupabase,
   saveContentToSupabase,
@@ -29,6 +30,7 @@ interface ToastInfo {
 interface ContentContextType {
   data: LetonData;
   isLoading: boolean;
+  isInitialReady: boolean;
   isRealtimeConnected: boolean;
   lastUpdated: number;
   auth: AuthState;
@@ -41,6 +43,7 @@ interface ContentContextType {
   logout: () => void;
   changeCredentials: (currentPassword: string, newUsername?: string, newPassword?: string) => Promise<{ success: boolean; error?: string }>;
   refreshData: () => Promise<void>;
+  completeLoading: () => void;
   resetToDefaults: () => Promise<boolean>;
 }
 
@@ -59,11 +62,16 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return loadStoredContent();
   });
 
-  // Start with isLoading true to prevent flash of old/default fallback data
+  // Start with isInitialReady false to prevent flash of old/default fallback logo before fetch & preload
+  const [isInitialReady, setIsInitialReady] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState<boolean>(false);
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
   const [toasts, setToasts] = useState<ToastInfo[]>([]);
+
+  const completeLoading = useCallback(() => {
+    setIsLoading(false);
+  }, []);
 
   // Automatically sync any data state changes to LocalStorage immediately
   useEffect(() => {
@@ -94,56 +102,52 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Fetch content from Supabase (primary) or server API and hydrate state
+  // Fetch content from Supabase (primary) or server API, preload latest logo, then mark initial ready
   const refreshData = useCallback(async () => {
-    const startTime = Date.now();
-    const minAnimationTime = 1800; // 1.8s for smooth minimal progress bar & bean transition
-
-    const completeLoading = () => {
-      const elapsed = Date.now() - startTime;
-      const remaining = Math.max(0, minAnimationTime - elapsed);
-      setTimeout(() => {
-        setIsLoading(false);
-      }, remaining);
-    };
-
     try {
-      // 1. Try Supabase database if configured (Primary Source of Truth)
+      let activeData: LetonData = loadStoredContent();
+
+      // 1. Try Supabase database first if configured (Primary Source of Truth from Admin)
       if (isSupabaseConfigured()) {
-        const supabaseData = await fetchContentFromSupabase();
-        if (supabaseData && supabaseData.siteSettings) {
-          const sanitizedData = sanitizeLoadedData(supabaseData);
-          setData(sanitizedData);
-          saveStoredContent(sanitizedData);
-          setLastUpdated(Date.now());
-          completeLoading();
-          return;
+        try {
+          const supabaseData = await fetchContentFromSupabase();
+          if (supabaseData && supabaseData.siteSettings) {
+            activeData = sanitizeLoadedData(supabaseData);
+            saveStoredContent(activeData);
+          }
+        } catch (sbErr) {
+          console.warn('Supabase fetch note:', sbErr);
+        }
+      } else {
+        // 2. If not Supabase, try Express backend API
+        try {
+          const res = await fetch(getApiUrl('/api/content'), { cache: 'no-store' });
+          if (res.ok) {
+            const json = await res.json();
+            if (json && json.siteSettings) {
+              activeData = sanitizeLoadedData(json);
+              saveStoredContent(activeData);
+            }
+          }
+        } catch (apiErr) {
+          // Keep activeData from local storage
         }
       }
 
-      // 2. If user already has saved content in localStorage, prioritize it!
-      const currentStored = loadStoredContent();
-      if (hasStoredContent() && currentStored) {
-        setData(currentStored);
-        completeLoading();
-        return;
-      }
+      // 3. Update active data state
+      setData(activeData);
+      setLastUpdated(Date.now());
 
-      // 3. Fallback to Express backend API only if local storage has never been edited
-      const res = await fetch(getApiUrl('/api/content'), { cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        if (json && json.siteSettings) {
-          const sanitizedServerData = sanitizeLoadedData(json);
-          setData(sanitizedServerData);
-          saveStoredContent(sanitizedServerData);
-          setLastUpdated(Date.now());
-        }
+      // 4. Preload the exact Admin logo image so it is fully decoded in browser memory
+      const logoToPreload = activeData.siteSettings?.logoUrl;
+      if (logoToPreload) {
+        await preloadImage(logoToPreload, 2500);
       }
     } catch (err) {
-      console.warn('Network sync notice (using local cache):', err);
+      console.warn('Network sync notice:', err);
     } finally {
-      completeLoading();
+      // 5. Logo and data are now 100% confirmed ready and in browser memory
+      setIsInitialReady(true);
     }
   }, []);
 
@@ -297,6 +301,11 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setData(sanitized);
       saveStoredContent(sanitized);
       setLastUpdated(Date.now());
+
+      // 4. Preload the new logo image in memory
+      if (sanitized.siteSettings?.logoUrl) {
+        preloadImage(sanitized.siteSettings.logoUrl).catch(() => {});
+      }
 
       if (supabaseSaved) {
         showToast('Perubahan berhasil disimpan permanen ke Supabase Database & tersinkron Realtime!', 'success');
@@ -515,6 +524,8 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       value={{
         data,
         isLoading,
+        isInitialReady,
+        completeLoading,
         isRealtimeConnected,
         lastUpdated,
         auth,

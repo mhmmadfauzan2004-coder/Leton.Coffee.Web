@@ -16,7 +16,7 @@ import { createWhatsAppLink } from './utils/formatters';
 import { motion, AnimatePresence } from 'motion/react';
 
 const AppContent: React.FC = () => {
-  const { data, auth, isLoading } = useContent();
+  const { data, auth, isLoading, isInitialReady, completeLoading } = useContent();
   const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => {
     return (
       window.location.pathname.startsWith('/admin') ||
@@ -65,8 +65,10 @@ const AppContent: React.FC = () => {
   return (
     <div className="relative min-h-screen bg-[#070b12] text-slate-100 selection:bg-[#00E5FF] selection:text-black">
       <AnimatePresence mode="wait">
-        {isLoading ? (
-          <PageSkeletonLoader key="loading-screen" />
+        {!isInitialReady ? (
+          <div key="pre-initial-backdrop" className="fixed inset-0 z-50 bg-[#050814]" />
+        ) : isLoading ? (
+          <PageSkeletonLoader key="loading-screen" onComplete={completeLoading} />
         ) : isAdminRoute ? (
           <motion.div
             key="admin-view"

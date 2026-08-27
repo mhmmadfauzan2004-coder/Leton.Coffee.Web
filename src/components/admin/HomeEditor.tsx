@@ -97,11 +97,11 @@ export const HomeEditor: React.FC = () => {
       {/* Logo Image Upload */}
       <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800">
         <ImageUploadField
-          label="Logo Brand Leton (Opsional - Kosongkan jika menggunakan teks)"
+          label="Logo Brand Leton (Tampil di Navbar & Loading Screen)"
           value={form.logoUrl || ''}
           onChange={(url) => setForm({ ...form, logoUrl: url })}
           aspectRatio="1:1"
-          description="Rekomendasi format PNG transparan atau SVG dengan rasio persegi 1:1."
+          description="Rekomendasi format PNG transparan atau foto 1:1. Logo ini otomatis tayang di Navbar dan Loading Screen."
         />
       </div>
 

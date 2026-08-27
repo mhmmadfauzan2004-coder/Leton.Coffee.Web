@@ -82,14 +82,14 @@ export const PageSkeletonLoader: React.FC = () => {
       {/* Centered Minimalist Loading Container */}
       <div className="relative z-10 flex flex-col items-center justify-center text-center max-w-sm w-full">
         
-        {/* 1. LOGO LETON COFFEE (Dynamic from Admin Settings) */}
+        {/* 1. LOGO LETON COFFEE (Dynamic from Admin Settings, ~50% larger) */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           className="relative group"
         >
-          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-[#2563EB] shadow-[0_0_22px_rgba(37,99,235,0.35)] bg-[#070b12] flex items-center justify-center p-0.5">
+          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden border-2 border-[#2563EB] shadow-[0_0_28px_rgba(37,99,235,0.45)] bg-[#070b12] flex items-center justify-center p-0.5">
             <img
               src={logoUrl}
               alt={brandName}

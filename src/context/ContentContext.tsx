@@ -97,7 +97,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Fetch content from Supabase (primary) or server API and hydrate state
   const refreshData = useCallback(async () => {
     const startTime = Date.now();
-    const minAnimationTime = 2700; // 2.7s for full cinematic commercial intro
+    const minAnimationTime = 1800; // 1.8s for smooth minimal progress bar & bean transition
 
     const completeLoading = () => {
       const elapsed = Date.now() - startTime;

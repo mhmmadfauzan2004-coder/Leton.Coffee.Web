@@ -1,17 +1,66 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
+import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
 
-// Photorealistic Studio Beverage Commercial Image Assets
-import commercialCupPhoto from '../../assets/images/leton_commercial_cup_1787848208620.jpg';
-import macroBeanPhoto from '../../assets/images/coffee_bean_macro_1787848225819.jpg';
-import angleBeanPhoto from '../../assets/images/coffee_bean_angle_1787848241238.jpg';
-import steamVaporPhoto from '../../assets/images/real_steam_vapor_1787848258189.jpg';
+// Crisp, Minimalist SVG Coffee Bean Icon for Progress Tracking
+const BeanIcon: React.FC<{ active: boolean }> = ({ active }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={`w-3 h-3 sm:w-3.5 sm:h-3.5 transition-all duration-300 transform ${
+      active
+        ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(0,229,255,0.75)] scale-110 opacity-100 rotate-12'
+        : 'text-slate-700/50 opacity-25 scale-90 rotate-0'
+    }`}
+    fill="currentColor"
+  >
+    <ellipse cx="12" cy="12" rx="7" ry="9.5" />
+    <path
+      d="M12 3.5 C9.5 8, 14.5 16, 12 20.5"
+      stroke="#060B18"
+      strokeWidth="2"
+      strokeLinecap="round"
+      fill="none"
+    />
+  </svg>
+);
 
 export const PageSkeletonLoader: React.FC = () => {
   const { data } = useContent();
-  const brandName = data?.siteSettings?.brandName || 'LETON COFFEE';
-  const tagline = data?.siteSettings?.tagline || 'EVERYDAY SPECIALTY COFFEE & YOUTH CULTURE';
+  const { siteSettings } = data || {};
+  const brandName = siteSettings?.brandName || 'LETON COFFEE';
+  
+  // Exact source used in Navbar/Header for dynamic admin-configured logo
+  const logoUrl = siteSettings?.logoUrl
+    ? resolveMediaUrl(siteSettings.logoUrl)
+    : 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80';
+
+  // Smooth 0% -> 100% Progress State
+  const [progress, setProgress] = useState(0);
+  const totalBeans = 8;
+
+  useEffect(() => {
+    const startTime = performance.now();
+    const duration = 1450; // 1.45s smooth progress fill
+
+    let animationFrameId: number;
+
+    const updateProgress = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progressFraction = Math.min(elapsed / duration, 1);
+      
+      // Smooth easeOutQuad progress curve
+      const easedProgress = 1 - Math.pow(1 - progressFraction, 2);
+      setProgress(Math.round(easedProgress * 100));
+
+      if (progressFraction < 1) {
+        animationFrameId = requestAnimationFrame(updateProgress);
+      }
+    };
+
+    animationFrameId = requestAnimationFrame(updateProgress);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, []);
 
   return (
     <motion.div
@@ -19,111 +68,85 @@ export const PageSkeletonLoader: React.FC = () => {
       animate={{ opacity: 1 }}
       exit={{
         opacity: 0,
-        filter: 'blur(10px)',
-        scale: 1.03,
-        transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] },
+        filter: 'blur(8px)',
+        transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
       }}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#040711] text-slate-100 overflow-hidden select-none px-4"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#050814] text-slate-100 select-none overflow-hidden px-6"
     >
-      {/* 0.0–0.4s: CINEMATIC STUDIO AMBIENT ENVIRONMENT (Deep Navy, Pure Black & Electric Blue/Cyan Glow) */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_85%_75%_at_50%_48%,_rgba(15,35,80,0.45),_rgba(4,7,17,0.92)_65%,_#040711_100%)] pointer-events-none" />
+      {/* Background Ambient Atmosphere (Deep Navy, Black & Subtle Cyan Accent Glow) */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_48%,_rgba(37,99,235,0.12),_rgba(5,8,20,0.94)_65%,_#050814_100%)] pointer-events-none" />
 
-      {/* Electric Cyan & Warm Key Light Backdrop Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] sm:w-[520px] sm:h-[520px] bg-[radial-gradient(circle,_rgba(0,229,255,0.14)_0%,_rgba(37,99,235,0.08)_45%,_transparent_72%)] rounded-full blur-3xl pointer-events-none animate-studio-ambient" />
+      {/* Subtle Central Glow Behind Logo */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 sm:w-80 sm:h-80 bg-[radial-gradient(circle,_rgba(0,229,255,0.1)_0%,_rgba(37,99,235,0.05)_50%,_transparent_75%)] rounded-full blur-3xl animate-loader-pulse pointer-events-none" />
 
-      {/* Subtle Studio Anamorphic Floor Flare */}
-      <div className="absolute bottom-[18%] left-1/2 -translate-x-1/2 w-[85vw] max-w-md h-[1px] bg-gradient-to-r from-transparent via-[#00E5FF]/25 to-transparent pointer-events-none blur-[0.5px]" />
-
-      {/* 2.5D PHOTOREALISTIC COMMERCIAL PRODUCT STAGE */}
-      <div className="relative w-full max-w-xs sm:max-w-sm flex flex-col items-center justify-center">
-
-        {/* 0.4–0.8s: REALISTIC ROASTED COFFEE BEAN PHOTO LAYERS (Depth of Field & Parallax) */}
-        {/* Bean 1 (Foreground Left, Sharp Macro Product Photo) */}
-        <div className="absolute -left-3 sm:-left-6 top-[22%] z-30 pointer-events-none animate-studio-bean-1">
-          <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-full overflow-hidden filter drop-shadow-[0_12px_24px_rgba(0,0,0,0.95)] contrast-[1.05]">
+      {/* Centered Minimalist Loading Container */}
+      <div className="relative z-10 flex flex-col items-center justify-center text-center max-w-sm w-full">
+        
+        {/* 1. LOGO LETON COFFEE (Dynamic from Admin Settings) */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="relative group"
+        >
+          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-[#2563EB] shadow-[0_0_22px_rgba(37,99,235,0.35)] bg-[#070b12] flex items-center justify-center p-0.5">
             <img
-              src={macroBeanPhoto}
-              alt="Roasted Coffee Bean"
-              className="w-full h-full object-cover scale-110"
+              src={logoUrl}
+              alt={brandName}
+              className="w-full h-full object-cover rounded-full"
               referrerPolicy="no-referrer"
             />
           </div>
-        </div>
+        </motion.div>
 
-        {/* Bean 2 (Background Right, Soft Studio Depth Blur) */}
-        <div className="absolute -right-2 sm:-right-5 top-[14%] z-10 pointer-events-none filter blur-[1.2px] opacity-75 animate-studio-bean-2">
-          <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full overflow-hidden filter drop-shadow-[0_8px_16px_rgba(0,0,0,0.85)]">
-            <img
-              src={angleBeanPhoto}
-              alt="Coffee Bean Depth"
-              className="w-full h-full object-cover scale-115"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-        </div>
+        {/* 2. NAMA BRAND */}
+        <motion.h1
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-4 sm:mt-5 font-display font-black text-lg sm:text-xl tracking-[0.26em] text-white uppercase drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]"
+        >
+          {brandName}
+        </motion.h1>
 
-        {/* Bean 3 (Foreground Right Lower, Natural Studio Highlights) */}
-        <div className="absolute right-0 sm:-right-3 bottom-[24%] z-30 pointer-events-none animate-studio-bean-3">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden filter drop-shadow-[0_14px_26px_rgba(0,0,0,0.95)] contrast-[1.04]">
-            <img
-              src={macroBeanPhoto}
-              alt="Roasted Bean Macro"
-              className="w-full h-full object-cover scale-115 rotate-45"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-        </div>
+        {/* 3. EXACT TAGLINE */}
+        <motion.p
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.28, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-1.5 text-xs sm:text-sm text-cyan-200/75 font-sans tracking-[0.18em] font-medium"
+        >
+          Bridging your desire of coffee
+        </motion.p>
 
-        {/* 1.5–2.0s: REALISTIC HOT STEAM VAPOR PHOTO (Screen Blend Mode) */}
-        <div className="absolute -top-12 inset-x-0 flex justify-center z-20 pointer-events-none mix-blend-screen animate-studio-steam">
-          <img
-            src={steamVaporPhoto}
-            alt="Hot Coffee Steam Vapor"
-            className="w-36 sm:w-44 h-48 sm:h-56 object-contain opacity-70 filter blur-[0.4px] contrast-125"
-            referrerPolicy="no-referrer"
-          />
-        </div>
-
-        {/* 0.7–1.3s: HERO PRODUCT COMMERCIAL SHOT (Real Leton Coffee Cup Photography) */}
-        <div className="relative z-20 w-full aspect-[9/14] max-h-[50vh] sm:max-h-[54vh] flex items-center justify-center animate-studio-cup">
-          
-          {/* Real Commercial Photography Cup Container with Seamless Black Studio Vignette */}
-          <div className="relative w-full h-full flex items-center justify-center rounded-2xl overflow-hidden">
+        {/* 4. HORIZONTAL COFFEE BEAN PROGRESS BAR */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-6 sm:mt-7 w-52 sm:w-60 max-w-[calc(100vw-80px)]"
+        >
+          {/* Progress Bar Frame */}
+          <div className="h-6 sm:h-7 px-3 rounded-full bg-[#080E1C]/90 border border-[#2563EB]/40 shadow-[0_0_16px_rgba(0,229,255,0.14)] flex items-center justify-between relative overflow-hidden">
             
-            {/* Real Product Photo */}
-            <img
-              src={commercialCupPhoto}
-              alt="Leton Coffee Commercial Cup"
-              className="w-full h-full object-contain filter drop-shadow-[0_20px_45px_rgba(0,0,0,0.98)] contrast-[1.02] brightness-[0.98]"
-              referrerPolicy="no-referrer"
+            {/* Subtle Gradient Backlight Trail based on progress */}
+            <div
+              className="absolute inset-y-0 left-0 bg-gradient-to-r from-transparent via-[#2563EB]/25 to-[#00E5FF]/30 rounded-full transition-all duration-150 pointer-events-none"
+              style={{ width: `${progress}%` }}
             />
 
-            {/* Seamless Edge Gradient Blend to Dark Navy Studio */}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#040711] via-transparent to-[#040711]/40 pointer-events-none" />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#040711]/50 via-transparent to-[#040711]/50 pointer-events-none" />
+            {/* Coffee Beans Filling from Left to Right */}
+            {Array.from({ length: totalBeans }).map((_, index) => {
+              const beanThreshold = ((index + 1) / totalBeans) * 100;
+              const isFilled = progress >= beanThreshold - (100 / totalBeans / 2);
+              return (
+                <div key={index} className="relative z-10 flex items-center justify-center">
+                  <BeanIcon active={isFilled} />
+                </div>
+              );
+            })}
           </div>
-
-          {/* Realistic Ground Contact Shadow */}
-          <div className="absolute -bottom-2 inset-x-8 h-6 bg-black/95 rounded-full filter blur-lg pointer-events-none -z-10" />
-        </div>
-
-        {/* 2.0–2.4s: ELEGANT BRAND REVEAL TYPOGRAPHY */}
-        <div className="mt-3 sm:mt-4 flex flex-col items-center text-center px-4 z-20 animate-studio-brand">
-          {/* Brand Name */}
-          <h1 className="font-display font-black text-sm sm:text-base tracking-[0.38em] text-white uppercase drop-shadow-[0_0_16px_rgba(0,229,255,0.45)]">
-            {brandName}
-          </h1>
-
-          {/* Official Tagline */}
-          {tagline && (
-            <p className="mt-1 text-[9px] sm:text-[10px] text-cyan-200/70 font-sans tracking-[0.24em] uppercase font-medium max-w-[280px] sm:max-w-xs leading-relaxed">
-              {tagline}
-            </p>
-          )}
-
-          {/* Minimal Electric Cyan Accent Beam */}
-          <div className="w-10 h-[1.5px] bg-gradient-to-r from-transparent via-[#00E5FF] to-transparent mt-2.5 shadow-[0_0_8px_#00E5FF]" />
-        </div>
+        </motion.div>
 
       </div>
     </motion.div>

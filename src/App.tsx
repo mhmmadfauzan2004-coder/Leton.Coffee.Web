@@ -13,6 +13,7 @@ import { AdminLogin } from './components/admin/AdminLogin';
 import { PageSkeletonLoader } from './components/public/PageSkeletonLoader';
 import { MessageCircle, Lock } from 'lucide-react';
 import { createWhatsAppLink } from './utils/formatters';
+import { motion, AnimatePresence } from 'motion/react';
 
 const AppContent: React.FC = () => {
   const { data, auth, isLoading } = useContent();
@@ -52,19 +53,6 @@ const AppContent: React.FC = () => {
     window.history.pushState(null, '', '/#home');
   };
 
-  if (isLoading) {
-    return <PageSkeletonLoader />;
-  }
-
-  // If Admin View is active
-  if (isAdminRoute) {
-    if (auth.isAuthenticated) {
-      return <AdminLayout onBackToPublic={closeAdmin} />;
-    } else {
-      return <AdminLogin onBackToPublic={closeAdmin} />;
-    }
-  }
-
   // Chapter 5 & Chapter 6 branches
   const chapter5 = data.branches.find((b) => b.id === 'chapter-5') || data.branches[0];
   const chapter6 = data.branches.find((b) => b.id === 'chapter-6') || data.branches[1];
@@ -76,56 +64,83 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="relative min-h-screen bg-[#070b12] text-slate-100 selection:bg-[#00E5FF] selection:text-black">
-      {/* Public Navbar */}
-      <Navbar onOpenAdmin={openAdmin} />
+      <AnimatePresence mode="wait">
+        {isLoading ? (
+          <PageSkeletonLoader key="loading-screen" />
+        ) : isAdminRoute ? (
+          <motion.div
+            key="admin-view"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            {auth.isAuthenticated ? (
+              <AdminLayout onBackToPublic={closeAdmin} />
+            ) : (
+              <AdminLogin onBackToPublic={closeAdmin} />
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="public-content"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+          >
+            {/* Public Navbar */}
+            <Navbar onOpenAdmin={openAdmin} />
 
-      {/* 01 — HOME / HERO */}
-      <HeroSection />
+            {/* 01 — HOME / HERO */}
+            <HeroSection />
 
-      {/* 02 — CHAPTER 5 (Dumai Sudirman) */}
-      {chapter5 && <ChapterSection branch={chapter5} reversed={false} />}
+            {/* 02 — CHAPTER 5 (Dumai Sudirman) */}
+            {chapter5 && <ChapterSection branch={chapter5} reversed={false} />}
 
-      {/* 03 — CHAPTER 6 (Dumai Ratu Sima) */}
-      {chapter6 && <ChapterSection branch={chapter6} reversed={true} />}
+            {/* 03 — CHAPTER 6 (Dumai Ratu Sima) */}
+            {chapter6 && <ChapterSection branch={chapter6} reversed={true} />}
 
-      {/* 04 — LET’GO / COFFEE TRUCK */}
-      <MobileTruckSection />
+            {/* 04 — LET’GO / COFFEE TRUCK */}
+            <MobileTruckSection />
 
-      {/* 05 — MENU */}
-      <MenuSection />
+            {/* 05 — MENU */}
+            <MenuSection />
 
-      {/* 06 — BARISTAS TEAM */}
-      <BaristasSection />
+            {/* 06 — BARISTAS TEAM */}
+            <BaristasSection />
 
-      {/* 07 — ABOUT */}
-      <AboutSection />
+            {/* 07 — ABOUT */}
+            <AboutSection />
 
-      {/* 08 — CONTACT & FOOTER */}
-      <ContactSection onOpenAdmin={openAdmin} />
+            {/* 08 — CONTACT & FOOTER */}
+            <ContactSection onOpenAdmin={openAdmin} />
 
-      {/* Floating Action Button (Quick WhatsApp) */}
-      <div className="fixed bottom-6 left-6 z-40 flex items-center gap-2">
-        <a
-          href={floatingWhatsAppLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Order via WhatsApp"
-          className="p-3.5 rounded-full bg-[#00E5FF] hover:bg-[#3cf0ff] text-slate-950 shadow-2xl shadow-[#00E5FF]/40 flex items-center justify-center transition-all transform hover:scale-110 active:scale-95 group"
-        >
-          <MessageCircle className="w-5 h-5" />
-          <span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs transition-all duration-300 font-display font-bold text-xs uppercase group-hover:ml-2">
-            Order WhatsApp
-          </span>
-        </a>
+            {/* Floating Action Button (Quick WhatsApp) */}
+            <div className="fixed bottom-6 left-6 z-40 flex items-center gap-2">
+              <a
+                href={floatingWhatsAppLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Order via WhatsApp"
+                className="p-3.5 rounded-full bg-[#00E5FF] hover:bg-[#3cf0ff] text-slate-950 shadow-2xl shadow-[#00E5FF]/40 flex items-center justify-center transition-all transform hover:scale-110 active:scale-95 group"
+              >
+                <MessageCircle className="w-5 h-5" />
+                <span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs transition-all duration-300 font-display font-bold text-xs uppercase group-hover:ml-2">
+                  Order WhatsApp
+                </span>
+              </a>
 
-        <button
-          onClick={openAdmin}
-          title="Buka Admin CMS"
-          className="p-3 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-[#00E5FF] shadow-xl flex items-center justify-center transition-all transform hover:scale-105 cursor-pointer"
-        >
-          <Lock className="w-4 h-4" />
-        </button>
-      </div>
+              <button
+                onClick={openAdmin}
+                title="Buka Admin CMS"
+                className="p-3 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-[#00E5FF] shadow-xl flex items-center justify-center transition-all transform hover:scale-105 cursor-pointer"
+              >
+                <Lock className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

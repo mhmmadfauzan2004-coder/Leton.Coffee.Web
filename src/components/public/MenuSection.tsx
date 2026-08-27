@@ -140,30 +140,30 @@ export const MenuSection: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 sm:gap-10">
             {filteredItems.map((item, idx) => (
               <motion.div
                 key={item.id}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: (idx % 4) * 0.1 }}
-                className="group rounded-2xl bg-[#121824]/90 backdrop-blur-md border border-slate-800/90 hover:border-[#2563EB]/80 overflow-hidden flex flex-col justify-between transition-all duration-300 hover:shadow-2xl hover:shadow-[#2563EB]/20 transform hover:-translate-y-1.5 shadow-lg shadow-black/50"
+                transition={{ duration: 0.4, delay: (idx % 4) * 0.08 }}
+                className="group flex flex-col justify-between transition-all duration-300 transform hover:-translate-y-1"
               >
                 <div className="flex-1 flex flex-col">
-                  {/* Image container */}
-                  <div className="relative aspect-4/3 overflow-hidden bg-slate-950 shrink-0">
+                  {/* Image container - Clean Rounded Frameless Media */}
+                  <div className="relative aspect-4/3 overflow-hidden rounded-2xl bg-slate-900 shrink-0 shadow-lg shadow-black/40">
                     <img
                       src={resolveMediaUrl(item.image)}
                       alt={item.name}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       referrerPolicy="no-referrer"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#121824] via-black/20 to-transparent opacity-80" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60 pointer-events-none" />
 
                     {/* Badge */}
                     {item.badge && (
-                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-[#2563EB] text-white text-[10px] font-black font-mono tracking-wider uppercase shadow-md">
+                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-[#2563EB] text-white text-[10px] font-black font-mono tracking-wider uppercase shadow-md shadow-[#2563EB]/30">
                         {item.badge}
                       </div>
                     )}
@@ -171,18 +171,18 @@ export const MenuSection: React.FC = () => {
                     {/* Availability Tag */}
                     {!item.isAvailable && (
                       <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs flex items-center justify-center">
-                        <span className="px-3 py-1 rounded-md bg-rose-950/90 border border-rose-500/50 text-rose-300 font-mono text-xs font-bold uppercase tracking-wider">
+                        <span className="px-3 py-1.5 rounded-lg bg-rose-950/95 border border-rose-500/60 text-rose-200 font-mono text-xs font-bold uppercase tracking-wider shadow-lg">
                           HABIS / SOLD OUT
                         </span>
                       </div>
                     )}
                   </div>
 
-                  {/* Body Content - High Contrast Light Text on Dark Glassmorphism */}
-                  <div className="p-5 flex-1 flex flex-col justify-between">
+                  {/* Text Content Directly Over Background - Frameless & High Contrast */}
+                  <div className="pt-4 flex-1 flex flex-col justify-between">
                     <div>
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-display font-black text-lg text-white group-hover:text-[#60A5FA] transition-colors leading-snug">
+                        <h3 className="font-display font-bold text-lg text-white group-hover:text-[#60A5FA] transition-colors leading-snug">
                           {item.name}
                         </h3>
                         <span className="font-mono font-bold text-sm sm:text-base text-[#60A5FA] whitespace-nowrap">
@@ -190,23 +190,23 @@ export const MenuSection: React.FC = () => {
                         </span>
                       </div>
 
-                      <p className="mt-2.5 text-xs sm:text-sm text-slate-300 leading-relaxed line-clamp-2 font-normal">
+                      <p className="mt-2 text-xs sm:text-sm text-slate-300 leading-relaxed line-clamp-2 font-normal">
                         {item.description}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Footer / Order Action */}
-                <div className="p-5 pt-0">
+                {/* Footer Action - Clean Frameless Button */}
+                <div className="pt-3">
                   <button
                     onClick={() => handleOrderWhatsApp(item.name)}
                     disabled={!item.isAvailable}
                     id={`order-wa-btn-${item.id}`}
                     className={`w-full py-2.5 px-4 rounded-xl font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       item.isAvailable
-                        ? 'bg-[#2563EB] hover:bg-[#1d4ed8] text-white shadow-md shadow-[#2563EB]/25 hover:shadow-lg hover:shadow-[#2563EB]/40'
-                        : 'bg-slate-800/80 text-slate-500 border border-slate-700/50 cursor-not-allowed'
+                        ? 'bg-[#2563EB] hover:bg-[#1d4ed8] text-white shadow-md shadow-[#2563EB]/25 hover:shadow-lg hover:shadow-[#2563EB]/40 active:scale-[0.98]'
+                        : 'bg-slate-800/60 text-slate-500 border border-slate-700/40 cursor-not-allowed'
                     }`}
                   >
                     <MessageCircle className="w-3.5 h-3.5" />

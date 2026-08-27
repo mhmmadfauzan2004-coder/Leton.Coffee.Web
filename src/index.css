@@ -28,272 +28,111 @@
   background: #00E5FF;
 }
 
-/* Cinematic 3D Coffee Product Opening Commercial Animations */
-.perspective-1000 {
-  perspective: 1000px;
-}
-.perspective-1200 {
-  perspective: 1200px;
-}
-.preserve-3d {
-  transform-style: preserve-3d;
-}
-
-@keyframes cinematic-cup-entry-float {
+/* Photorealistic Coffee Commercial Studio Animations */
+@keyframes studio-camera-drift {
   0% {
-    opacity: 0;
-    transform: translateY(40px) scale(0.92) rotateX(18deg) rotateY(-14deg) rotateZ(3deg);
+    transform: scale(0.96) translateY(24px);
+    filter: brightness(0.85) contrast(1.05);
   }
-  20% {
-    opacity: 1;
-    transform: translateY(0px) scale(1) rotateX(12deg) rotateY(-8deg) rotateZ(2deg);
-  }
-  50% {
-    transform: translateY(-14px) scale(1.02) rotateX(8deg) rotateY(6deg) rotateZ(-1deg);
-  }
-  80% {
-    transform: translateY(-4px) scale(1.01) rotateX(10deg) rotateY(-4deg) rotateZ(1deg);
-  }
-  100% {
-    transform: translateY(0px) scale(1) rotateX(10deg) rotateY(-6deg) rotateZ(1.5deg);
-  }
-}
-
-@keyframes cinematic-lid-sequence {
-  0% {
-    opacity: 0;
-    transform: translateY(-65px) translateZ(45px) rotateX(32deg) rotateZ(18deg);
-  }
-  14% {
-    opacity: 1;
-    transform: translateY(-50px) translateZ(40px) rotateX(24deg) rotateZ(14deg);
-  }
-  24%, 48% {
-    opacity: 1;
-    transform: translateY(-44px) translateZ(35px) rotateX(20deg) rotateZ(10deg);
-  }
-  64% {
-    transform: translateY(-6px) translateZ(5px) rotateX(4deg) rotateZ(2deg);
-  }
-  72%, 100% {
-    opacity: 1;
-    transform: translateY(0px) translateZ(0px) rotateX(0deg) rotateZ(0deg);
-  }
-}
-
-@keyframes cinematic-pour-stream {
-  0%, 14% {
-    opacity: 0;
-    transform: scaleY(0);
-    transform-origin: top;
-  }
-  20% {
-    opacity: 0.95;
-    transform: scaleY(0.7);
-    transform-origin: top;
-  }
-  24%, 44% {
-    opacity: 1;
-    transform: scaleY(1);
-    transform-origin: top;
-  }
-  48% {
-    opacity: 0.75;
-    transform: scaleY(0.8) translateY(12px);
-    transform-origin: top;
-  }
-  54%, 100% {
-    opacity: 0;
-    transform: scaleY(0) translateY(35px);
-    transform-origin: top;
-  }
-}
-
-@keyframes cinematic-liquid-splash {
-  0%, 18% {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  24%, 44% {
-    opacity: 0.85;
-    transform: scale(1.15);
-  }
-  48% {
-    opacity: 0.4;
-    transform: scale(0.9);
-  }
-  54%, 100% {
-    opacity: 0;
-    transform: scale(0.7);
-  }
-}
-
-@keyframes cinematic-shadow-breathe {
-  0% {
-    transform: scale(0.7) translateX(0px);
-    opacity: 0.2;
-    filter: blur(14px);
-  }
-  20% {
-    transform: scale(1) translateX(-4px);
-    opacity: 0.65;
-    filter: blur(10px);
-  }
-  50% {
-    transform: scale(0.82) translateX(4px);
-    opacity: 0.4;
-    filter: blur(16px);
-  }
-  80%, 100% {
-    transform: scale(0.95) translateX(-2px);
-    opacity: 0.6;
-    filter: blur(12px);
-  }
-}
-
-@keyframes cinematic-bean-1 {
-  0% {
-    opacity: 0;
-    transform: translate3d(-30px, 20px, 50px) rotate(-40deg) scale(0.8);
-  }
-  25% {
-    opacity: 0.95;
-    transform: translate3d(0px, 0px, 50px) rotate(-25deg) scale(1);
+  30% {
+    transform: scale(1) translateY(0px);
+    filter: brightness(1) contrast(1.02);
   }
   60% {
-    transform: translate3d(-8px, -18px, 70px) rotate(15deg) scale(1.1);
+    transform: scale(1.025) translateY(-8px) rotate(-0.5deg);
+    filter: brightness(1.04) contrast(1.02);
   }
   100% {
-    transform: translate3d(-12px, -8px, 60px) rotate(-10deg) scale(1.05);
+    transform: scale(1.04) translateY(-14px) rotate(0.4deg);
+    filter: brightness(1.02) contrast(1);
   }
 }
 
-@keyframes cinematic-bean-2 {
+@keyframes studio-light-sweep {
   0% {
     opacity: 0;
-    transform: translate3d(30px, -20px, -30px) rotate(40deg) scale(0.75);
+    transform: translateX(-100%) rotate(25deg);
   }
-  30% {
-    opacity: 0.85;
-    transform: translate3d(0px, 0px, -20px) rotate(20deg) scale(0.9);
-  }
-  70% {
-    transform: translate3d(12px, -22px, 0px) rotate(-25deg) scale(1.02);
-  }
-  100% {
-    transform: translate3d(8px, -12px, -10px) rotate(10deg) scale(0.95);
-  }
-}
-
-@keyframes cinematic-bean-3 {
-  0% {
-    opacity: 0;
-    transform: translate3d(-20px, 40px, 40px) rotate(10deg) scale(0.8);
-  }
-  35% {
-    opacity: 0.9;
-    transform: translate3d(0px, 0px, 60px) rotate(45deg) scale(1.05);
-  }
-  75% {
-    transform: translate3d(-15px, -16px, 80px) rotate(70deg) scale(1.15);
-  }
-  100% {
-    transform: translate3d(-10px, -6px, 70px) rotate(55deg) scale(1.1);
-  }
-}
-
-@keyframes cinematic-bean-4 {
-  0% {
-    opacity: 0;
-    transform: translate3d(25px, 30px, -20px) rotate(-30deg) scale(0.7);
-  }
-  30% {
-    opacity: 0.8;
-    transform: translate3d(0px, 0px, -10px) rotate(-15deg) scale(0.85);
-  }
-  70% {
-    transform: translate3d(10px, -18px, 15px) rotate(20deg) scale(0.98);
-  }
-  100% {
-    transform: translate3d(6px, -8px, 5px) rotate(0deg) scale(0.92);
-  }
-}
-
-@keyframes cinematic-steam-rise {
-  0% {
-    transform: translateY(0px) scaleX(0.8) scaleY(0.7);
-    opacity: 0;
-  }
-  30% {
-    opacity: 0.6;
-  }
-  65% {
-    transform: translateY(-22px) scaleX(1.2) scaleY(1.2) translateX(3px);
+  40% {
     opacity: 0.35;
   }
+  70% {
+    opacity: 0.15;
+  }
   100% {
-    transform: translateY(-44px) scaleX(1.5) scaleY(1.4) translateX(-4px);
+    opacity: 0;
+    transform: translateX(200%) rotate(25deg);
+  }
+}
+
+@keyframes natural-steam-drift-1 {
+  0% {
+    transform: translateY(0px) scaleX(0.8) scaleY(0.7) rotate(0deg);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.55;
+    transform: translateY(-20px) scaleX(1.1) scaleY(1.1) rotate(4deg);
+  }
+  70% {
+    opacity: 0.3;
+    transform: translateY(-48px) scaleX(1.4) scaleY(1.4) rotate(-6deg);
+  }
+  100% {
+    transform: translateY(-75px) scaleX(1.8) scaleY(1.7) rotate(8deg);
     opacity: 0;
   }
 }
 
-@keyframes cinematic-warm-spotlight {
+@keyframes natural-steam-drift-2 {
   0% {
-    opacity: 0.3;
-    transform: scale(0.9);
+    transform: translateY(0px) scaleX(0.7) scaleY(0.8) rotate(0deg);
+    opacity: 0;
   }
-  50% {
-    opacity: 0.75;
-    transform: scale(1.08);
+  35% {
+    opacity: 0.6;
+    transform: translateY(-24px) scaleX(1.15) scaleY(1.15) rotate(-5deg);
+  }
+  75% {
+    opacity: 0.25;
+    transform: translateY(-54px) scaleX(1.5) scaleY(1.5) rotate(7deg);
   }
   100% {
-    opacity: 0.6;
-    transform: scale(1);
+    transform: translateY(-82px) scaleX(1.9) scaleY(1.8) rotate(-9deg);
+    opacity: 0;
   }
 }
 
-.animate-cinematic-cup {
-  animation: cinematic-cup-entry-float 2.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+@keyframes cinematic-ambient-glow {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.08);
+  }
 }
 
-.animate-cinematic-lid {
-  animation: cinematic-lid-sequence 2.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+.animate-camera-drift {
+  animation: studio-camera-drift 3.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.animate-cinematic-pour {
-  animation: cinematic-pour-stream 2.8s ease-in-out forwards;
+.animate-light-sweep {
+  animation: studio-light-sweep 2.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards 0.4s;
 }
 
-.animate-cinematic-splash {
-  animation: cinematic-liquid-splash 2.8s ease-in-out forwards;
+.animate-natural-steam-1 {
+  animation: natural-steam-drift-1 3.2s cubic-bezier(0.33, 1, 0.68, 1) infinite;
 }
 
-.animate-cinematic-shadow {
-  animation: cinematic-shadow-breathe 2.8s ease-in-out forwards;
+.animate-natural-steam-2 {
+  animation: natural-steam-drift-2 3.6s cubic-bezier(0.33, 1, 0.68, 1) infinite 0.6s;
 }
 
-.animate-cinematic-bean-1 {
-  animation: cinematic-bean-1 2.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+.animate-ambient-glow {
+  animation: cinematic-ambient-glow 4s ease-in-out infinite;
 }
 
-.animate-cinematic-bean-2 {
-  animation: cinematic-bean-2 2.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards 0.1s;
-}
-
-.animate-cinematic-bean-3 {
-  animation: cinematic-bean-3 2.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards 0.15s;
-}
-
-.animate-cinematic-bean-4 {
-  animation: cinematic-bean-4 2.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards 0.2s;
-}
-
-.animate-cinematic-steam {
-  animation: cinematic-steam-rise 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-.animate-cinematic-spotlight {
-  animation: cinematic-warm-spotlight 2.8s ease-in-out forwards;
-}
 
 

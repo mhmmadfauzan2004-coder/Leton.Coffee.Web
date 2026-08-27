@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { MobileService } from '../../types';
 import { ImageUploadField } from './ImageUploadField';
+import { GalleryManager } from './GalleryManager';
 import { Save, Loader2, RotateCcw, Plus, Trash2 } from 'lucide-react';
 
 export const LetGoEditor: React.FC = () => {
@@ -233,6 +234,16 @@ export const LetGoEditor: React.FC = () => {
             description="Foto showcase kartu armada mobile / booth event Let'GO (Rasio 4:3)."
           />
         </div>
+      </div>
+
+      {/* Let'GO Swipe Gallery Manager */}
+      <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-md">
+        <GalleryManager
+          label="GALERI FOTO SWIPE (ARMADA & EVENT LET'GO)"
+          images={form.galleryImages || []}
+          onChange={(updated) => setForm({ ...form, galleryImages: updated })}
+          description="Foto dokumentasi event, festival, booth outdoor, dan armada mobil Let'GO yang tampil dalam format horizontal swipe gallery di halaman LET'GO."
+        />
       </div>
 
       {/* Feature Bullet Points */}

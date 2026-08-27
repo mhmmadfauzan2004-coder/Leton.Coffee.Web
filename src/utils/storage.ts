@@ -46,14 +46,26 @@ export function sanitizeLoadedData(raw: any): LetonData {
     },
     branches:
       Array.isArray(raw.branches) && raw.branches.length > 0
-        ? raw.branches.map((b: any) => ({
-            ...b,
-            bgOverlay: typeof b?.bgOverlay === 'number' ? b.bgOverlay : 45,
-          }))
+        ? raw.branches.map((b: any, idx: number) => {
+            const fallbackBranch = initialLetonData.branches[idx] || initialLetonData.branches[0];
+            return {
+              ...fallbackBranch,
+              ...b,
+              bgOverlay: typeof b?.bgOverlay === 'number' ? b.bgOverlay : 45,
+              galleryImages:
+                Array.isArray(b?.galleryImages) && b.galleryImages.length > 0
+                  ? b.galleryImages
+                  : (fallbackBranch?.galleryImages || []),
+            };
+          })
         : initialLetonData.branches,
     mobileService: {
       ...initialLetonData.mobileService,
       ...(raw.mobileService || {}),
+      galleryImages:
+        Array.isArray(raw.mobileService?.galleryImages) && raw.mobileService.galleryImages.length > 0
+          ? raw.mobileService.galleryImages
+          : initialLetonData.mobileService.galleryImages,
     },
     menuCategories:
       Array.isArray(raw.menuCategories) && raw.menuCategories.length > 0

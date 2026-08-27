@@ -26,7 +26,13 @@ export const initialLetonData: LetonData = {
       mapsUrl: "https://maps.google.com/?q=Leton+Coffee+Sudirman+Dumai",
       bgImage: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1920&q=80",
       buttonText: "PETUNJUK ARAH & DETAIL",
-      bgOverlay: 45
+      bgOverlay: 45,
+      galleryImages: [
+        "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1525610553991-2bede1a236e2?auto=format&fit=crop&w=1200&q=80"
+      ]
     },
     {
       id: "chapter-6",
@@ -41,7 +47,13 @@ export const initialLetonData: LetonData = {
       mapsUrl: "https://maps.google.com/?q=Leton+Coffee+Ratu+Sima+Dumai",
       bgImage: "https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=1920&q=80",
       buttonText: "PETUNJUK ARAH & DETAIL",
-      bgOverlay: 45
+      bgOverlay: 45,
+      galleryImages: [
+        "https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1497636577773-f1231844b336?auto=format&fit=crop&w=1200&q=80",
+        "https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&w=1200&q=80"
+      ]
     }
   ],
   mobileService: {
@@ -60,6 +72,12 @@ export const initialLetonData: LetonData = {
       "Full Specialty Espresso Bar",
       "High Capacity: 500+ Cups / Day",
       "Signature Mocktails & Non-Coffee"
+    ],
+    galleryImages: [
+      "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1498804103079-a6351b050096?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1507133750040-3a4f5bd9f860?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=1200&q=80"
     ]
   },
   menuCategories: [

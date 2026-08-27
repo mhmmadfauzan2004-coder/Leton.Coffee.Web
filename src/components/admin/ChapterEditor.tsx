@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { BranchItem } from '../../types';
 import { ImageUploadField } from './ImageUploadField';
+import { GalleryManager } from './GalleryManager';
 import { resolveMediaUrl } from '../../utils/api';
 import { Save, Loader2, RotateCcw, Sliders, Sun, Moon, Sparkles } from 'lucide-react';
 
@@ -299,6 +300,16 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
             </div>
           )}
         </div>
+      </div>
+
+      {/* Chapter Swipe Gallery Manager */}
+      <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-md">
+        <GalleryManager
+          label={`GALERI FOTO SWIPE (${form.chapterName} — ${form.branchName || 'CABANG'})`}
+          images={form.galleryImages || []}
+          onChange={(updated) => setForm({ ...form, galleryImages: updated })}
+          description="Foto-foto yang diunggah di sini otomatis tampil dalam format swipe gallery horizontal interaktif di halaman cabang ini."
+        />
       </div>
 
       {/* Location, Hours, Maps URL & Central WhatsApp Info */}

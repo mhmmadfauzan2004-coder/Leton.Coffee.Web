@@ -24,6 +24,7 @@ export interface BranchItem {
   buttonText: string;
   badge: string;
   bgOverlay?: number; // 0 - 100% overlay opacity, default 45%
+  galleryImages?: string[]; // Horizontal swipe gallery photos
 }
 
 export interface MobileService {
@@ -38,6 +39,7 @@ export interface MobileService {
   bgImage: string;
   truckImage: string;
   features: string[];
+  galleryImages?: string[]; // Horizontal swipe gallery photos
 }
 
 export interface MenuCategory {

@@ -2,6 +2,7 @@ import React from 'react';
 import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
+import { SectionPhotoGallery } from './SectionPhotoGallery';
 import { motion } from 'motion/react';
 import { Truck, MessageCircle, Calendar, MapPin, CheckCircle2 } from 'lucide-react';
 
@@ -142,6 +143,23 @@ export const MobileTruckSection: React.FC = () => {
             <span>{mobileService.ctaText || 'BOOK FOR EVENT VIA WHATSAPP'}</span>
           </a>
         </motion.div>
+
+        {/* Minimalist Horizontal Photo Gallery for LET'GO */}
+        {mobileService.galleryImages && mobileService.galleryImages.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6, delay: 0.65 }}
+            className="w-full"
+          >
+            <SectionPhotoGallery
+              images={mobileService.galleryImages}
+              sectionLabel="GALERI ARMADA LET'GO"
+              chapterBadge="ON THE MOVE"
+            />
+          </motion.div>
+        )}
       </div>
     </section>
   );

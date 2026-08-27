@@ -3,6 +3,7 @@ import { BranchItem } from '../../types';
 import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
+import { SectionPhotoGallery } from './SectionPhotoGallery';
 import { motion } from 'motion/react';
 import { MapPin, Clock, MessageCircle, ExternalLink, Navigation } from 'lucide-react';
 
@@ -144,6 +145,23 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
             </a>
           )}
         </motion.div>
+
+        {/* Minimalist Horizontal Photo Gallery for this Chapter */}
+        {branch.galleryImages && branch.galleryImages.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6, delay: 0.6 }}
+            className="w-full"
+          >
+            <SectionPhotoGallery
+              images={branch.galleryImages}
+              sectionLabel={`GALERI ${branch.chapterName}`}
+              chapterBadge={branch.branchName}
+            />
+          </motion.div>
+        )}
       </div>
     </section>
   );

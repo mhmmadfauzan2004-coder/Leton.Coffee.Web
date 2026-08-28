@@ -32,14 +32,18 @@ export interface MobileService {
   subtitle: string;
   badge: string;
   description: string;
-  serviceInfo: string;
-  eventInfo: string;
-  serviceArea: string;
-  ctaText: string;
+  locations?: string[]; // e.g. ["Parkiran MPP", "Ecopark"]
+  openBoothTitle?: string;
+  openBoothSubtitle?: string;
+  openBoothDescription?: string;
+  serviceInfo?: string;
+  eventInfo?: string;
+  serviceArea?: string;
+  ctaText?: string;
   bgImage: string;
   truckImage: string;
   features: string[];
-  galleryImages?: string[]; // Horizontal swipe gallery photos
+  galleryImages?: string[]; // Horizontal swipe card photos for Leton Open Booth
 }
 
 export interface MenuCategory {

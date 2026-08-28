@@ -62,6 +62,13 @@ export function sanitizeLoadedData(raw: any): LetonData {
     mobileService: {
       ...initialLetonData.mobileService,
       ...(raw.mobileService || {}),
+      locations:
+        Array.isArray(raw.mobileService?.locations) && raw.mobileService.locations.length > 0
+          ? raw.mobileService.locations
+          : initialLetonData.mobileService.locations,
+      openBoothTitle: raw.mobileService?.openBoothTitle || initialLetonData.mobileService.openBoothTitle,
+      openBoothSubtitle: raw.mobileService?.openBoothSubtitle || initialLetonData.mobileService.openBoothSubtitle,
+      openBoothDescription: raw.mobileService?.openBoothDescription || initialLetonData.mobileService.openBoothDescription,
       galleryImages:
         Array.isArray(raw.mobileService?.galleryImages) && raw.mobileService.galleryImages.length > 0
           ? raw.mobileService.galleryImages

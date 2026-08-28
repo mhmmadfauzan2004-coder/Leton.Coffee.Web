@@ -58,20 +58,27 @@ export const initialLetonData: LetonData = {
   ],
   mobileService: {
     title: "LET'GO",
-    subtitle: "LETON COFFEE ON THE MOVE",
-    badge: "MOBILE COFFEE EXPERIENCE",
-    description: "Bawa atmosfer segar dan racikan barista Leton Coffee langsung ke titik acaramu! Solusi coffee pop-up berkelas untuk pesta, festival, dan kolaborasi brand.",
-    serviceInfo: "Unit mobile truck estetik dengan mesin espresso komersial, generator independen, dan barista profesional berpengalaman.",
-    eventInfo: "Melayani Wedding, Corporate Gathering, Music Concert, Birthday Party, Sports Event, hingga Community Meetup.",
-    serviceArea: "Area Jangkauan: Dumai Kota, Bukit Kapur, Sungai Sembilan, hingga Pekanbaru.",
-    ctaText: "BOOK FOR EVENT",
+    subtitle: "COFFEE ON THE MOVE",
+    badge: "MOBILE COFFEE BOOTH",
+    description: "Leton Coffee hadir lebih dekat dengan kamu melalui konsep mobile coffee booth. Temukan kami di lokasi-lokasi tertentu dan nikmati kopi Leton tanpa harus datang ke outlet utama.",
+    locations: [
+      "Parkiran MPP",
+      "Ecopark"
+    ],
+    openBoothTitle: "LETON OPEN BOOTH",
+    openBoothSubtitle: "HADIR DI AREA PUBLIK",
+    openBoothDescription: "Leton Open Booth adalah coffee booth mobile dari Leton Coffee yang hadir di area publik dan lokasi tertentu untuk melayani customer secara langsung dengan racikan kopi khas Leton.",
+    serviceInfo: "Mobile coffee booth mandiri yang menyajikan specialty espresso, signature drink, dan mocktail segar di area publik.",
+    eventInfo: "Hadir berpindah di titik-titik kumpul favorit Dumai seperti Parkiran MPP dan kawasan hijau Ecopark.",
+    serviceArea: "Titik Operasional Mobile: Parkiran MPP & Ecopark, Dumai.",
+    ctaText: "",
     bgImage: "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=1920&q=80",
     truckImage: "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=1200&q=80",
     features: [
-      "Custom Branded Cups & Sleeves",
-      "Full Specialty Espresso Bar",
-      "High Capacity: 500+ Cups / Day",
-      "Signature Mocktails & Non-Coffee"
+      "Mobile Coffee Booth On The Move",
+      "Specialty Espresso & Mocktails",
+      "Titik Lokasi: Parkiran MPP",
+      "Titik Lokasi: Ecopark"
     ],
     galleryImages: [
       "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=1200&q=80",

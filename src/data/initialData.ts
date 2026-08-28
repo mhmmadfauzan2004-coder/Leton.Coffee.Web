@@ -73,6 +73,9 @@ export const initialLetonData: LetonData = {
     serviceArea: "Titik Operasional Mobile: Parkiran MPP & Ecopark, Dumai.",
     ctaText: "",
     bgImage: "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=1920&q=80",
+    bgOverlay: 45,
+    openBoothBgImage: "https://images.unsplash.com/photo-1498804103079-a6351b050096?auto=format&fit=crop&w=1920&q=80",
+    openBoothBgOverlay: 45,
     truckImage: "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=1200&q=80",
     features: [
       "Mobile Coffee Booth On The Move",
@@ -85,6 +88,12 @@ export const initialLetonData: LetonData = {
       "https://images.unsplash.com/photo-1498804103079-a6351b050096?auto=format&fit=crop&w=1200&q=80",
       "https://images.unsplash.com/photo-1507133750040-3a4f5bd9f860?auto=format&fit=crop&w=1200&q=80",
       "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=1200&q=80"
+    ],
+    letGoGalleryImages: [
+      "https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1497636577773-f1231844b336?auto=format&fit=crop&w=1200&q=80"
     ]
   },
   menuCategories: [

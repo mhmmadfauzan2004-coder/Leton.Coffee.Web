@@ -1,6 +1,7 @@
 import React from 'react';
 import { useContent } from '../../context/ContentContext';
 import { resolveMediaUrl } from '../../utils/api';
+import { LetGoCardsGallery } from './LetGoCardsGallery';
 import { motion } from 'motion/react';
 import { Truck, MapPin } from 'lucide-react';
 
@@ -9,6 +10,9 @@ export const MobileTruckSection: React.FC = () => {
   const { mobileService } = data;
 
   const bgPhoto = resolveMediaUrl(mobileService.bgImage || mobileService.truckImage);
+  const overlayPercent = typeof mobileService.bgOverlay === 'number' ? mobileService.bgOverlay : 45;
+  const overlayOpacity = Math.max(0, Math.min(100, overlayPercent)) / 100;
+
   const locationsList =
     mobileService.locations && mobileService.locations.length > 0
       ? mobileService.locations
@@ -18,15 +22,21 @@ export const MobileTruckSection: React.FC = () => {
     <section
       id="let-go"
       className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden py-28 sm:py-36 px-4 sm:px-6 lg:px-8 bg-[#070b12]"
-      style={{
-        backgroundImage: bgPhoto
-          ? `linear-gradient(rgba(7, 11, 18, 0.80), rgba(7, 11, 18, 0.88)), url("${bgPhoto}")`
-          : 'linear-gradient(rgba(7, 11, 18, 0.92), rgba(7, 11, 18, 0.96))',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-      }}
     >
+      {/* Background Image Layer */}
+      {bgPhoto && (
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-300 pointer-events-none"
+          style={{ backgroundImage: `url("${bgPhoto}")` }}
+        />
+      )}
+
+      {/* Dynamic CSS Dark Overlay Layer (Controlled from Admin 0% - 100%) */}
+      <div
+        className="absolute inset-0 bg-black pointer-events-none transition-opacity duration-300"
+        style={{ opacity: overlayOpacity }}
+      />
+
       {/* Background Ambient Radial Glow */}
       <div className="absolute inset-0 bg-radial from-[#2563EB]/12 via-transparent to-transparent pointer-events-none" />
 
@@ -102,6 +112,20 @@ export const MobileTruckSection: React.FC = () => {
               </div>
             ))}
           </div>
+        </motion.div>
+
+        {/* Horizontal Photo Slider / Carousel for LET'GO */}
+        <motion.div
+          initial={{ opacity: 0, y: 25 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6, delay: 0.5 }}
+          className="w-full"
+        >
+          <LetGoCardsGallery
+            images={mobileService.letGoGalleryImages || []}
+            sectionLabel="LET'GO"
+          />
         </motion.div>
       </div>
     </section>

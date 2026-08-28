@@ -10,7 +10,15 @@ export const OpenBoothSection: React.FC = () => {
   const { data } = useContent();
   const { mobileService, contactSettings } = data;
 
-  const bgPhoto = resolveMediaUrl(mobileService.bgImage || mobileService.truckImage);
+  const bgPhoto = resolveMediaUrl(
+    mobileService.openBoothBgImage || mobileService.bgImage || mobileService.truckImage
+  );
+  const overlayPercent =
+    typeof mobileService.openBoothBgOverlay === 'number'
+      ? mobileService.openBoothBgOverlay
+      : 45;
+  const overlayOpacity = Math.max(0, Math.min(100, overlayPercent)) / 100;
+
   const openBoothDesc =
     mobileService.openBoothDescription ||
     'Leton Open Booth adalah coffee booth mobile dari Leton Coffee yang hadir di area publik dan lokasi tertentu untuk melayani customer secara langsung.';
@@ -25,15 +33,21 @@ export const OpenBoothSection: React.FC = () => {
     <section
       id="leton-open-booth"
       className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden py-28 sm:py-36 px-4 sm:px-6 lg:px-8 bg-[#070b12]"
-      style={{
-        backgroundImage: bgPhoto
-          ? `linear-gradient(rgba(7, 11, 18, 0.85), rgba(7, 11, 18, 0.90)), url("${bgPhoto}")`
-          : 'linear-gradient(rgba(7, 11, 18, 0.93), rgba(7, 11, 18, 0.97))',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-      }}
     >
+      {/* Background Image Layer */}
+      {bgPhoto && (
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-300 pointer-events-none"
+          style={{ backgroundImage: `url("${bgPhoto}")` }}
+        />
+      )}
+
+      {/* Dynamic CSS Dark Overlay Layer (Controlled from Admin 0% - 100%) */}
+      <div
+        className="absolute inset-0 bg-black pointer-events-none transition-opacity duration-300"
+        style={{ opacity: overlayOpacity }}
+      />
+
       {/* Background Subtle Gradient Overlay */}
       <div className="absolute inset-0 bg-gradient-to-b from-[#070b12]/90 via-transparent to-[#070b12]/95 pointer-events-none" />
 

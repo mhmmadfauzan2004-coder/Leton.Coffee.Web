@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { MobileService } from '../../types';
 import { ImageUploadField } from './ImageUploadField';
-import { Save, Loader2, RotateCcw, Plus, Trash2, MapPin, Truck } from 'lucide-react';
+import { GalleryManager } from './GalleryManager';
+import { resolveMediaUrl } from '../../utils/api';
+import { Save, Loader2, RotateCcw, Plus, Trash2, MapPin, Truck, Sliders, Sun, Moon, Sparkles } from 'lucide-react';
 
 export const LetGoEditor: React.FC = () => {
   const { data, saveData } = useContent();
@@ -14,6 +16,7 @@ export const LetGoEditor: React.FC = () => {
     if (data && data.mobileService) {
       setForm({
         ...data.mobileService,
+        bgOverlay: typeof data.mobileService.bgOverlay === 'number' ? data.mobileService.bgOverlay : 45,
         locations:
           Array.isArray(data.mobileService.locations) && data.mobileService.locations.length > 0
             ? data.mobileService.locations
@@ -28,7 +31,10 @@ export const LetGoEditor: React.FC = () => {
     try {
       await saveData({
         ...data,
-        mobileService: form,
+        mobileService: {
+          ...form,
+          bgOverlay: typeof form.bgOverlay === 'number' ? form.bgOverlay : 45,
+        },
       });
     } finally {
       setIsSaving(false);
@@ -53,12 +59,16 @@ export const LetGoEditor: React.FC = () => {
   const handleReset = () => {
     setForm({
       ...data.mobileService,
+      bgOverlay: typeof data.mobileService.bgOverlay === 'number' ? data.mobileService.bgOverlay : 45,
       locations:
         Array.isArray(data.mobileService.locations) && data.mobileService.locations.length > 0
           ? data.mobileService.locations
           : ['Parkiran MPP', 'Ecopark'],
     });
   };
+
+  const currentOverlay = typeof form.bgOverlay === 'number' ? form.bgOverlay : 45;
+  const resolvedBgImage = resolveMediaUrl(form.bgImage || form.truckImage);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8 max-w-4xl">
@@ -206,8 +216,18 @@ export const LetGoEditor: React.FC = () => {
         </div>
       </div>
 
-      {/* Foto Latar Belakang */}
+      {/* Galeri Slide Foto LET'GO (Carousel) */}
       <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-md">
+        <GalleryManager
+          label="SLIDE FOTO HALAMAN LET'GO (CAROUSEL)"
+          images={form.letGoGalleryImages || []}
+          onChange={(updated) => setForm({ ...form, letGoGalleryImages: updated })}
+          description="Foto-foto dokumentasi Let'Go / mobile coffee Leton Coffee. Foto tampil dalam format horizontal image carousel / slider di halaman LET'GO."
+        />
+      </div>
+
+      {/* Foto Latar Belakang & Pengatur Cahaya Background */}
+      <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-md space-y-6">
         <ImageUploadField
           label="FOTO LATAR BELAKANG HALAMAN LET'GO"
           value={form.bgImage}
@@ -215,6 +235,118 @@ export const LetGoEditor: React.FC = () => {
           aspectRatio="16:9"
           description="Foto full-screen suasana outdoor / mobile coffee booth untuk background wallpaper halaman LET'GO (Rasio 16:9)."
         />
+
+        {/* Pengatur Cahaya / Kegelapan Overlay Background */}
+        <div className="pt-4 border-t border-slate-800 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-[#00E5FF]" />
+                <label className="block text-xs font-mono font-bold tracking-wider text-white uppercase">
+                  PENGATUR CAHAYA BACKGROUND HALAMAN LET'GO
+                </label>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Atur tingkat kegelapan overlay di atas foto background agar foto tetap tampak jernih dan teks LET'GO mudah dibaca.
+              </p>
+            </div>
+
+            {/* Current Value Display Badge */}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs font-mono text-slate-400">Tingkat Overlay:</span>
+              <span className="px-3 py-1 rounded-lg bg-[#00E5FF]/10 border border-[#00E5FF]/40 text-[#00E5FF] font-mono font-bold text-sm">
+                {currentOverlay}%
+              </span>
+            </div>
+          </div>
+
+          {/* Slider Bar */}
+          <div className="space-y-2 bg-slate-950 p-4 rounded-xl border border-slate-800">
+            <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-1">
+              <span className="flex items-center gap-1">
+                <Sun className="w-3.5 h-3.5 text-amber-400" />
+                <span>0% (Terang / Tanpa Overlay)</span>
+              </span>
+              <span className="text-[#00E5FF] font-bold">45% (Default)</span>
+              <span className="flex items-center gap-1">
+                <span>100% (Sangat Gelap)</span>
+                <Moon className="w-3.5 h-3.5 text-indigo-400" />
+              </span>
+            </div>
+
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={currentOverlay}
+              onChange={(e) => setForm({ ...form, bgOverlay: parseInt(e.target.value, 10) })}
+              className="w-full h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-[#00E5FF] focus:outline-none focus:ring-2 focus:ring-[#00E5FF]/40"
+            />
+
+            {/* Quick Preset Buttons */}
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider mr-1">
+                Preset Cepat:
+              </span>
+              {[
+                { label: '0% (Asli)', val: 0 },
+                { label: '35% (Terang)', val: 35 },
+                { label: '45% (Default)', val: 45 },
+                { label: '60% (Kontras Teks)', val: 60 },
+                { label: '75% (Sangat Gelap)', val: 75 },
+              ].map((preset) => (
+                <button
+                  key={preset.val}
+                  type="button"
+                  onClick={() => setForm({ ...form, bgOverlay: preset.val })}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-medium transition-all cursor-pointer ${
+                    currentOverlay === preset.val
+                      ? 'bg-[#00E5FF] text-slate-950 font-bold shadow-sm shadow-[#00E5FF]/30'
+                      : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Live Visual Preview */}
+          {resolvedBgImage && (
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">
+                Preview Tampilan Live Background (LET'GO):
+              </span>
+              <div className="relative h-44 rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center text-center p-4">
+                {/* Background Image */}
+                <div
+                  className="absolute inset-0 bg-cover bg-center transition-all duration-300"
+                  style={{ backgroundImage: `url("${resolvedBgImage}")` }}
+                />
+
+                {/* Dark Overlay Layer based on slider */}
+                <div
+                  className="absolute inset-0 bg-black pointer-events-none transition-opacity duration-200"
+                  style={{ opacity: currentOverlay / 100 }}
+                />
+
+                {/* Foreground Sample Text */}
+                <div className="relative z-10 space-y-1 max-w-md">
+                  <span className="inline-block px-3 py-0.5 rounded-full bg-[#FDFBF7]/90 text-[#2563EB] text-[10px] font-mono font-bold uppercase tracking-wider mb-1">
+                    04 — {form.badge || 'MOBILE COFFEE EXPERIENCE'}
+                  </span>
+                  <h4 className="font-display font-black text-lg sm:text-xl text-white tracking-tight uppercase drop-shadow-md">
+                    {form.title || "LET'GO"}
+                  </h4>
+                  <p className="text-xs text-slate-200 font-sans line-clamp-2 drop-shadow">
+                    {form.description || 'Layanan coffee booth mobile dari Leton Coffee on the move.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Bottom Save Button */}

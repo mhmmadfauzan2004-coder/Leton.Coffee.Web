@@ -41,9 +41,13 @@ export interface MobileService {
   serviceArea?: string;
   ctaText?: string;
   bgImage: string;
+  bgOverlay?: number; // Background overlay darkness / brightness level (0 - 100, default 45)
+  openBoothBgImage?: string; // Custom background image for LETON OPEN BOOTH
+  openBoothBgOverlay?: number; // Background overlay darkness / brightness level for LETON OPEN BOOTH (0 - 100, default 45)
   truckImage: string;
   features: string[];
   galleryImages?: string[]; // Horizontal swipe card photos for Leton Open Booth
+  letGoGalleryImages?: string[]; // Horizontal image carousel/slider for LET'GO
 }
 
 export interface MenuCategory {

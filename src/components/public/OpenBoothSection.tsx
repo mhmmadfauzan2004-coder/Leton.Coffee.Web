@@ -1,23 +1,25 @@
 import React from 'react';
 import { useContent } from '../../context/ContentContext';
 import { resolveMediaUrl } from '../../utils/api';
+import { createWhatsAppLink } from '../../utils/formatters';
 import { OpenBoothCardsGallery } from './OpenBoothCardsGallery';
 import { motion } from 'motion/react';
-import { Store, MapPin } from 'lucide-react';
+import { Store, MessageCircle } from 'lucide-react';
 
 export const OpenBoothSection: React.FC = () => {
   const { data } = useContent();
-  const { mobileService } = data;
+  const { mobileService, contactSettings } = data;
 
   const bgPhoto = resolveMediaUrl(mobileService.bgImage || mobileService.truckImage);
-  const locationsList =
-    mobileService.locations && mobileService.locations.length > 0
-      ? mobileService.locations
-      : ['Parkiran MPP', 'Ecopark'];
-
   const openBoothDesc =
     mobileService.openBoothDescription ||
     'Leton Open Booth adalah coffee booth mobile dari Leton Coffee yang hadir di area publik dan lokasi tertentu untuk melayani customer secara langsung.';
+
+  const whatsappNumber = contactSettings?.whatsapp || '082168936647';
+  const eventWaLink = createWhatsAppLink(
+    whatsappNumber,
+    'Halo Leton Coffee, saya ingin BOOK FOR EVENT. Bisa minta informasi lebih lanjut?'
+  );
 
   return (
     <section
@@ -82,30 +84,24 @@ export const OpenBoothSection: React.FC = () => {
           {openBoothDesc}
         </motion.p>
 
-        {/* Locations Notice */}
+        {/* BOOK FOR EVENT Button (Replaces location list box) */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6, delay: 0.4 }}
-          className="mt-8 flex flex-col items-center gap-3 w-full"
+          className="mt-8 mb-4"
         >
-          <span className="text-xs font-mono font-bold tracking-widest uppercase text-slate-300 drop-shadow-md flex items-center gap-1.5">
-            <MapPin className="w-3.5 h-3.5 text-[#60A5FA]" />
-            <span>TEMUKAN BOOTH KAMI DI:</span>
-          </span>
-
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-            {locationsList.map((loc, idx) => (
-              <div
-                key={idx}
-                className="inline-flex items-center gap-2 px-4 sm:px-5 py-2 rounded-full bg-slate-900/85 backdrop-blur-md border border-[#2563EB]/40 text-white shadow-xl shadow-black/40 text-xs sm:text-sm font-display font-bold tracking-wider uppercase"
-              >
-                <span className="w-2 h-2 rounded-full bg-[#60A5FA] animate-pulse" />
-                <span>📍 {loc}</span>
-              </div>
-            ))}
-          </div>
+          <a
+            href={eventWaLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            id="book-for-event-btn"
+            className="inline-flex items-center gap-3 px-8 py-4 rounded-full bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-display font-bold text-sm sm:text-base tracking-wider uppercase shadow-xl shadow-[#2563EB]/30 hover:shadow-2xl hover:shadow-[#2563EB]/50 hover:scale-105 active:scale-[0.98] transition-all cursor-pointer border border-[#60A5FA]/30"
+          >
+            <MessageCircle className="w-5 h-5 text-white" />
+            <span>BOOK FOR EVENT</span>
+          </a>
         </motion.div>
 
         {/* Horizontal Swipe Cards Photo Gallery */}

@@ -140,7 +140,7 @@ export const MenuSection: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 sm:gap-10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8">
             {filteredItems.map((item, idx) => (
               <motion.div
                 key={item.id}
@@ -148,15 +148,15 @@ export const MenuSection: React.FC = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.4, delay: (idx % 4) * 0.08 }}
-                className="group flex flex-col justify-between transition-all duration-300 transform hover:-translate-y-1"
+                className="group flex flex-col justify-between transition-all duration-300 transform hover:-translate-y-1 cursor-default"
               >
                 <div className="flex-1 flex flex-col">
-                  {/* Image container - Clean Rounded Frameless Media */}
-                  <div className="relative aspect-4/3 overflow-hidden rounded-2xl bg-slate-900 shrink-0 shadow-lg shadow-black/40">
+                  {/* Image container - Matched to Barista Photo Card dimensions, aspect ratio & border-radius */}
+                  <div className="relative aspect-[3/4] w-full rounded-2xl sm:rounded-3xl overflow-hidden bg-slate-900 border border-slate-800/80 group-hover:border-[#2563EB]/60 transition-all duration-300 shadow-xl group-hover:shadow-2xl group-hover:shadow-[#2563EB]/10 shrink-0">
                     <img
                       src={resolveMediaUrl(item.image)}
                       alt={item.name}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      className="w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105"
                       referrerPolicy="no-referrer"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60 pointer-events-none" />

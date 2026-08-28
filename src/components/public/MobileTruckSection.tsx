@@ -88,7 +88,7 @@ export const MobileTruckSection: React.FC = () => {
         >
           <span className="text-xs font-mono font-bold tracking-widest uppercase text-slate-300 drop-shadow-md flex items-center gap-1.5">
             <MapPin className="w-3.5 h-3.5 text-[#60A5FA]" />
-            <span>LOKASI OPERASIONAL MOBILE:</span>
+            <span>LOKASI MOBILE LETON COFFEE:</span>
           </span>
 
           <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">

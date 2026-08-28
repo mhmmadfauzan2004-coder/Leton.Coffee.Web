@@ -94,12 +94,12 @@ export const BaristasSection: React.FC = () => {
                 className="group flex flex-col cursor-default"
               >
                 {/* Photo Container */}
-                <div className="relative aspect-[3/4] w-full rounded-2xl sm:rounded-3xl overflow-hidden bg-slate-900 border border-slate-800/80 group-hover:border-[#2563EB]/60 transition-all duration-300 shadow-xl group-hover:shadow-2xl group-hover:shadow-[#2563EB]/10">
+                <div className="relative aspect-[3/4] w-full rounded-2xl sm:rounded-3xl overflow-hidden bg-slate-900 border border-slate-800/80 group-hover:border-[#2563EB]/60 transition-all duration-300 shadow-xl group-hover:shadow-2xl group-hover:shadow-[#2563EB]/10 shrink-0">
                   {barista.image ? (
                     <img
                       src={resolveMediaUrl(barista.image)}
                       alt={barista.name}
-                      className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
+                      className="w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105"
                       referrerPolicy="no-referrer"
                     />
                   ) : (
@@ -110,7 +110,7 @@ export const BaristasSection: React.FC = () => {
                   )}
 
                   {/* Subtle Gradient Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#060a10]/70 via-transparent to-transparent opacity-60 group-hover:opacity-30 transition-opacity" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60 pointer-events-none" />
 
                   {/* Instagram Button */}
                   {barista.instagram && (

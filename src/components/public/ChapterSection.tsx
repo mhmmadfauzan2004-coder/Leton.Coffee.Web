@@ -24,15 +24,26 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
   const overlayPercent = typeof branch.bgOverlay === 'number' ? branch.bgOverlay : 45;
   const overlayOpacity = Math.max(0, Math.min(100, overlayPercent)) / 100;
 
+  // Tailored responsive background positioning per branch to preserve natural subject composition (people, faces & focal points) on mobile & desktop
+  const getBranchBgPosition = () => {
+    if (branch.id === 'chapter-5') {
+      return 'bg-[position:50%_20%] sm:bg-[position:50%_28%] md:bg-center';
+    }
+    if (branch.id === 'chapter-6') {
+      return 'bg-[position:50%_25%] sm:bg-[position:50%_32%] md:bg-center';
+    }
+    return 'bg-[position:50%_25%] sm:bg-center';
+  };
+
   return (
     <section
       id={branch.id}
       className="relative min-h-screen w-full flex items-center justify-center overflow-hidden py-28 sm:py-36 px-4 sm:px-6 lg:px-8 bg-[#070b12]"
     >
-      {/* Background Image Layer (Original high quality photo) */}
+      {/* Background Image Layer (Original high quality photo with tailored positioning) */}
       {resolvedBg && (
         <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-300 pointer-events-none"
+          className={`absolute inset-0 bg-cover bg-no-repeat ${getBranchBgPosition()} transition-all duration-300 pointer-events-none`}
           style={{ backgroundImage: `url("${resolvedBg}")` }}
         />
       )}

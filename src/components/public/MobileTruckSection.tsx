@@ -23,10 +23,10 @@ export const MobileTruckSection: React.FC = () => {
       id="let-go"
       className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden py-28 sm:py-36 px-4 sm:px-6 lg:px-8 bg-[#070b12]"
     >
-      {/* Background Image Layer */}
+      {/* Background Image Layer with tailored responsive positioning */}
       {bgPhoto && (
         <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-300 pointer-events-none"
+          className="absolute inset-0 bg-cover bg-no-repeat bg-[position:50%_25%] sm:bg-[position:50%_32%] md:bg-center transition-all duration-300 pointer-events-none"
           style={{ backgroundImage: `url("${bgPhoto}")` }}
         />
       )}

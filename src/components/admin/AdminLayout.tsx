@@ -4,6 +4,7 @@ import { DashboardOverview } from './DashboardOverview';
 import { HomeEditor } from './HomeEditor';
 import { ChapterEditor } from './ChapterEditor';
 import { LetGoEditor } from './LetGoEditor';
+import { OpenBoothEditor } from './OpenBoothEditor';
 import { MenuManager } from './MenuManager';
 import { AboutEditor } from './AboutEditor';
 import { BaristaManager } from './BaristaManager';
@@ -14,6 +15,7 @@ import {
   Home,
   MapPin,
   Truck,
+  Store,
   UtensilsCrossed,
   Users,
   Info,
@@ -40,7 +42,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
     { id: 'home', label: 'HOME / HERO', icon: Home },
     { id: 'chapter-5', label: 'CHAPTER 5', icon: MapPin },
     { id: 'chapter-6', label: 'CHAPTER 6', icon: MapPin },
-    { id: 'let-go', label: "LET'GO TRUCK", icon: Truck },
+    { id: 'let-go', label: "LET'GO", icon: Truck },
+    { id: 'open-booth', label: 'LETON OPEN BOOTH', icon: Store },
     { id: 'menu', label: 'MENU & KATEGORI', icon: UtensilsCrossed },
     { id: 'baristas', label: 'TIM BARISTA', icon: Users },
     { id: 'about', label: 'ABOUT STORY', icon: Info },
@@ -231,6 +234,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
           <ChapterEditor branchId="chapter-6" title="CHAPTER 6 (DUMAI RATU SIMA)" />
         )}
         {activeTab === 'let-go' && <LetGoEditor />}
+        {activeTab === 'open-booth' && <OpenBoothEditor />}
         {activeTab === 'menu' && <MenuManager />}
         {activeTab === 'baristas' && <BaristaManager />}
         {activeTab === 'about' && <AboutEditor />}

@@ -4,6 +4,7 @@ import { Navbar } from './components/public/Navbar';
 import { HeroSection } from './components/public/HeroSection';
 import { ChapterSection } from './components/public/ChapterSection';
 import { MobileTruckSection } from './components/public/MobileTruckSection';
+import { OpenBoothSection } from './components/public/OpenBoothSection';
 import { MenuSection } from './components/public/MenuSection';
 import { BaristasSection } from './components/public/BaristasSection';
 import { AboutSection } from './components/public/AboutSection';
@@ -102,10 +103,13 @@ const AppContent: React.FC = () => {
             {/* 03 — CHAPTER 6 (Dumai Ratu Sima) */}
             {chapter6 && <ChapterSection branch={chapter6} reversed={true} />}
 
-            {/* 04 — LET’GO / COFFEE TRUCK */}
+            {/* 04 — LET’GO (Mobile Coffee) */}
             <MobileTruckSection />
 
-            {/* 05 — MENU */}
+            {/* 05 — LETON OPEN BOOTH */}
+            <OpenBoothSection />
+
+            {/* 06 — MENU */}
             <MenuSection />
 
             {/* 06 — BARISTAS TEAM */}

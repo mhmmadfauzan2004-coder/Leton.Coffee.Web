@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { MobileService } from '../../types';
 import { ImageUploadField } from './ImageUploadField';
-import { GalleryManager } from './GalleryManager';
-import { Save, Loader2, RotateCcw, Plus, Trash2, MapPin, Store, Truck, Sparkles } from 'lucide-react';
+import { Save, Loader2, RotateCcw, Plus, Trash2, MapPin, Truck } from 'lucide-react';
 
 export const LetGoEditor: React.FC = () => {
   const { data, saveData } = useContent();
@@ -68,10 +67,10 @@ export const LetGoEditor: React.FC = () => {
         <div>
           <h2 className="font-display font-black text-2xl text-white uppercase tracking-tight flex items-center gap-2.5">
             <Truck className="w-6 h-6 text-[#00E5FF]" />
-            <span>EDITOR LET'GO & LETON OPEN BOOTH</span>
+            <span>EDITOR HALAMAN LET'GO</span>
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Kelola informasi mobile coffee booth Leton Coffee, titik lokasi operasional (Parkiran MPP & Ecopark), serta galeri kartu foto Leton Open Booth.
+            Kelola informasi layanan mobile coffee booth Leton Coffee & titik lokasi operasional (Parkiran MPP & Ecopark).
           </p>
         </div>
 
@@ -95,15 +94,8 @@ export const LetGoEditor: React.FC = () => {
         </div>
       </div>
 
-      {/* Bagian 1: Konsep Utama LET'GO */}
+      {/* Bagian: Konsep Utama LET'GO */}
       <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-5 shadow-md">
-        <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
-          <Truck className="w-4 h-4 text-[#00E5FF]" />
-          <h3 className="text-xs font-mono font-bold tracking-wider text-white uppercase">
-            BAGIAN 1: KONSEP UTAMA LET'GO (MOBILE COFFEE)
-          </h3>
-        </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
@@ -141,7 +133,7 @@ export const LetGoEditor: React.FC = () => {
               type="text"
               value={form.badge || ''}
               onChange={(e) => setForm({ ...form, badge: e.target.value })}
-              placeholder="MOBILE COFFEE BOOTH"
+              placeholder="MOBILE COFFEE EXPERIENCE"
               className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
             />
           </div>
@@ -214,71 +206,7 @@ export const LetGoEditor: React.FC = () => {
         </div>
       </div>
 
-      {/* Bagian 2: Sub-Section LETON OPEN BOOTH */}
-      <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-5 shadow-md">
-        <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
-          <Store className="w-4 h-4 text-[#00E5FF]" />
-          <h3 className="text-xs font-mono font-bold tracking-wider text-white uppercase">
-            BAGIAN 2: SUB-SECTION LETON OPEN BOOTH
-          </h3>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
-              Judul Open Booth
-            </label>
-            <input
-              type="text"
-              value={form.openBoothTitle || 'LETON OPEN BOOTH'}
-              onChange={(e) => setForm({ ...form, openBoothTitle: e.target.value })}
-              placeholder="LETON OPEN BOOTH"
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
-              Tagline / Subtitle Open Booth
-            </label>
-            <input
-              type="text"
-              value={form.openBoothSubtitle || 'HADIR DI AREA PUBLIK'}
-              onChange={(e) => setForm({ ...form, openBoothSubtitle: e.target.value })}
-              placeholder="HADIR DI AREA PUBLIK"
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
-            Penjelasan Konsep Open Booth
-          </label>
-          <textarea
-            rows={3}
-            value={
-              form.openBoothDescription ||
-              'Leton Open Booth adalah coffee booth mobile dari Leton Coffee yang hadir di area publik dan lokasi tertentu untuk melayani customer secara langsung.'
-            }
-            onChange={(e) => setForm({ ...form, openBoothDescription: e.target.value })}
-            placeholder="Leton Open Booth adalah coffee booth mobile dari Leton Coffee yang hadir di area publik..."
-            className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
-          />
-        </div>
-      </div>
-
-      {/* Bagian 3: Galeri Kartu Foto Leton Open Booth */}
-      <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-md">
-        <GalleryManager
-          label="CARD FOTO LETON OPEN BOOTH (HORIZONTAL SWIPE GALLERY)"
-          images={form.galleryImages || []}
-          onChange={(updated) => setForm({ ...form, galleryImages: updated })}
-          description="Foto-foto dokumentasi suasana dan penyajian kopi Leton Open Booth di area publik (Parkiran MPP, Ecopark). Foto tampil dalam format deretan kartu horizontal yang dapat digeser (swipe) oleh pengunjung di website utama."
-        />
-      </div>
-
-      {/* Bagian 4: Foto Latar Belakang */}
+      {/* Foto Latar Belakang */}
       <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-md">
         <ImageUploadField
           label="FOTO LATAR BELAKANG HALAMAN LET'GO"

@@ -23,7 +23,17 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
         setIsScrolled(false);
       }
 
-      const sections = ['home', 'chapter-5', 'chapter-6', 'let-go', 'menu', 'baristas', 'about', 'contact'];
+      const sections = [
+        'home',
+        'chapter-5',
+        'chapter-6',
+        'let-go',
+        'leton-open-booth',
+        'menu',
+        'baristas',
+        'about',
+        'contact',
+      ];
       for (const sectionId of sections) {
         const el = document.getElementById(sectionId);
         if (el) {
@@ -45,6 +55,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin }) => {
     { label: 'CHAPTER 5', href: '#chapter-5', id: 'chapter-5' },
     { label: 'CHAPTER 6', href: '#chapter-6', id: 'chapter-6' },
     { label: "LET'GO", href: '#let-go', id: 'let-go' },
+    { label: 'LETON OPEN BOOTH', href: '#leton-open-booth', id: 'leton-open-booth' },
     { label: 'MENU', href: '#menu', id: 'menu' },
     { label: 'BARISTAS', href: '#baristas', id: 'baristas' },
     { label: 'ABOUT', href: '#about', id: 'about' },

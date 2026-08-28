@@ -11,6 +11,7 @@ import {
   Layers,
   MapPin,
   Truck,
+  Store,
   Sparkles,
   ArrowRight,
   ShieldCheck,
@@ -66,11 +67,18 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
       color: 'text-indigo-400',
     },
     {
-      title: "EDIT LET'GO TRUCK",
-      description: 'Kelola paket event, area jangkauan, foto truck, dan CTA booking.',
+      title: "EDIT HALAMAN LET'GO",
+      description: 'Kelola informasi mobile coffee booth dan titik lokasi operasional.',
       tab: 'let-go',
       icon: Truck,
       color: 'text-amber-400',
+    },
+    {
+      title: 'EDIT LETON OPEN BOOTH',
+      description: 'Kelola konsep booth publik dan deretan kartu galeri foto horizontal.',
+      tab: 'open-booth',
+      icon: Store,
+      color: 'text-emerald-400',
     },
     {
       title: 'KONTAK & SETTINGS',

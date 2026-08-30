@@ -244,6 +244,9 @@ export const initialLetonData: LetonData = {
     description: "Leton Coffee bermula dari sebuah ide sederhana: bagaimana secangkir kopi berkualitas tinggi dapat menjadi titik temu untuk percakapan jujur, pertukaran ide kreatif, dan ruang bertumbuh bagi anak muda.",
     secondaryDescription: "Dari Chapter 5 di Sudirman hingga Chapter 6 di Ratu Sima dan armada mobile Let'GO, kami terus berkomitmen menyajikan biji kopi pilihan terbaik dari petani Nusantara dengan teknik seduh presisi dan keramahan yang tulus.",
     mainImage: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80",
+    sliderImages: [
+      "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80"
+    ],
     secondaryImage: "https://images.unsplash.com/photo-1509785307050-d4066910ec1e?auto=format&fit=crop&w=1200&q=80",
     facts: [
       { id: "f1", label: "Cabang & Mobile Truck", value: "3 Lokasi" },

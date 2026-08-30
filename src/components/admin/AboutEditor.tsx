@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { AboutContent, AboutFact } from '../../types';
 import { ImageUploadField } from './ImageUploadField';
-import { Save, Loader2, RotateCcw, Plus, Trash2 } from 'lucide-react';
+import { Save, Loader2, RotateCcw, Plus, Trash2, Images, Sparkles } from 'lucide-react';
 
 export const AboutEditor: React.FC = () => {
   const { data, saveData } = useContent();
@@ -22,9 +22,17 @@ export const AboutEditor: React.FC = () => {
     e.preventDefault();
     setIsSaving(true);
     try {
+      // Keep sliderImages synced with mainImage if slider has at least 1 image
+      const updatedSlider = Array.isArray(form.sliderImages) && form.sliderImages.length > 0
+        ? [form.mainImage, ...form.sliderImages.slice(1)]
+        : [form.mainImage];
+
       await saveData({
         ...data,
-        aboutContent: form,
+        aboutContent: {
+          ...form,
+          sliderImages: updatedSlider,
+        },
       });
     } finally {
       setIsSaving(false);

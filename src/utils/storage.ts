@@ -99,6 +99,12 @@ export function sanitizeLoadedData(raw: any): LetonData {
     aboutContent: {
       ...initialLetonData.aboutContent,
       ...(raw.aboutContent || {}),
+      sliderImages:
+        Array.isArray(raw.aboutContent?.sliderImages) && raw.aboutContent.sliderImages.length > 0
+          ? raw.aboutContent.sliderImages.filter((img: any) => typeof img === 'string' && img.trim())
+          : Array.isArray(initialLetonData.aboutContent.sliderImages) && initialLetonData.aboutContent.sliderImages.length > 0
+          ? initialLetonData.aboutContent.sliderImages
+          : [raw.aboutContent?.mainImage || initialLetonData.aboutContent.mainImage],
       facts:
         Array.isArray(raw.aboutContent?.facts) && raw.aboutContent.facts.length > 0
           ? raw.aboutContent.facts.map((f: any) => {

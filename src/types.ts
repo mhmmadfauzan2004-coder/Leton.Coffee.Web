@@ -99,6 +99,7 @@ export interface AboutContent {
   description: string;
   secondaryDescription: string;
   mainImage: string;
+  sliderImages?: string[];
   secondaryImage: string;
   facts: AboutFact[];
 }

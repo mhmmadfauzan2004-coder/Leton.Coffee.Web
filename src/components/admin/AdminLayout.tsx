@@ -7,6 +7,7 @@ import { LetGoEditor } from './LetGoEditor';
 import { OpenBoothEditor } from './OpenBoothEditor';
 import { MenuManager } from './MenuManager';
 import { AboutEditor } from './AboutEditor';
+import { StorySliderManager } from './StorySliderManager';
 import { BaristaManager } from './BaristaManager';
 import { ContactEditor } from './ContactEditor';
 import { SettingsEditor } from './SettingsEditor';
@@ -19,6 +20,7 @@ import {
   UtensilsCrossed,
   Users,
   Info,
+  Images,
   Phone,
   Settings,
   LogOut,
@@ -47,6 +49,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
     { id: 'menu', label: 'MENU & KATEGORI', icon: UtensilsCrossed },
     { id: 'baristas', label: 'TIM BARISTA', icon: Users },
     { id: 'about', label: 'ABOUT STORY', icon: Info },
+    { id: 'story-slider', label: 'FOTO SLIDER STORY', icon: Images },
     { id: 'contact', label: 'KONTAK & FOOTER', icon: Phone },
     { id: 'settings', label: 'PENGATURAN & AKUN', icon: Settings },
   ];
@@ -238,6 +241,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
         {activeTab === 'menu' && <MenuManager />}
         {activeTab === 'baristas' && <BaristaManager />}
         {activeTab === 'about' && <AboutEditor />}
+        {activeTab === 'story-slider' && <StorySliderManager />}
         {activeTab === 'contact' && <ContactEditor />}
         {activeTab === 'settings' && <SettingsEditor />}
       </main>

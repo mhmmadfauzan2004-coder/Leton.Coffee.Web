@@ -53,6 +53,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
       color: 'text-rose-400',
     },
     {
+      title: 'KELOLA FOTO SLIDER STORY',
+      description: 'Upload & atur urutan carousel foto interaktif di section Our Story.',
+      tab: 'story-slider',
+      icon: Layers,
+      color: 'text-cyan-400',
+    },
+    {
       title: 'EDIT CHAPTER 5 (SUDIRMAN)',
       description: 'Perbarui jam buka, alamat, background, dan link maps Sudirman.',
       tab: 'chapter-5',

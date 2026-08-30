@@ -1,12 +1,18 @@
 import React from 'react';
 import { useContent } from '../../context/ContentContext';
 import { resolveMediaUrl } from '../../utils/api';
+import { StoryImageSlider } from './StoryImageSlider';
 import { motion } from 'motion/react';
 import { Coffee, Flame } from 'lucide-react';
 
 export const AboutSection: React.FC = () => {
   const { data } = useContent();
   const { aboutContent } = data;
+
+  const sliderImages =
+    aboutContent.sliderImages && aboutContent.sliderImages.length > 0
+      ? aboutContent.sliderImages
+      : [aboutContent.mainImage];
 
   return (
     <section
@@ -24,13 +30,11 @@ export const AboutSection: React.FC = () => {
             className="lg:col-span-6 relative"
           >
             <div className="relative rounded-2xl overflow-hidden border border-slate-700/80 shadow-2xl">
-              <img
-                src={resolveMediaUrl(aboutContent.mainImage)}
-                alt="Leton Coffee Story"
-                className="w-full h-80 sm:h-96 lg:h-[450px] object-cover"
-                referrerPolicy="no-referrer"
+              <StoryImageSlider
+                images={sliderImages}
+                alt={aboutContent.title || 'Leton Coffee Story'}
+                className="w-full h-80 sm:h-96 lg:h-[450px]"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#070b12] via-transparent to-transparent opacity-60" />
             </div>
 
             {/* Secondary Floating Image */}

@@ -137,13 +137,19 @@ export async function saveContentToSupabase(contentData: LetonData): Promise<{ s
       .upsert(payload, { onConflict: 'id' });
 
     if (error) {
-      console.error('Supabase upsert error:', error);
-      return { success: false, error: error.message };
+      console.error('[Supabase Database Upsert Error]:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        table: SUPABASE_TABLE_NAME,
+      });
+      return { success: false, error: `${error.message}${error.hint ? ` (${error.hint})` : ''}` };
     }
 
     return { success: true };
   } catch (err: any) {
-    console.error('saveContentToSupabase exception:', err);
+    console.error('[saveContentToSupabase Exception]:', err);
     return { success: false, error: err?.message || 'Gagal menyimpan data ke Supabase.' };
   }
 }

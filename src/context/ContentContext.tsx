@@ -39,6 +39,7 @@ interface ContentContextType {
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   dismissToast: (id: string) => void;
   saveData: (newData: LetonData) => Promise<boolean>;
+  updateData: (partialOrFn: Partial<LetonData> | ((prev: LetonData) => LetonData)) => Promise<boolean>;
   uploadImage: (file: File) => Promise<string | null>;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -279,6 +280,8 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const supabaseRes = await saveContentToSupabase(sanitized);
       if (supabaseRes.success) {
         supabaseSaved = true;
+      } else {
+        console.warn('[Supabase Database Warning] Gagal menyimpan ke Supabase:', supabaseRes.error);
       }
 
       // 2. Also send to Express backend API (Secondary fallback)
@@ -316,12 +319,30 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } else if (serverSaved) {
         showToast('Perubahan berhasil disimpan permanen ke server backend!', 'success');
       } else {
-        showToast('Perubahan disimpan di browser.', 'info');
+        showToast('Perubahan berhasil disimpan di memori & cache lokal browser.', 'info');
       }
       return true;
     } catch (err: any) {
-      console.error('Save error:', err);
-      showToast('Gagal menyimpan data.', 'error');
+      console.error('Save error in ContentContext:', err);
+      showToast('Gagal menyimpan data: ' + (err?.message || 'Error tidak diketahui'), 'error');
+      return false;
+    }
+  };
+
+  // Helper to update a slice of data or functional state update
+  const updateData = async (
+    partialOrFn: Partial<LetonData> | ((prev: LetonData) => LetonData)
+  ): Promise<boolean> => {
+    try {
+      const nextData: LetonData =
+        typeof partialOrFn === 'function'
+          ? (partialOrFn as any)(data)
+          : { ...data, ...partialOrFn };
+
+      return await saveData(nextData);
+    } catch (err: any) {
+      console.error('[ContentContext updateData Error]:', err);
+      showToast('Gagal memperbarui data: ' + (err?.message || 'Unknown error'), 'error');
       return false;
     }
   };
@@ -538,6 +559,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         showToast,
         dismissToast,
         saveData,
+        updateData,
         uploadImage,
         login,
         logout,

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { resolveMediaUrl } from '../../utils/api';
 import { optimizeImageFile } from '../../utils/storage';
@@ -19,13 +19,16 @@ import {
   Layers,
   Sparkles,
   Info,
-  Crop as CropIcon,
   AlertCircle,
   RotateCcw,
+  Database,
+  Code2,
+  Copy,
+  CheckCheck,
 } from 'lucide-react';
 
 export const StorySliderManager: React.FC = () => {
-  const { data, updateData, uploadImage, showToast } = useContent();
+  const { data, updateData, saveData, uploadImage, showToast } = useContent();
   const { aboutContent } = data;
 
   // Initialize list from data.aboutContent.sliderImages (fallback to mainImage)
@@ -40,22 +43,83 @@ export const StorySliderManager: React.FC = () => {
   const [activeMode, setActiveMode] = useState<'upload' | 'url'>('upload');
   const [urlInput, setUrlInput] = useState('');
   const [showLivePreview, setShowLivePreview] = useState(true);
+  const [showSqlGuide, setShowSqlGuide] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
+
+  // Keep local images state in sync if data changes externally
+  useEffect(() => {
+    if (Array.isArray(aboutContent.sliderImages) && aboutContent.sliderImages.length > 0) {
+      setImages(aboutContent.sliderImages);
+    }
+  }, [aboutContent.sliderImages]);
 
   // Cropper states
   const [cropperSource, setCropperSource] = useState<string | null>(null);
   const [originalFile, setOriginalFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  /**
+   * Helper function to save slider images directly to Supabase & Context
+   */
+  const persistSliderImages = async (newList: string[], notify = false): Promise<boolean> => {
+    setIsSaving(true);
+    try {
+      const validImages = newList.filter((img) => typeof img === 'string' && img.trim().length > 0);
+      const fallbackMain = validImages[0] || aboutContent.mainImage || 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80';
+
+      const updatedAbout = {
+        ...aboutContent,
+        sliderImages: validImages.length > 0 ? validImages : [fallbackMain],
+        mainImage: fallbackMain, // Keep mainImage synced to slide #1
+      };
+
+      console.log('[CMS Slider] Saving slider sequence to Supabase / Local storage:', updatedAbout.sliderImages);
+
+      let success = false;
+      if (typeof updateData === 'function') {
+        success = await updateData({
+          aboutContent: updatedAbout,
+        });
+      } else if (typeof saveData === 'function') {
+        success = await saveData({
+          ...data,
+          aboutContent: updatedAbout,
+        });
+      }
+
+      if (notify) {
+        if (success) {
+          showToast('Urutan Foto Slider Story berhasil disimpan ke database!', 'success');
+        } else {
+          showToast('Perubahan disimpan di browser local cache.', 'info');
+        }
+      }
+      return success;
+    } catch (err: any) {
+      console.error('[CMS Slider Error Details]:', {
+        error: err,
+        message: err?.message,
+        stack: err?.stack,
+      });
+      showToast('Peringatan: Gagal sinkron ke Supabase (' + (err?.message || 'Error') + '), data tetap aman di memori browser.', 'info');
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Add new image URL
-  const handleAddUrl = (e: React.FormEvent) => {
+  const handleAddUrl = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!urlInput.trim()) {
       showToast('Masukkan URL foto yang valid.', 'error');
       return;
     }
-    setImages((prev) => [...prev, urlInput.trim()]);
+    const newUrl = urlInput.trim();
+    const updated = [...images, newUrl];
+    setImages(updated);
     setUrlInput('');
-    showToast('Foto berhasil ditambahkan ke daftar slider!', 'success');
+    await persistSliderImages(updated, true);
   };
 
   // Upload file handler
@@ -63,21 +127,29 @@ export const StorySliderManager: React.FC = () => {
     setIsUploading(true);
     try {
       // 1. Direct upload to Supabase Storage
-      const serverUrl = await uploadImage(fileToUpload);
-      if (serverUrl) {
-        setImages((prev) => [...prev, serverUrl]);
-        showToast('Foto berhasil diunggah ke Supabase Storage!', 'success');
+      let uploadedUrl: string | null = null;
+      if (typeof uploadImage === 'function') {
+        uploadedUrl = await uploadImage(fileToUpload);
+      }
+
+      if (uploadedUrl) {
+        const updated = [...images, uploadedUrl];
+        setImages(updated);
+        await persistSliderImages(updated, true);
+        showToast('Foto berhasil diunggah ke Supabase Storage & ditambahkan ke slider!', 'success');
       } else {
         // Fallback: local optimized high-quality base64
         const fallbackData = fallbackDataUrl || (await optimizeImageFile(fileToUpload, 1200, 0.8));
         if (fallbackData) {
-          setImages((prev) => [...prev, fallbackData]);
-          showToast('Foto berhasil dimuat. Klik "Simpan Perubahan" untuk menyimpan!', 'info');
+          const updated = [...images, fallbackData];
+          setImages(updated);
+          await persistSliderImages(updated, true);
+          showToast('Foto berhasil dimuat dan disimpan!', 'info');
         }
       }
-    } catch (err) {
-      console.error('File upload error:', err);
-      showToast('Gagal memproses foto. Silakan coba lagi.', 'error');
+    } catch (err: any) {
+      console.error('[CMS Upload Error]:', err);
+      showToast('Gagal memproses foto: ' + (err?.message || 'Terjadi kesalahan'), 'error');
     } finally {
       setIsUploading(false);
       setCropperSource(null);
@@ -119,73 +191,94 @@ export const StorySliderManager: React.FC = () => {
     await processAndUploadFile(originalFile);
   };
 
-  // Reorder functions
-  const moveUp = (index: number) => {
-    if (index === 0) return;
-    setImages((prev) => {
-      const updated = [...prev];
-      const temp = updated[index - 1];
-      updated[index - 1] = updated[index];
-      updated[index] = temp;
-      return updated;
-    });
+  // Reorder functions (Up / Down) with instant state change and auto-sync
+  const moveUp = async (index: number) => {
+    if (index <= 0) return;
+    const updated = [...images];
+    const temp = updated[index - 1];
+    updated[index - 1] = updated[index];
+    updated[index] = temp;
+    
+    setImages(updated);
+    await persistSliderImages(updated, false);
+    showToast(`Posisi slide #${index + 1} berhasil dinaikkan ke #${index}`, 'info');
   };
 
-  const moveDown = (index: number) => {
-    if (index === images.length - 1) return;
-    setImages((prev) => {
-      const updated = [...prev];
-      const temp = updated[index + 1];
-      updated[index + 1] = updated[index];
-      updated[index] = temp;
-      return updated;
-    });
+  const moveDown = async (index: number) => {
+    if (index >= images.length - 1) return;
+    const updated = [...images];
+    const temp = updated[index + 1];
+    updated[index + 1] = updated[index];
+    updated[index] = temp;
+
+    setImages(updated);
+    await persistSliderImages(updated, false);
+    showToast(`Posisi slide #${index + 1} berhasil diturunkan ke #${index + 2}`, 'info');
   };
 
-  // Remove function
-  const removeImage = (index: number) => {
+  // Remove function with auto-sync
+  const removeImage = async (index: number) => {
     if (images.length === 1) {
       if (!confirm('Ini adalah satu-satunya foto pada Story. Yakin ingin menghapusnya?')) {
         return;
       }
     }
-    setImages((prev) => prev.filter((_, idx) => idx !== index));
-    showToast('Foto dihapus dari daftar slider.', 'info');
+    const updated = images.filter((_, idx) => idx !== index);
+    setImages(updated);
+    await persistSliderImages(updated, false);
+    showToast('Foto berhasil dihapus dari slider!', 'info');
   };
 
   // Reset to default
-  const handleResetToDefault = () => {
+  const handleResetToDefault = async () => {
     if (confirm('Kembalikan foto slider ke pengaturan awal?')) {
       const defaultImg = 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80';
-      setImages([defaultImg]);
+      const defaultList = [defaultImg];
+      setImages(defaultList);
+      await persistSliderImages(defaultList, true);
       showToast('Daftar foto dikembalikan ke default.', 'info');
     }
   };
 
-  // Save to Supabase and Context
+  // Manual save trigger
   const handleSaveAll = async () => {
-    setIsSaving(true);
-    try {
-      const validImages = images.filter((img) => img && img.trim().length > 0);
-      const fallbackMain = validImages[0] || aboutContent.mainImage;
+    await persistSliderImages(images, true);
+  };
 
-      const updatedAbout = {
-        ...aboutContent,
-        sliderImages: validImages.length > 0 ? validImages : [fallbackMain],
-        mainImage: fallbackMain, // Keep mainImage synced to slide #1
-      };
+  const sqlSnippet = `-- 1. Buat Tabel leton_content (jika belum ada di Supabase)
+CREATE TABLE IF NOT EXISTS public.leton_content (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  content JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-      await updateData({
-        aboutContent: updatedAbout,
-      });
+-- 2. Aktifkan Row Level Security (RLS)
+ALTER TABLE public.leton_content ENABLE ROW LEVEL SECURITY;
 
-      showToast('Foto Slider Story berhasil disimpan dan disinkronkan ke Supabase!', 'success');
-    } catch (err) {
-      console.error('Error saving slider:', err);
-      showToast('Gagal menyimpan perubahan ke database.', 'error');
-    } finally {
-      setIsSaving(false);
-    }
+-- 3. Kebijakan Akses Baca Publik
+CREATE POLICY "Public Read Access"
+ON public.leton_content
+FOR SELECT
+TO anon, authenticated
+USING (true);
+
+-- 4. Kebijakan Akses Tulis (INSERT, UPDATE, DELETE)
+CREATE POLICY "Admin Full Access"
+ON public.leton_content
+FOR ALL
+TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
+-- 5. Aktifkan Realtime Replication
+ALTER PUBLICATION supabase_realtime ADD TABLE public.leton_content;`;
+
+  const copySqlToClipboard = () => {
+    navigator.clipboard.writeText(sqlSnippet);
+    setCopiedSql(true);
+    showToast('Script SQL berhasil disalin ke clipboard!', 'success');
+    setTimeout(() => setCopiedSql(false), 3000);
   };
 
   return (
@@ -208,7 +301,16 @@ export const StorySliderManager: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => setShowSqlGuide(!showSqlGuide)}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
+            title="Lihat skema SQL Supabase & RLS"
+          >
+            <Database className="w-3.5 h-3.5 text-blue-400" />
+            <span>{showSqlGuide ? 'Tutup Info SQL' : 'Skema SQL Supabase'}</span>
+          </button>
+
           <button
             onClick={() => setShowLivePreview(!showLivePreview)}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
@@ -237,6 +339,42 @@ export const StorySliderManager: React.FC = () => {
         </div>
       </div>
 
+      {/* SQL Migration & RLS Helper Drawer (Optional toggle) */}
+      {showSqlGuide && (
+        <div className="p-5 rounded-2xl bg-slate-950 border border-blue-900/60 shadow-2xl space-y-3 animate-fadeIn">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-blue-400">
+              <Code2 className="w-4 h-4" />
+              <h3 className="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">
+                Skema Database & Kebijakan RLS Supabase
+              </h3>
+            </div>
+            <button
+              onClick={copySqlToClipboard}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/40 text-[11px] font-semibold text-blue-300 hover:text-white transition-all cursor-pointer"
+            >
+              {copiedSql ? (
+                <>
+                  <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-emerald-400">Tersalin!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Salin SQL</span>
+                </>
+              )}
+            </button>
+          </div>
+          <p className="text-xs text-slate-400">
+            Jika Supabase memunculkan pesan error RLS atau tabel belum tersedia, jalankan skrip berikut di <strong>Supabase Dashboard &gt; SQL Editor</strong>:
+          </p>
+          <pre className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] font-mono text-slate-300 overflow-x-auto select-all leading-relaxed">
+            {sqlSnippet}
+          </pre>
+        </div>
+      )}
+
       {/* Info Status Banner */}
       <div className="p-4 rounded-2xl bg-gradient-to-r from-[#0c1427] to-[#070b12] border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -252,7 +390,7 @@ export const StorySliderManager: React.FC = () => {
               )}
             </p>
             <p className="text-[11px] text-slate-400">
-              Foto #1 otomatis menjadi gambar cover utama. Urutan slide dapat diatur dengan tombol panah naik/turun.
+              Foto #1 otomatis menjadi gambar cover utama. Urutan slide dapat diatur dengan tombol panah naik/turun dan otomatis disinkronkan.
             </p>
           </div>
         </div>

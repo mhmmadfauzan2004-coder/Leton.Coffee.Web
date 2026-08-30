@@ -3,14 +3,14 @@ import { useContent } from '../../context/ContentContext';
 import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
 
-// Crisp, Minimalist SVG Coffee Bean Icon for Progress Tracking
-const BeanIcon: React.FC<{ active: boolean }> = ({ active }) => (
+// Crisp, Minimalist SVG Coffee Bean Icon for Progressive Progress Tracking
+const BeanIcon: React.FC<{ active: boolean; index: number }> = ({ active }) => (
   <svg
     viewBox="0 0 24 24"
     className={`w-3 h-3 sm:w-3.5 sm:h-3.5 transition-all duration-300 transform ${
       active
-        ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(0,229,255,0.75)] scale-110 opacity-100 rotate-12'
-        : 'text-slate-700/50 opacity-25 scale-90 rotate-0'
+        ? 'text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.9)] scale-110 opacity-100 rotate-12'
+        : 'text-slate-800/80 opacity-20 scale-90 rotate-0'
     }`}
     fill="currentColor"
   >
@@ -38,15 +38,15 @@ export const PageSkeletonLoader: React.FC<PageSkeletonLoaderProps> = ({ onComple
   const customLogoUrl = siteSettings?.logoUrl ? resolveMediaUrl(siteSettings.logoUrl) : '';
   const [imageError, setImageError] = useState(false);
 
-  // Smooth 0% -> 100% Progress State
+  // Smooth 0% -> 100% Progressive State
   const [progress, setProgress] = useState(0);
   const [isAnimationFinished, setIsAnimationFinished] = useState(false);
   const totalBeans = 8;
 
-  // 1. Run smooth progress bar animation
+  // 1. Run smooth progressive animation across 2.2 - 2.5 seconds (0% to 100%)
   useEffect(() => {
     const startTime = performance.now();
-    const duration = 1500; // 1.5s smooth baseline progress fill
+    const duration = 2400; // 2.4s smooth progressive fill for the 2-3s loading window
 
     let animationFrameId: number;
 
@@ -54,14 +54,14 @@ export const PageSkeletonLoader: React.FC<PageSkeletonLoaderProps> = ({ onComple
       const elapsed = currentTime - startTime;
       const progressFraction = Math.min(elapsed / duration, 1);
       
-      // Smooth easeOutQuad progress curve
-      const easedProgress = 1 - Math.pow(1 - progressFraction, 2);
-      const currentPct = Math.round(easedProgress * 100);
+      // Smooth linear-to-ease progressive fill
+      const currentPct = Math.min(Math.floor(progressFraction * 100), 100);
       setProgress(currentPct);
 
       if (progressFraction < 1) {
         animationFrameId = requestAnimationFrame(updateProgress);
       } else {
+        setProgress(100);
         setIsAnimationFinished(true);
       }
     };
@@ -72,14 +72,14 @@ export const PageSkeletonLoader: React.FC<PageSkeletonLoaderProps> = ({ onComple
     };
   }, []);
 
-  // 2. Complete loading only when animation has reached 100% AND Supabase data is fully ready
+  // 2. Complete loading only when all beans are 100% lit AND Supabase data is fully ready
   useEffect(() => {
     if (isAnimationFinished && isDataReady) {
       const timer = setTimeout(() => {
         if (onComplete) {
           onComplete();
         }
-      }, 200);
+      }, 300); // Elegant 300ms pause when 100% full before starting smooth fade out
       return () => clearTimeout(timer);
     }
   }, [isAnimationFinished, isDataReady, onComplete]);
@@ -171,13 +171,13 @@ export const PageSkeletonLoader: React.FC<PageSkeletonLoaderProps> = ({ onComple
               style={{ width: `${progress}%` }}
             />
 
-            {/* Coffee Beans Filling from Left to Right */}
+            {/* Coffee Beans Filling Progressively from Left to Right */}
             {Array.from({ length: totalBeans }).map((_, index) => {
-              const beanThreshold = ((index + 1) / totalBeans) * 100;
-              const isFilled = progress >= beanThreshold - (100 / totalBeans / 2);
+              const beanThreshold = Math.round(((index + 1) / totalBeans) * 100);
+              const isFilled = progress >= beanThreshold;
               return (
                 <div key={index} className="relative z-10 flex items-center justify-center">
-                  <BeanIcon active={isFilled} />
+                  <BeanIcon active={isFilled} index={index} />
                 </div>
               );
             })}

@@ -168,13 +168,24 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenAdmin }) =
         {/* Footer Sub-Bar with Logo */}
         <div className="pt-8 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-full overflow-hidden border border-[#2563EB] shrink-0">
-              <img
-                src={resolveMediaUrl(siteSettings.logoUrl) || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
-                alt={siteSettings.brandName}
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
+            <div className="relative w-7 h-7 rounded-full overflow-hidden border border-[#2563EB] shrink-0 bg-slate-900">
+              <div className="w-full h-full rounded-full bg-gradient-to-br from-[#0c1427] to-[#04070d] flex items-center justify-center p-0.5 select-none">
+                <svg viewBox="0 0 32 32" className="w-3.5 h-3.5 text-[#00E5FF]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
+                  <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" fill="rgba(0,229,255,0.15)" />
+                  <line x1="6" y1="1" x2="6" y2="4" stroke="#60A5FA" />
+                  <line x1="10" y1="1" x2="10" y2="4" stroke="#00E5FF" />
+                  <line x1="14" y1="1" x2="14" y2="4" stroke="#60A5FA" />
+                </svg>
+              </div>
+              {siteSettings.logoUrl && (
+                <img
+                  src={resolveMediaUrl(siteSettings.logoUrl)}
+                  alt={siteSettings.brandName}
+                  className="absolute inset-0 w-full h-full object-cover z-10"
+                  referrerPolicy="no-referrer"
+                />
+              )}
             </div>
             <p>{contactSettings.footerText}</p>
           </div>

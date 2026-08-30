@@ -31,6 +31,7 @@ interface ContentContextType {
   data: LetonData;
   isLoading: boolean;
   isInitialReady: boolean;
+  isDataReady: boolean;
   isRealtimeConnected: boolean;
   lastUpdated: number;
   auth: AuthState;
@@ -62,8 +63,10 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return loadStoredContent();
   });
 
-  // Start with isInitialReady false to prevent flash of old/default fallback logo before fetch & preload
-  const [isInitialReady, setIsInitialReady] = useState<boolean>(false);
+  // Non-blocking readiness flags:
+  // isInitialReady is true immediately to allow instant 0-delay loading screen rendering
+  const [isInitialReady, setIsInitialReady] = useState<boolean>(true);
+  const [isDataReady, setIsDataReady] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState<boolean>(false);
   const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
@@ -148,6 +151,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } finally {
       // 5. Logo and data are now 100% confirmed ready and in browser memory
       setIsInitialReady(true);
+      setIsDataReady(true);
     }
   }, []);
 
@@ -525,6 +529,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         data,
         isLoading,
         isInitialReady,
+        isDataReady,
         completeLoading,
         isRealtimeConnected,
         lastUpdated,

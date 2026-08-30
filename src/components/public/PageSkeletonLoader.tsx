@@ -30,25 +30,25 @@ export interface PageSkeletonLoaderProps {
 }
 
 export const PageSkeletonLoader: React.FC<PageSkeletonLoaderProps> = ({ onComplete }) => {
-  const { data } = useContent();
+  const { data, isDataReady } = useContent();
   const { siteSettings } = data || {};
   const brandName = siteSettings?.brandName || 'LETON COFFEE';
   
-  // Exact source used in Navbar/Header for dynamic admin-configured logo
-  const logoUrl = siteSettings?.logoUrl
-    ? resolveMediaUrl(siteSettings.logoUrl)
-    : resolveMediaUrl('https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80');
+  // Custom logo from Supabase / Admin CMS
+  const customLogoUrl = siteSettings?.logoUrl ? resolveMediaUrl(siteSettings.logoUrl) : '';
+  const [imageError, setImageError] = useState(false);
 
   // Smooth 0% -> 100% Progress State
   const [progress, setProgress] = useState(0);
+  const [isAnimationFinished, setIsAnimationFinished] = useState(false);
   const totalBeans = 8;
 
+  // 1. Run smooth progress bar animation
   useEffect(() => {
     const startTime = performance.now();
-    const duration = 1600; // 1.6s smooth progress fill
+    const duration = 1500; // 1.5s smooth baseline progress fill
 
     let animationFrameId: number;
-    let completionTimeout: any = null;
 
     const updateProgress = (currentTime: number) => {
       const elapsed = currentTime - startTime;
@@ -62,21 +62,27 @@ export const PageSkeletonLoader: React.FC<PageSkeletonLoaderProps> = ({ onComple
       if (progressFraction < 1) {
         animationFrameId = requestAnimationFrame(updateProgress);
       } else {
-        // When 100% reached, pause briefly for 250ms then notify completion
-        completionTimeout = setTimeout(() => {
-          if (onComplete) {
-            onComplete();
-          }
-        }, 250);
+        setIsAnimationFinished(true);
       }
     };
 
     animationFrameId = requestAnimationFrame(updateProgress);
     return () => {
       cancelAnimationFrame(animationFrameId);
-      if (completionTimeout) clearTimeout(completionTimeout);
     };
-  }, [onComplete]);
+  }, []);
+
+  // 2. Complete loading only when animation has reached 100% AND Supabase data is fully ready
+  useEffect(() => {
+    if (isAnimationFinished && isDataReady) {
+      const timer = setTimeout(() => {
+        if (onComplete) {
+          onComplete();
+        }
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [isAnimationFinished, isDataReady, onComplete]);
 
   return (
     <motion.div
@@ -98,20 +104,34 @@ export const PageSkeletonLoader: React.FC<PageSkeletonLoaderProps> = ({ onComple
       {/* Centered Minimalist Loading Container */}
       <div className="relative z-10 flex flex-col items-center justify-center text-center max-w-sm w-full">
         
-        {/* 1. LOGO LETON COFFEE (Dynamic from Admin Settings, ~50% larger) */}
+        {/* 1. LOGO LETON COFFEE (Neon Circle with Soft Glow Pulse, Displays Admin Supabase Logo with Smooth Fade-in) */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           className="relative group"
         >
-          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden border-2 border-[#2563EB] shadow-[0_0_28px_rgba(37,99,235,0.45)] bg-[#070b12] flex items-center justify-center p-0.5">
-            <img
-              src={logoUrl}
-              alt={brandName}
-              className="w-full h-full object-cover rounded-full"
-              referrerPolicy="no-referrer"
-            />
+          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden border-2 border-[#2563EB] shadow-[0_0_28px_rgba(37,99,235,0.45)] bg-[#070b12] flex items-center justify-center p-0.5 relative">
+            {/* Ambient Background & Pulsing Glow inside the Neon Ring (No cup icon) */}
+            <div className="w-full h-full rounded-full bg-gradient-to-br from-[#0c1427] via-[#070b12] to-[#04070d] flex items-center justify-center relative overflow-hidden select-none">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(0,229,255,0.25)_0%,_rgba(37,99,235,0.1)_50%,_transparent_75%)] animate-pulse" />
+              <div className="w-8 h-8 rounded-full bg-[#00E5FF]/10 border border-[#00E5FF]/20 blur-[2px] animate-ping opacity-30" />
+            </div>
+
+            {/* Custom Admin Logo Image from Supabase (Fades in smoothly once fetched) */}
+            {customLogoUrl && !imageError && (
+              <motion.img
+                key={customLogoUrl}
+                src={customLogoUrl}
+                alt={brandName}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
+                onError={() => setImageError(true)}
+                className="absolute inset-0 w-full h-full object-cover rounded-full z-10"
+                referrerPolicy="no-referrer"
+              />
+            )}
           </div>
         </motion.div>
 

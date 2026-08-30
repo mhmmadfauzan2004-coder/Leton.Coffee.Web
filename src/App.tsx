@@ -66,9 +66,7 @@ const AppContent: React.FC = () => {
   return (
     <div className="relative min-h-screen bg-[#070b12] text-slate-100 selection:bg-[#00E5FF] selection:text-black">
       <AnimatePresence mode="wait">
-        {!isInitialReady ? (
-          <div key="pre-initial-backdrop" className="fixed inset-0 z-50 bg-[#050814]" />
-        ) : isLoading ? (
+        {isLoading ? (
           <PageSkeletonLoader key="loading-screen" onComplete={completeLoading} />
         ) : isAdminRoute ? (
           <motion.div

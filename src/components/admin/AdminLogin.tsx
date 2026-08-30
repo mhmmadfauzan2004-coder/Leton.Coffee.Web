@@ -53,13 +53,24 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToPublic }) => {
       <div className="relative z-10 w-full max-w-md p-8 rounded-3xl bg-slate-900/90 border border-slate-800/90 shadow-2xl backdrop-blur-xl">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl overflow-hidden border-2 border-[#2563EB] shadow-xl shadow-[#2563EB]/25 bg-slate-950 flex items-center justify-center">
-            <img
-              src={resolveMediaUrl(data.siteSettings.logoUrl) || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"}
-              alt={data.siteSettings.brandName}
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
+          <div className="relative w-16 h-16 mx-auto mb-4 rounded-2xl overflow-hidden border-2 border-[#2563EB] shadow-xl shadow-[#2563EB]/25 bg-slate-950 flex items-center justify-center">
+            <div className="w-full h-full rounded-2xl bg-gradient-to-br from-[#0c1427] to-[#04070d] flex flex-col items-center justify-center p-2 select-none">
+              <svg viewBox="0 0 32 32" className="w-7 h-7 text-[#00E5FF]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
+                <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" fill="rgba(0,229,255,0.15)" />
+                <line x1="6" y1="1" x2="6" y2="4" stroke="#60A5FA" />
+                <line x1="10" y1="1" x2="10" y2="4" stroke="#00E5FF" />
+                <line x1="14" y1="1" x2="14" y2="4" stroke="#60A5FA" />
+              </svg>
+            </div>
+            {data.siteSettings.logoUrl && (
+              <img
+                src={resolveMediaUrl(data.siteSettings.logoUrl)}
+                alt={data.siteSettings.brandName}
+                className="absolute inset-0 w-full h-full object-cover z-10"
+                referrerPolicy="no-referrer"
+              />
+            )}
           </div>
           <h1 className="font-display font-black text-2xl text-white tracking-tight uppercase">
             {data.siteSettings.brandName} CMS

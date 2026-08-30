@@ -39,10 +39,16 @@ export function sanitizeLoadedData(raw: any): LetonData {
     return initialLetonData;
   }
 
+  const cleanedLogo =
+    raw.siteSettings?.logoUrl && !raw.siteSettings.logoUrl.includes('images.unsplash.com/photo-1514432324607')
+      ? raw.siteSettings.logoUrl
+      : '';
+
   return {
     siteSettings: {
       ...initialLetonData.siteSettings,
       ...(raw.siteSettings || {}),
+      logoUrl: cleanedLogo,
     },
     branches:
       Array.isArray(raw.branches) && raw.branches.length > 0
@@ -173,8 +179,10 @@ export function loadStoredContent(): LetonData {
 
     // 3. Granular check only if no global JSON existed
     const specificLogo = localStorage.getItem(LETON_KEY_LOGO_URL);
-    if (specificLogo && specificLogo.trim()) {
+    if (specificLogo && specificLogo.trim() && !specificLogo.includes('images.unsplash.com/photo-1514432324607')) {
       resultData.siteSettings.logoUrl = specificLogo;
+    } else {
+      resultData.siteSettings.logoUrl = '';
     }
 
     const specificHeroBg = localStorage.getItem(LETON_KEY_HERO_BG);

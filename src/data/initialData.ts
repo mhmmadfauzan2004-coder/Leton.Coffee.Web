@@ -4,7 +4,7 @@ export const initialLetonData: LetonData = {
   siteSettings: {
     brandName: "LETON COFFEE",
     tagline: "EVERYDAY SPECIALTY COFFEE & YOUTH CULTURE",
-    logoUrl: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80",
+    logoUrl: "",
     heroTitle: "ENERGY, COMMUNITY & SPECIALTY COFFEE",
     heroSubtitle: "DUMAI'S FAVORITE COFFEE SCENE",
     heroDescription: "Ruang temu generasi muda dengan sajian kopi spesialti berkarakter, atmosfer dinamis, dan semangat komunitas kreatif tanpa batas.",

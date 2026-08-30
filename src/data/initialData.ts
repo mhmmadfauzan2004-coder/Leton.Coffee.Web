@@ -247,7 +247,7 @@ export const initialLetonData: LetonData = {
     secondaryImage: "https://images.unsplash.com/photo-1509785307050-d4066910ec1e?auto=format&fit=crop&w=1200&q=80",
     facts: [
       { id: "f1", label: "Cabang & Mobile Truck", value: "3 Lokasi" },
-      { id: "f2", label: "Cangkir Kopi Terjual / Hari", value: "1,200+" },
+      { id: "f2", label: "Established Coffee Brand", value: "Since 2020" },
       { id: "f3", label: "Komunitas & Event Aktif", value: "85+" },
       { id: "f4", label: "Specialty Beans Quality", value: "100% Arabica" }
     ]

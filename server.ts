@@ -126,6 +126,18 @@ function getContent(): LetonData {
           aboutContent: {
             ...initialLetonData.aboutContent,
             ...(parsed.aboutContent || {}),
+            facts:
+              Array.isArray(parsed.aboutContent?.facts) && parsed.aboutContent.facts.length > 0
+                ? parsed.aboutContent.facts.map((f: any) => {
+                    if (
+                      f?.value === '1,200+' ||
+                      (typeof f?.label === 'string' && f.label.toLowerCase().includes('cangkir'))
+                    ) {
+                      return { ...f, label: 'Established Coffee Brand', value: 'Since 2020' };
+                    }
+                    return f;
+                  })
+                : initialLetonData.aboutContent.facts,
           },
           contactSettings: {
             ...initialLetonData.contactSettings,

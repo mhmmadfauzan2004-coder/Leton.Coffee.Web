@@ -93,6 +93,18 @@ export function sanitizeLoadedData(raw: any): LetonData {
     aboutContent: {
       ...initialLetonData.aboutContent,
       ...(raw.aboutContent || {}),
+      facts:
+        Array.isArray(raw.aboutContent?.facts) && raw.aboutContent.facts.length > 0
+          ? raw.aboutContent.facts.map((f: any) => {
+              if (
+                f?.value === '1,200+' ||
+                (typeof f?.label === 'string' && f.label.toLowerCase().includes('cangkir'))
+              ) {
+                return { ...f, label: 'Established Coffee Brand', value: 'Since 2020' };
+              }
+              return f;
+            })
+          : initialLetonData.aboutContent.facts,
     },
     contactSettings: {
       ...initialLetonData.contactSettings,

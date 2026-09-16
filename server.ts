@@ -38,6 +38,7 @@ const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads');
 const UPLOAD_ROOT_DIR = path.join(process.cwd(), 'uploads');
 const CONTENT_FILE = path.join(DATA_DIR, 'leton_content.json');
 const AUTH_FILE = path.join(DATA_DIR, 'admin_auth.json');
+const ORDERS_FILE = path.join(DATA_DIR, 'leton_orders.json');
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -289,6 +290,11 @@ app.post('/api/content', (req, res) => {
     return res.status(401).json({ error: 'Unauthorized: Silakan login terlebih dahulu' });
   }
 
+  const role = req.headers['x-admin-role'] as string | undefined;
+  if (role === 'outlet_admin') {
+    return res.status(403).json({ error: 'Akses Ditolak: Outlet Admin tidak memiliki izin mengedit konten website global.' });
+  }
+
   try {
     const updatedData: LetonData = req.body;
     if (!updatedData || !updatedData.siteSettings) {
@@ -421,6 +427,34 @@ const handleImageUpload = (req: express.Request, res: express.Response) => {
 app.post('/api/upload', handleImageUpload);
 app.post('/api/upload-image', handleImageUpload);
 
+// 9b. Public Receipt Upload for Online Customers (File strictly validated, not base64)
+app.post('/api/upload-receipt', (req, res) => {
+  upload.single('receipt')(req, res, (err) => {
+    if (err) {
+      console.error('Receipt upload error:', err);
+      return res.status(400).json({ error: err.message || 'Gagal mengupload bukti pembayaran' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'Tidak ada file bukti pembayaran yang diupload' });
+    }
+
+    const allowedMime = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedMime.includes(req.file.mimetype)) {
+      return res.status(400).json({ error: 'Format file tidak didukung. Gunakan JPG, JPEG, PNG, atau WEBP.' });
+    }
+
+    const publicUrl = `/uploads/${req.file.filename}`;
+    return res.json({
+      success: true,
+      url: publicUrl,
+      path: `uploads/${req.file.filename}`,
+      filename: req.file.filename,
+      size: req.file.size,
+    });
+  });
+});
+
 // 10. Reset content to defaults (Protected)
 app.post('/api/reset-defaults', (req, res) => {
   if (!verifyAuthHeader(req)) {
@@ -429,6 +463,122 @@ app.post('/api/reset-defaults', (req, res) => {
   saveContent(initialLetonData);
   broadcastUpdate(initialLetonData);
   res.json({ success: true, message: 'Data berhasil direset ke default', data: initialLetonData });
+});
+
+// Helper for orders persistence
+function getOrders(): any[] {
+  try {
+    if (fs.existsSync(ORDERS_FILE)) {
+      const raw = fs.readFileSync(ORDERS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+  } catch (err) {
+    console.error('Error reading orders file:', err);
+  }
+  return [];
+}
+
+function saveOrders(orders: any[]) {
+  try {
+    fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error saving orders file:', err);
+  }
+}
+
+function broadcastOrderEvent(type: 'ORDER_CREATED' | 'ORDER_UPDATED', order: any) {
+  const message = `data: ${JSON.stringify({ type, order, timestamp: Date.now() })}\n\n`;
+  for (let i = sseClients.length - 1; i >= 0; i--) {
+    const client = sseClients[i];
+    try {
+      client.write(message);
+    } catch {
+      sseClients.splice(i, 1);
+    }
+  }
+}
+
+// 11. Orders API
+// Helper to test if an order belongs to an outlet
+function orderMatchesOutlet(orderOutlet: string | undefined, targetOutlet: string): boolean {
+  if (!targetOutlet || targetOutlet === 'ALL') return true;
+  if (!orderOutlet) return false;
+  const o = orderOutlet.toLowerCase();
+  const t = targetOutlet.toLowerCase();
+  if (o === t || o.includes(t) || t.includes(o)) return true;
+  if (t.includes('ratusima') && o.includes('kelakap')) return true;
+  if (t.includes('kelakap') && o.includes('ratusima')) return true;
+  if (t.includes('letgo') && (o.includes('letgo') || o.includes('mpp'))) return true;
+  return false;
+}
+
+// Get all orders (with RBAC outlet filtering)
+app.get('/api/orders', (req, res) => {
+  let orders = getOrders();
+  const role = req.headers['x-admin-role'] as string | undefined;
+  const outletId = (req.headers['x-outlet-id'] as string | undefined)?.toLowerCase();
+
+  if (role === 'outlet_admin' && outletId && outletId !== 'all') {
+    orders = orders.filter((o: any) => orderMatchesOutlet(o.outletId || o.outlet_id, outletId));
+  }
+
+  res.json(orders);
+});
+
+// Create a new order
+app.post('/api/orders', (req, res) => {
+  const order = req.body;
+  if (!order || !order.id || !order.customerName) {
+    return res.status(400).json({ error: 'Data pesanan tidak lengkap' });
+  }
+
+  const orders = getOrders();
+  const index = orders.findIndex((o: any) => o.id === order.id);
+  if (index >= 0) {
+    orders[index] = order;
+  } else {
+    orders.unshift(order);
+  }
+
+  saveOrders(orders.slice(0, 500)); // retain last 500 orders
+  broadcastOrderEvent('ORDER_CREATED', order);
+
+  res.status(201).json({ success: true, order });
+});
+
+// Update order status or payment status (with RBAC verification)
+app.patch('/api/orders/:id', (req, res) => {
+  const { id } = req.params;
+  const { orderStatus, paymentStatus, rejectionReason, paymentReceiptUrl, paymentReceiptPath } = req.body;
+  const role = req.headers['x-admin-role'] as string | undefined;
+  const outletId = (req.headers['x-outlet-id'] as string | undefined)?.toLowerCase();
+
+  const orders = getOrders();
+  const index = orders.findIndex((o: any) => o.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+  }
+
+  // If outlet_admin, verify that the order belongs to this admin's outlet
+  if (role === 'outlet_admin' && outletId && outletId !== 'all') {
+    const orderOutlet = orders[index].outletId || orders[index].outlet_id;
+    if (!orderMatchesOutlet(orderOutlet, outletId)) {
+      return res.status(403).json({ error: 'Akses Ditolak: Anda tidak memiliki wewenang mengubah pesanan dari cabang lain.' });
+    }
+  }
+
+  if (orderStatus) orders[index].orderStatus = orderStatus;
+  if (paymentStatus) orders[index].paymentStatus = paymentStatus;
+  if (rejectionReason !== undefined) orders[index].rejectionReason = rejectionReason;
+  if (paymentReceiptUrl) orders[index].paymentReceiptUrl = paymentReceiptUrl;
+  if (paymentReceiptPath) orders[index].paymentReceiptPath = paymentReceiptPath;
+  orders[index].updatedAt = new Date().toISOString();
+
+  saveOrders(orders);
+  broadcastOrderEvent('ORDER_UPDATED', orders[index]);
+
+  res.json({ success: true, order: orders[index] });
 });
 
 // ---------------------------------------------

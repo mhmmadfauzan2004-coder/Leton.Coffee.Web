@@ -1,6 +1,6 @@
 {
   "name": "Leton Coffee",
-  "description": "Website profil dan landing page resmi Leton Coffee dengan Chapter 5, Chapter 6, Let'GO Coffee Truck, dynamic menu, pemesanan WhatsApp, dan Admin CMS real-time.",
+  "description": "Website profil, landing page resmi, dan sistem Online Ordering Leton Coffee dengan Chapter 5, Chapter 6, Let'GO Coffee Truck, dynamic menu, keranjang pesanan, dan Admin CMS real-time.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

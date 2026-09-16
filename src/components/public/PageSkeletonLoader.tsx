@@ -96,10 +96,10 @@ export const PageSkeletonLoader: React.FC<PageSkeletonLoaderProps> = ({ onComple
       className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#050814] text-slate-100 select-none overflow-hidden px-6"
     >
       {/* Background Ambient Atmosphere (Deep Navy, Black & Subtle Cyan Accent Glow) */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_48%,_rgba(37,99,235,0.12),_rgba(5,8,20,0.94)_65%,_#050814_100%)] pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_48%,_rgba(0,229,255,0.08),_rgba(5,8,20,0.94)_65%,_#050814_100%)] pointer-events-none" />
 
       {/* Subtle Central Glow Behind Logo */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 sm:w-80 sm:h-80 bg-[radial-gradient(circle,_rgba(0,229,255,0.1)_0%,_rgba(37,99,235,0.05)_50%,_transparent_75%)] rounded-full blur-3xl animate-loader-pulse pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 sm:w-80 sm:h-80 bg-[radial-gradient(circle,_rgba(0,229,255,0.14)_0%,_rgba(2,132,199,0.06)_50%,_transparent_75%)] rounded-full blur-3xl animate-loader-pulse pointer-events-none" />
 
       {/* Centered Minimalist Loading Container */}
       <div className="relative z-10 flex flex-col items-center justify-center text-center max-w-sm w-full">
@@ -111,11 +111,11 @@ export const PageSkeletonLoader: React.FC<PageSkeletonLoaderProps> = ({ onComple
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           className="relative group"
         >
-          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden border-2 border-[#2563EB] shadow-[0_0_28px_rgba(37,99,235,0.45)] bg-[#070b12] flex items-center justify-center p-0.5 relative">
+          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden border-2 border-[#00E5FF] shadow-[0_0_28px_rgba(0,229,255,0.4)] bg-[#070b12] flex items-center justify-center p-0.5 relative">
             {/* Ambient Background & Pulsing Glow inside the Neon Ring (No cup icon) */}
             <div className="w-full h-full rounded-full bg-gradient-to-br from-[#0c1427] via-[#070b12] to-[#04070d] flex items-center justify-center relative overflow-hidden select-none">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(0,229,255,0.25)_0%,_rgba(37,99,235,0.1)_50%,_transparent_75%)] animate-pulse" />
-              <div className="w-8 h-8 rounded-full bg-[#00E5FF]/10 border border-[#00E5FF]/20 blur-[2px] animate-ping opacity-30" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(0,229,255,0.25)_0%,_rgba(2,132,199,0.1)_50%,_transparent_75%)] animate-pulse" />
+              <div className="w-8 h-8 rounded-full bg-[#00E5FF]/15 border border-[#00E5FF]/30 blur-[2px] animate-ping opacity-30" />
             </div>
 
             {/* Custom Admin Logo Image from Supabase (Fades in smoothly once fetched) */}
@@ -163,11 +163,11 @@ export const PageSkeletonLoader: React.FC<PageSkeletonLoaderProps> = ({ onComple
           className="mt-6 sm:mt-7 w-52 sm:w-60 max-w-[calc(100vw-80px)]"
         >
           {/* Progress Bar Frame */}
-          <div className="h-6 sm:h-7 px-3 rounded-full bg-[#080E1C]/90 border border-[#2563EB]/40 shadow-[0_0_16px_rgba(0,229,255,0.14)] flex items-center justify-between relative overflow-hidden">
+          <div className="h-6 sm:h-7 px-3 rounded-full bg-[#080E1C]/90 border border-[#00E5FF]/40 shadow-[0_0_16px_rgba(0,229,255,0.2)] flex items-center justify-between relative overflow-hidden">
             
             {/* Subtle Gradient Backlight Trail based on progress */}
             <div
-              className="absolute inset-y-0 left-0 bg-gradient-to-r from-transparent via-[#2563EB]/25 to-[#00E5FF]/30 rounded-full transition-all duration-150 pointer-events-none"
+              className="absolute inset-y-0 left-0 bg-gradient-to-r from-transparent via-[#0284C7]/30 to-[#00E5FF]/40 rounded-full transition-all duration-150 pointer-events-none"
               style={{ width: `${progress}%` }}
             />
 

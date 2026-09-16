@@ -133,8 +133,92 @@ export interface LetonData {
   updatedAt?: number;
 }
 
+export type AdminRole = 'super_admin' | 'outlet_admin';
+
+export interface AdminAccount {
+  username: string;
+  name: string;
+  role: AdminRole;
+  outletId?: string; // 'sudirman' | 'ratusima' | 'letgo-mpp'
+  outletName?: string;
+}
+
 export interface AuthState {
   isAuthenticated: boolean;
   token: string | null;
   username: string | null;
+  role?: AdminRole;
+  outletId?: string;
+  outletName?: string;
+}
+
+export interface OrderOutlet {
+  id: string;
+  name: string;
+  shortName: string;
+  address: string;
+  hours: string;
+  image?: string;
+  badge?: string;
+  whatsapp?: string;
+  qrisImage?: string;
+}
+
+export type OrderType = 'DINE IN' | 'TAKE AWAY';
+export type PaymentMethod = 'QRIS' | 'TUNAI';
+export type PaymentStatus =
+  | 'WAITING PAYMENT'
+  | 'WAITING VERIFICATION'
+  | 'PAY AT STORE'
+  | 'PAID'
+  | 'PAYMENT REJECTED';
+export type OrderStatus = 'NEW' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
+
+export interface AddOnOption {
+  name: string;
+  price: number;
+}
+
+export interface OrderItem {
+  id: string;
+  productId: string;
+  name: string;
+  price: number; // base menu price
+  unitPrice?: number; // price with add-ons
+  quantity: number;
+  image?: string;
+  note?: string;
+  topping?: AddOnOption;
+  syrup?: AddOnOption;
+}
+
+export interface CustomerOrder {
+  id: string;
+  orderNumber: string; // e.g. "LTN-4892"
+  outletId: string;
+  outletName: string;
+  customerName: string;
+  customerPhone?: string;
+  orderType: OrderType;
+  tableNumber?: string;
+  items: OrderItem[];
+  totalAmount: number;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  paymentReceiptUrl?: string;
+  paymentReceiptPath?: string;
+  rejectionReason?: string;
+  orderStatus: OrderStatus;
+  customerNote?: string;
+  createdAt: string; // ISO String
+  updatedAt?: string;
+}
+
+export interface CartItem {
+  id?: string;
+  product: MenuItem;
+  quantity: number;
+  note?: string;
+  topping?: AddOnOption;
+  syrup?: AddOnOption;
 }

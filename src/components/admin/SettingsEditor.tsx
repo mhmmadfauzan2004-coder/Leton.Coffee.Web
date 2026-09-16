@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
+import { PRESET_ADMIN_ACCOUNTS } from '../../data/adminAccounts';
 import {
   getSupabaseAnonKey,
   getSupabaseUrl,
@@ -16,11 +17,13 @@ import {
   RotateCcw,
   AlertTriangle,
   ShieldCheck,
+  Shield,
   Check,
   Loader2,
   Database,
   CloudUpload,
   Radio,
+  Building2,
 } from 'lucide-react';
 
 export const SettingsEditor: React.FC = () => {
@@ -412,6 +415,88 @@ export const SettingsEditor: React.FC = () => {
             </button>
           </div>
         </form>
+      </div>
+
+      {/* RBAC Accounts & Outlet Scopes Card */}
+      <div className="p-6 sm:p-8 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-400">
+            <Building2 className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-display font-bold text-lg text-white">AKUN ADMIN PER OUTLET (RBAC)</h3>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/30">
+                MULTI-OUTLET ACTIVE
+              </span>
+            </div>
+            <p className="text-xs text-slate-400">
+              Daftar akun operasional cabang dan kredensial akses terisolasi untuk tiap outlet Leton Coffee.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {PRESET_ADMIN_ACCOUNTS.filter((acc, idx, arr) => arr.findIndex(a => a.username === acc.username) === idx).map((acc) => {
+            const isSuper = acc.role === 'super_admin';
+            return (
+              <div
+                key={acc.username}
+                className={`p-4 rounded-2xl border ${
+                  isSuper
+                    ? 'bg-cyan-950/20 border-cyan-500/40'
+                    : 'bg-slate-950/60 border-slate-800'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span
+                    className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
+                      isSuper ? 'bg-[#00E5FF] text-slate-950' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    }`}
+                  >
+                    {isSuper ? 'SUPER ADMIN (AKSES PENUH)' : 'OUTLET ADMIN'}
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-500">
+                    ID: {acc.outletId || 'GLOBAL'}
+                  </span>
+                </div>
+
+                <h4 className="font-display font-bold text-sm text-white">
+                  {acc.name}
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {acc.outletName || 'Seluruh Website & Semua Outlet'}
+                </p>
+
+                <div className="mt-3 pt-2.5 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-[11px] font-mono">
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">USERNAME</span>
+                    <code className="text-[#00E5FF] font-bold">{acc.username}</code>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">PASSWORD DEFAULT</span>
+                    <code className="text-slate-300 font-bold">{acc.password}</code>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-xs text-slate-400 space-y-1.5 leading-relaxed">
+          <p className="font-bold text-slate-200 flex items-center gap-1.5">
+            <Shield className="w-3.5 h-3.5 text-[#00E5FF]" />
+            <span>Hak Akses Berdasarkan Role:</span>
+          </p>
+          <ul className="list-disc list-inside space-y-1 pl-1 text-[11px]">
+            <li>
+              <b className="text-white">Super Admin:</b> Akses penuh ke pesanan semua outlet, ganti status pesanan, kontrol stok, kelola foto/slider/hero, kelola data cabang, konfigurasi database & kredensial.
+            </li>
+            <li>
+              <b className="text-white">Outlet Admin:</b> Terisolasi hanya ke cabang masing-masing (Sudirman, Ratusima/Kelakap 7, atau LetGo MPP). Hanya melihat pesanan cabang terkait, verifikasi bukti bayar QRIS cabang terkait, dan kontrol ketersediaan stok cabang terkait.
+            </li>
+          </ul>
+        </div>
       </div>
 
       {/* Reset to Defaults Card */}

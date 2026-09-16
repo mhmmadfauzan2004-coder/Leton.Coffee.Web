@@ -17,7 +17,7 @@ export const getSupabaseAnonKey = (): string => {
     const customKey = localStorage.getItem('leton_custom_supabase_anon_key');
     if (customKey && customKey.trim().length > 20) return customKey.trim();
   }
-  return import.meta.env.VITE_SUPABASE_ANON_KEY || 'GANTI_DENGAN_ANON_KEY_YANG_SUDAH_DIKOPY';
+  return import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_lcKDS5QKJkqA4__0j10pZw_7bXUaoGg';
 };
 
 export const setCustomSupabaseCredentials = (anonKey: string, url?: string) => {
@@ -46,10 +46,24 @@ export function isSupabaseConfigured(): boolean {
   );
 }
 
-// 2. Initialize Supabase Client
+// 2. Initialize Supabase Client with Role & Outlet Context for Database RLS
 let supabaseInstance: SupabaseClient | null = null;
 
-export function getSupabase(): SupabaseClient {
+export function resetSupabaseClient(): void {
+  supabaseInstance = null;
+}
+
+export function getSupabase(overrideRole?: string, overrideOutletId?: string): SupabaseClient {
+  const role = overrideRole || (typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '');
+  const outletId = overrideOutletId || (typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '');
+  const token = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_token') || '' : '';
+
+  const headers: Record<string, string> = {};
+  if (role) headers['x-admin-role'] = role;
+  if (outletId) headers['x-outlet-id'] = outletId;
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  // If instance exists, return it (unless explicitly forced by resetSupabaseClient)
   if (!supabaseInstance) {
     const url = getSupabaseUrl();
     const key = getSupabaseAnonKey();
@@ -57,6 +71,9 @@ export function getSupabase(): SupabaseClient {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
+      },
+      global: {
+        headers,
       },
       realtime: {
         params: {

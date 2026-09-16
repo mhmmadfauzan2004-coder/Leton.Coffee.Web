@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { LetonData, AuthState } from '../types';
+import { LetonData, AuthState, AdminRole } from '../types';
 import { initialLetonData } from '../data/initialData';
 import {
   loadStoredContent,
@@ -11,6 +11,7 @@ import {
 } from '../utils/storage';
 import { getApiUrl } from '../utils/api';
 import { preloadImage } from '../utils/imagePreloader';
+import { findPresetAdmin } from '../data/adminAccounts';
 import {
   fetchContentFromSupabase,
   saveContentToSupabase,
@@ -19,6 +20,7 @@ import {
   isSupabaseConfigured,
   updateSupabaseAuthPassword,
   SUPABASE_STORAGE_BUCKET,
+  resetSupabaseClient,
 } from '../utils/supabase';
 
 interface ToastInfo {
@@ -53,6 +55,9 @@ const ContentContext = createContext<ContentContextType | undefined>(undefined);
 
 const TOKEN_STORAGE_KEY = 'leton_admin_token';
 const USERNAME_STORAGE_KEY = 'leton_admin_user';
+export const ROLE_STORAGE_KEY = 'leton_admin_role';
+export const OUTLET_STORAGE_KEY = 'leton_admin_outlet';
+export const OUTLET_NAME_STORAGE_KEY = 'leton_admin_outlet_name';
 
 // Local hardcoded default credentials
 export const DEFAULT_ADMIN_USERNAME = 'admin';
@@ -87,10 +92,22 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [auth, setAuth] = useState<AuthState>(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_STORAGE_KEY) : null;
     const username = typeof window !== 'undefined' ? localStorage.getItem(USERNAME_STORAGE_KEY) : null;
+    const storedRole = (typeof window !== 'undefined' ? localStorage.getItem(ROLE_STORAGE_KEY) : null) as AdminRole | null;
+    const storedOutlet = typeof window !== 'undefined' ? localStorage.getItem(OUTLET_STORAGE_KEY) : null;
+    const storedOutletName = typeof window !== 'undefined' ? localStorage.getItem(OUTLET_NAME_STORAGE_KEY) : null;
+
+    const preset = username ? findPresetAdmin(username) : undefined;
+    const role = storedRole || preset?.role || (username === 'admin' ? 'super_admin' : 'super_admin');
+    const outletId = storedOutlet || preset?.outletId || undefined;
+    const outletName = storedOutletName || preset?.outletName || undefined;
+
     return {
       isAuthenticated: Boolean(token),
       token: token || null,
       username: username || DEFAULT_ADMIN_USERNAME,
+      role,
+      outletId,
+      outletName,
     };
   });
 
@@ -111,6 +128,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       let activeData: LetonData = loadStoredContent();
 
+      let fetched = false;
       // 1. Try Supabase database first if configured (Primary Source of Truth from Admin)
       if (isSupabaseConfigured()) {
         try {
@@ -118,12 +136,15 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
           if (supabaseData && supabaseData.siteSettings) {
             activeData = sanitizeLoadedData(supabaseData);
             saveStoredContent(activeData);
+            fetched = true;
           }
         } catch (sbErr) {
           console.warn('Supabase fetch note:', sbErr);
         }
-      } else {
-        // 2. If not Supabase, try Express backend API
+      }
+
+      // 2. Fallback: Express backend API (reads data/content.json)
+      if (!fetched) {
         try {
           const res = await fetch(getApiUrl('/api/content'), { cache: 'no-store' });
           if (res.ok) {
@@ -273,6 +294,20 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return false;
       }
 
+      // Enforce Role Restriction: Outlet Admin cannot modify global CMS settings, chapters, or hero
+      if (auth.role === 'outlet_admin') {
+        const hasSiteSettingsChange = JSON.stringify(newData.siteSettings) !== JSON.stringify(data.siteSettings);
+        const hasBranchesChange = JSON.stringify(newData.branches) !== JSON.stringify(data.branches);
+        const hasMobileChange = JSON.stringify(newData.mobileService) !== JSON.stringify(data.mobileService);
+        const hasAboutChange = JSON.stringify(newData.aboutContent) !== JSON.stringify(data.aboutContent);
+        const hasContactChange = JSON.stringify(newData.contactSettings) !== JSON.stringify(data.contactSettings);
+
+        if (hasSiteSettingsChange || hasBranchesChange || hasMobileChange || hasAboutChange || hasContactChange) {
+          showToast('Akses Ditolak: Akun Outlet Admin tidak memiliki izin untuk mengubah konten website global.', 'error');
+          return false;
+        }
+      }
+
       const sanitized = sanitizeLoadedData(newData);
 
       // 1. Save directly to Supabase Database (Primary)
@@ -396,40 +431,86 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Local Hardcoded Login with immediate feedback
+  // Login supporting Super Admin and Outlet Admins
   const login = async (inputUser: string, inputPass: string): Promise<{ success: boolean; error?: string }> => {
     const trimmedUser = inputUser.trim();
-    
-    // Check against local hardcoded credentials
-    const isHardcodedValid =
-      (trimmedUser === DEFAULT_ADMIN_USERNAME || trimmedUser.toLowerCase() === 'admin') &&
-      inputPass === DEFAULT_ADMIN_PASSWORD;
 
-    // Also check if custom local credentials match
+    // 1. Check against Preset Admin Accounts (Super Admin and Outlet Admins)
+    const preset = findPresetAdmin(trimmedUser);
+    let matchedRole: AdminRole = 'super_admin';
+    let matchedOutletId: string | undefined;
+    let matchedOutletName: string | undefined;
+    let activeUsername = trimmedUser;
+    let isValid = false;
+
+    if (preset) {
+      // Valid if matching preset password, or default admin password for super_admin
+      if (inputPass === preset.password || (preset.role === 'super_admin' && inputPass === DEFAULT_ADMIN_PASSWORD)) {
+        isValid = true;
+        matchedRole = preset.role;
+        matchedOutletId = preset.outletId;
+        matchedOutletName = preset.outletName;
+        activeUsername = preset.username;
+      }
+    }
+
+    // 2. Check against custom local credentials for super admin
     const storedUser = localStorage.getItem('leton_custom_user');
     const storedPass = localStorage.getItem('leton_custom_pass');
-    const isCustomValid = Boolean(storedUser && storedPass && trimmedUser === storedUser && inputPass === storedPass);
+    if (!isValid && storedUser && storedPass && trimmedUser === storedUser && inputPass === storedPass) {
+      isValid = true;
+      matchedRole = 'super_admin';
+      activeUsername = storedUser;
+    }
 
-    if (isHardcodedValid || isCustomValid) {
+    // 3. Fallback check for default admin
+    if (!isValid && (trimmedUser === DEFAULT_ADMIN_USERNAME || trimmedUser.toLowerCase() === 'admin') && inputPass === DEFAULT_ADMIN_PASSWORD) {
+      isValid = true;
+      matchedRole = 'super_admin';
+      activeUsername = DEFAULT_ADMIN_USERNAME;
+    }
+
+    if (isValid) {
       const token = `leton_local_token_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-      const activeUsername = isCustomValid ? storedUser! : DEFAULT_ADMIN_USERNAME;
 
       // Store in localStorage for persistent session
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
       localStorage.setItem(USERNAME_STORAGE_KEY, activeUsername);
+      localStorage.setItem(ROLE_STORAGE_KEY, matchedRole);
+      if (matchedOutletId) {
+        localStorage.setItem(OUTLET_STORAGE_KEY, matchedOutletId);
+      } else {
+        localStorage.removeItem(OUTLET_STORAGE_KEY);
+      }
+      if (matchedOutletName) {
+        localStorage.setItem(OUTLET_NAME_STORAGE_KEY, matchedOutletName);
+      } else {
+        localStorage.removeItem(OUTLET_NAME_STORAGE_KEY);
+      }
 
-      // Instantly update Auth state to render CMS Dashboard
+      // Re-initialize Supabase client so headers include x-admin-role and x-outlet-id
+      resetSupabaseClient();
+
+      // Instantly update Auth state to render Admin Dashboard
       setAuth({
         isAuthenticated: true,
         token,
         username: activeUsername,
+        role: matchedRole,
+        outletId: matchedOutletId,
+        outletName: matchedOutletName,
       });
 
       // Synchronize with server in background if available
       fetch(getApiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: activeUsername, password: inputPass }),
+        body: JSON.stringify({
+          username: activeUsername,
+          password: inputPass,
+          role: matchedRole,
+          outletId: matchedOutletId,
+        }),
       })
         .then((r) => r.json())
         .then((d) => {
@@ -440,7 +521,10 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         })
         .catch(() => {});
 
-      showToast(`Selamat datang di CMS Leton Coffee, ${activeUsername}!`, 'success');
+      const welcomeMsg = matchedRole === 'super_admin'
+        ? `Selamat datang, Super Admin Leton Coffee!`
+        : `Selamat datang di Admin Outlet ${matchedOutletName || ''}!`;
+      showToast(welcomeMsg, 'success');
       return { success: true };
     }
 
@@ -460,12 +544,20 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     localStorage.removeItem(USERNAME_STORAGE_KEY);
+    localStorage.removeItem(ROLE_STORAGE_KEY);
+    localStorage.removeItem(OUTLET_STORAGE_KEY);
+    localStorage.removeItem(OUTLET_NAME_STORAGE_KEY);
+    localStorage.removeItem('leton_admin_orders_cache');
+    resetSupabaseClient();
     setAuth({
       isAuthenticated: false,
       token: null,
       username: null,
+      role: undefined,
+      outletId: undefined,
+      outletName: undefined,
     });
-    showToast('Berhasil keluar dari Admin CMS.', 'info');
+    showToast('Berhasil keluar dari Admin.', 'info');
   };
 
   // Change credentials (updates locally & on server)

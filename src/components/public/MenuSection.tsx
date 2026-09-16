@@ -3,9 +3,14 @@ import { useContent } from '../../context/ContentContext';
 import { formatRupiah, createWhatsAppLink } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
-import { UtensilsCrossed, MessageCircle, Sparkles, AlertCircle } from 'lucide-react';
+import { UtensilsCrossed, MessageCircle, Sparkles, AlertCircle, ShoppingBag } from 'lucide-react';
+import { MenuItem } from '../../types';
 
-export const MenuSection: React.FC = () => {
+interface MenuSectionProps {
+  onOpenOrder?: (item?: MenuItem) => void;
+}
+
+export const MenuSection: React.FC<MenuSectionProps> = ({ onOpenOrder }) => {
   const { data } = useContent();
   const { menuCategories, menuItems, contactSettings } = data;
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -74,8 +79,26 @@ export const MenuSection: React.FC = () => {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="mt-3 text-slate-300 text-base sm:text-lg max-w-xl mx-auto"
           >
-            Dari racikan espresso khas Dumai hingga mocktail segar buah tropis. Pesan langsung melalui WhatsApp.
+            Dari racikan espresso khas Dumai hingga mocktail segar buah tropis. Sekarang dapat dipesan secara online.
           </motion.p>
+
+          {onOpenOrder && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              className="mt-6"
+            >
+              <button
+                onClick={() => onOpenOrder()}
+                className="inline-flex items-center gap-2.5 px-6 py-3 rounded-2xl bg-gradient-to-r from-[#2563EB] to-[#00E5FF] hover:from-[#1d4ed8] hover:to-[#38bdf8] text-white font-display font-black text-xs sm:text-sm tracking-wider uppercase shadow-xl shadow-[#2563EB]/30 hover:shadow-cyan-500/40 transition-all cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+              >
+                <ShoppingBag className="w-4 h-4 text-white" />
+                <span>MULAI ORDER ONLINE (DINE IN / TAKE AWAY)</span>
+                <span className="text-base leading-none">→</span>
+              </button>
+            </motion.div>
+          )}
         </div>
 
         {/* Dynamic Category Filter Bar */}
@@ -198,20 +221,48 @@ export const MenuSection: React.FC = () => {
                 </div>
 
                 {/* Footer Action - Clean Frameless Button */}
-                <div className="pt-3">
-                  <button
-                    onClick={() => handleOrderWhatsApp(item.name)}
-                    disabled={!item.isAvailable}
-                    id={`order-wa-btn-${item.id}`}
-                    className={`w-full py-2.5 px-4 rounded-xl font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      item.isAvailable
-                        ? 'bg-[#2563EB] hover:bg-[#1d4ed8] text-white shadow-md shadow-[#2563EB]/25 hover:shadow-lg hover:shadow-[#2563EB]/40 active:scale-[0.98]'
-                        : 'bg-slate-800/60 text-slate-500 border border-slate-700/40 cursor-not-allowed'
-                    }`}
-                  >
-                    <MessageCircle className="w-3.5 h-3.5" />
-                    <span>{item.isAvailable ? 'ORDER VIA WHATSAPP' : 'MENU TIDAK TERSEDIA'}</span>
-                  </button>
+                <div className="pt-3 flex items-center gap-2">
+                  {onOpenOrder ? (
+                    <>
+                      <button
+                        onClick={() => item.isAvailable && onOpenOrder(item)}
+                        disabled={!item.isAvailable}
+                        id={`order-online-btn-${item.id}`}
+                        className={`flex-1 py-2.5 px-3 rounded-xl font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                          item.isAvailable
+                            ? 'bg-[#2563EB] hover:bg-[#1d4ed8] text-white shadow-md shadow-[#2563EB]/25 hover:shadow-lg hover:shadow-[#2563EB]/40 active:scale-[0.98]'
+                            : 'bg-slate-800/60 text-slate-500 border border-slate-700/40 cursor-not-allowed'
+                        }`}
+                      >
+                        <ShoppingBag className="w-3.5 h-3.5" />
+                        <span>{item.isAvailable ? 'PESAN ONLINE' : 'TIDAK TERSEDIA'}</span>
+                      </button>
+
+                      {item.isAvailable && (
+                        <button
+                          onClick={() => handleOrderWhatsApp(item.name)}
+                          title="Pesan via WhatsApp"
+                          className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                        >
+                          <MessageCircle className="w-4 h-4 text-emerald-400" />
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleOrderWhatsApp(item.name)}
+                      disabled={!item.isAvailable}
+                      id={`order-wa-btn-${item.id}`}
+                      className={`w-full py-2.5 px-4 rounded-xl font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        item.isAvailable
+                          ? 'bg-[#2563EB] hover:bg-[#1d4ed8] text-white shadow-md shadow-[#2563EB]/25 hover:shadow-lg hover:shadow-[#2563EB]/40 active:scale-[0.98]'
+                          : 'bg-slate-800/60 text-slate-500 border border-slate-700/40 cursor-not-allowed'
+                      }`}
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>{item.isAvailable ? 'ORDER VIA WHATSAPP' : 'MENU TIDAK TERSEDIA'}</span>
+                    </button>
+                  )}
                 </div>
               </motion.div>
             ))}

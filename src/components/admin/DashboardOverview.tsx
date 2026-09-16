@@ -20,6 +20,9 @@ import {
   Database,
   Radio,
   CheckCircle2,
+  ShoppingBag,
+  Boxes,
+  Building2,
 } from 'lucide-react';
 
 interface DashboardOverviewProps {
@@ -27,8 +30,154 @@ interface DashboardOverviewProps {
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigateTab }) => {
-  const { data, isRealtimeConnected, lastUpdated, refreshData } = useContent();
+  const { data, auth, isRealtimeConnected, lastUpdated, refreshData } = useContent();
   const { menuItems, menuCategories, branches, baristas = [] } = data;
+  const isOutletAdmin = auth.role === 'outlet_admin';
+  const assignedOutletName = auth.outletName || (isOutletAdmin ? 'Outlet Ditugaskan' : 'Semua Cabang');
+
+  // If Outlet Admin, render dedicated operational dashboard
+  if (isOutletAdmin) {
+    return (
+      <div className="space-y-8">
+        {/* Welcome Banner */}
+        <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-950 border border-amber-500/30 relative overflow-hidden">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] font-mono font-bold tracking-widest uppercase mb-3">
+                <Building2 className="w-3.5 h-3.5" />
+                <span>OUTLET OPERATIONAL PANEL</span>
+              </div>
+              <h2 className="font-display font-black text-2xl sm:text-3xl text-white tracking-tight uppercase">
+                {assignedOutletName}
+              </h2>
+              <p className="text-slate-300 text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed">
+                Anda masuk sebagai Administrator Cabang. Kelola pesanan pelanggan yang masuk ke outlet ini, verifikasi bukti bayar QRIS, dan kontrol stok ketersediaan menu secara langsung.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={() => onNavigateTab('orders')}
+                className="px-5 py-2.5 rounded-xl bg-[#00E5FF] text-slate-950 text-xs font-display font-black uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-[#00E5FF]/20 hover:opacity-90 transition-opacity cursor-pointer"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span>Buka Pesanan Masuk</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-mono tracking-wider text-slate-400 uppercase">
+                Outlet Bertugas
+              </span>
+              <p className="text-base sm:text-lg font-display font-bold text-amber-400 mt-1 truncate">
+                {assignedOutletName}
+              </p>
+              <span className="text-[10px] text-slate-500 font-mono">Data Terisolasi</span>
+            </div>
+            <div className="p-3 rounded-xl bg-amber-500/10 text-amber-400">
+              <Building2 className="w-5 h-5" />
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-mono tracking-wider text-slate-400 uppercase">
+                Katalog Menu
+              </span>
+              <p className="text-2xl sm:text-3xl font-display font-black text-white mt-1">
+                {menuItems.length} Produk
+              </p>
+              <span className="text-[10px] text-slate-500 font-mono">Dapat dikontrol ketersediaannya</span>
+            </div>
+            <div className="p-3 rounded-xl bg-cyan-500/10 text-[#00E5FF]">
+              <Boxes className="w-5 h-5" />
+            </div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-mono tracking-wider text-slate-400 uppercase">
+                Realtime Orders
+              </span>
+              <div className="flex items-center gap-2 mt-1.5">
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    isRealtimeConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                  }`}
+                />
+                <span className="font-display font-bold text-xs text-white">
+                  {isRealtimeConnected ? 'TERHUBUNG LIVE' : 'SYNC POLLING'}
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono mt-1 block">Notifikasi Suara Aktif</span>
+            </div>
+            <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400">
+              <Radio className="w-5 h-5" />
+            </div>
+          </div>
+        </div>
+
+        {/* Operational Quick Actions for Outlet Admin */}
+        <div>
+          <h3 className="font-display font-black text-lg text-white uppercase tracking-tight mb-4">
+            MENU KERJA HARIAN OUTLET
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button
+              onClick={() => onNavigateTab('orders')}
+              className="p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-[#00E5FF]/50 text-left transition-all group flex flex-col justify-between cursor-pointer"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 rounded-xl bg-[#00E5FF]/10 text-[#00E5FF]">
+                    <ShoppingBag className="w-6 h-6" />
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-slate-600 group-hover:text-[#00E5FF] group-hover:translate-x-1 transition-all" />
+                </div>
+                <h4 className="font-display font-black text-base text-white group-hover:text-[#00E5FF] transition-colors uppercase">
+                  PESANAN MASUK & KASIR REALTIME
+                </h4>
+                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                  Buka layar kasir utama: pantau pesanan baru dengan notifikasi suara denting, verifikasi bukti transfer QRIS, tolak pembayaran tidak valid, proses peracikan barista, dan selesaikan transaksi take away / dine in.
+                </p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => onNavigateTab('stock')}
+              className="p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-900 border border-slate-800 hover:border-amber-500/50 text-left transition-all group flex flex-col justify-between cursor-pointer"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="p-3 rounded-xl bg-amber-500/10 text-amber-400">
+                    <Boxes className="w-6 h-6" />
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-slate-600 group-hover:text-amber-400 group-hover:translate-x-1 transition-all" />
+                </div>
+                <h4 className="font-display font-black text-base text-white group-hover:text-amber-400 transition-colors uppercase">
+                  KONTROL STOK & KETERSEDIAAN MENU
+                </h4>
+                <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                  Kelola status ketersediaan item menu. Jika biji kopi atau sirup tertentu sedang habis di outlet ini, tandai menu sebagai "Stok Habis" agar customer online tidak memesannya.
+                </p>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Sync Info */}
+        <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-500 font-mono flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <span>Terakhir disinkronkan: {new Date(lastUpdated).toLocaleTimeString('id-ID')}</span>
+          <span>Hak Akses: Terbatas Cabang {assignedOutletName}</span>
+        </div>
+      </div>
+    );
+  }
 
   const quickActions = [
     {

@@ -3,9 +3,13 @@ import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
-import { MessageCircle, ArrowDown, Sparkles } from 'lucide-react';
+import { MessageCircle, ArrowDown, Sparkles, ShoppingBag, Coffee, ArrowRight } from 'lucide-react';
 
-export const HeroSection: React.FC = () => {
+interface HeroSectionProps {
+  onOpenOrder?: () => void;
+}
+
+export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenOrder }) => {
   const { data } = useContent();
   const { siteSettings, contactSettings } = data;
 
@@ -81,32 +85,45 @@ export const HeroSection: React.FC = () => {
           {siteSettings.heroDescription}
         </motion.p>
 
-        {/* Action CTAs */}
+        {/* Redesigned Premium Specialty Coffee CTA */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.65 }}
-          className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto"
+          className="mt-10 flex flex-col items-center justify-center w-full sm:w-auto"
         >
-          <a
-            href="#menu"
-            onClick={scrollToMenu}
-            id="hero-explore-menu-cta"
-            className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#FDFBF7] text-[#1E293B] font-display font-bold text-sm tracking-wider uppercase hover:bg-[#2563EB] hover:text-white transition-all duration-200 transform hover:-translate-y-0.5 shadow-xl hover:shadow-[#2563EB]/30 active:translate-y-0 text-center"
-          >
-            {siteSettings.heroCtaMenuText || 'EXPLORE MENU'}
-          </a>
+          <div className="relative group inline-flex items-center justify-center w-full sm:w-auto">
+            {/* Ambient Electric Blue Aura Glow */}
+            <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-[#00E5FF]/50 via-[#38BDF8]/60 to-[#2563EB]/50 blur-xl opacity-75 group-hover:opacity-100 group-hover:blur-2xl transition-all duration-500 pointer-events-none" />
 
-          <a
-            href={orderWALink}
-            target="_blank"
-            rel="noopener noreferrer"
-            id="hero-order-wa-cta"
-            className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#2563EB] text-white font-display font-bold text-sm tracking-wider uppercase hover:bg-[#1d4ed8] transition-all duration-200 transform hover:-translate-y-0.5 shadow-xl shadow-[#2563EB]/30 hover:shadow-[#2563EB]/50 active:translate-y-0 flex items-center justify-center gap-2"
-          >
-            <MessageCircle className="w-4 h-4" />
-            <span>{siteSettings.heroCtaOrderText || 'ORDER VIA WHATSAPP'}</span>
-          </a>
+            {/* Main Interactive CTA Button */}
+            <button
+              onClick={onOpenOrder}
+              id="hero-order-online-cta"
+              className="relative w-full sm:w-auto flex items-center justify-center gap-3.5 px-8 sm:px-10 py-4 sm:py-4.5 rounded-full bg-gradient-to-r from-[#00E5FF] via-[#38BDF8] to-[#00E5FF] hover:from-[#3cf0ff] hover:to-[#38bdf8] text-slate-950 font-display font-black text-sm sm:text-base tracking-[0.16em] uppercase shadow-[0_0_25px_rgba(0,229,255,0.45)] hover:shadow-[0_0_40px_rgba(0,229,255,0.7)] transform hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 cursor-pointer overflow-hidden border border-white/30"
+            >
+              {/* Coffee culture emblem circle */}
+              <span className="w-8 h-8 rounded-full bg-slate-950 flex items-center justify-center text-[#00E5FF] shrink-0 shadow-inner group-hover:rotate-12 transition-transform duration-300">
+                <Coffee className="w-4 h-4" />
+              </span>
+
+              {/* Precise high-contrast typography */}
+              <span className="leading-none text-slate-950">ORDER ONLINE</span>
+
+              {/* Directional arrow badge */}
+              <span className="w-7 h-7 rounded-full bg-slate-950/10 flex items-center justify-center text-slate-950 shrink-0 group-hover:translate-x-1 transition-transform duration-300">
+                <ArrowRight className="w-4 h-4" />
+              </span>
+            </button>
+          </div>
+
+          {/* Specialty Micro-Indicator */}
+          <div className="mt-3.5 flex items-center justify-center gap-2 text-[11px] font-mono tracking-wider text-slate-300/80">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#00E5FF] animate-pulse" />
+            <span className="text-[#00E5FF] font-bold">Dumai Chapter 5 & 6</span>
+            <span className="text-slate-500">•</span>
+            <span>Dine In & Take Away</span>
+          </div>
         </motion.div>
       </div>
 

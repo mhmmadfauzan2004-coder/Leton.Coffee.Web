@@ -19,9 +19,10 @@ import {
   AlertCircle,
   Bolt,
   ShieldCheck,
-  Info,
-  Clock,
   Trash2,
+  Layers,
+  Sparkles,
+  Droplets,
 } from 'lucide-react';
 
 interface OrderCheckoutProps {
@@ -68,13 +69,11 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
 
   const subtotal = cart.reduce(
     (acc, item) =>
-      acc + calculateItemUnitPrice(item.product.price, item.topping, item.syrup) * item.quantity,
+      acc + calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup) * item.quantity,
     0
   );
   const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
-  const tax = Math.round(subtotal * 0.1);
-  const packagingFee = 1000;
-  const grandTotal = subtotal + tax + packagingFee;
+  const grandTotal = subtotal;
 
   // File upload handler for QRIS
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -353,7 +352,8 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
 
             <div className="flex flex-col gap-3">
               {cart.map((item, idx) => {
-                const unitPrice = calculateItemUnitPrice(item.product.price, item.topping, item.syrup);
+                const unitPrice = calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup);
+                const hasSize = item.size && item.size.name;
                 const hasTopping = item.topping && item.topping.name !== 'No Topping';
                 const hasSyrup = item.syrup && item.syrup.name !== 'No Syrup';
 
@@ -371,81 +371,58 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
                           {item.product.name}
                         </span>
                         <div className="flex flex-wrap gap-1 mt-0.5 text-[11px] text-[#64748B]">
+                          {hasSize && (
+                            <span className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono font-medium">
+                              Size: {item.size!.name}{item.size!.price > 0 ? ` (+${formatRupiah(item.size!.price)})` : ''}
+                            </span>
+                          )}
                           {hasTopping && (
-                            <span className="px-1.5 py-0.2 bg-[#E0F2FE] text-[#0284C7] rounded">
-                              +{item.topping!.name}
+                            <span className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono font-medium">
+                              Top: {item.topping!.name} (+{formatRupiah(item.topping!.price)})
                             </span>
                           )}
                           {hasSyrup && (
-                            <span className="px-1.5 py-0.2 bg-[#E0F2FE] text-[#0284C7] rounded">
-                              +{item.syrup!.name}
+                            <span className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono font-medium">
+                              Syr: {item.syrup!.name} (+{formatRupiah(item.syrup!.price)})
                             </span>
                           )}
-                          {item.note && <span className="italic">Note: {item.note}</span>}
                         </div>
+                        {item.note && (
+                          <span className="text-[11px] text-slate-500 italic mt-0.5">
+                            Catatan: {item.note}
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex flex-col items-end shrink-0">
-                      <span className="font-mono font-bold text-sm text-[#172033]">
+                    <div className="text-right font-mono">
+                      <span className="font-bold text-sm text-[#172033] block">
                         {formatRupiah(unitPrice * item.quantity)}
                       </span>
-                      <span className="text-[10px] text-[#64748B]">@{formatRupiah(unitPrice)}</span>
+                      <span className="text-[10px] text-[#64748B]">
+                        @{formatRupiah(unitPrice)}
+                      </span>
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Freshness Note */}
-            <div className="p-3 rounded-xl bg-[#F0F7FF] border border-[#E0F2FE] flex items-center gap-2.5 text-xs text-[#0284C7]">
-              <Info className="w-4 h-4 shrink-0" />
-              <span>
-                Semua espresso diekstraksi freshly pulled menggunakan biji kopi pilihan sangrai Leton Dumai.
+            {/* Total summary */}
+            <div className="pt-3 border-t border-[#E0F2FE] flex justify-between items-center text-sm">
+              <span className="font-bold text-[#172033]">Total Pembayaran</span>
+              <span className="font-mono font-black text-lg text-[#0284C7]">
+                {formatRupiah(grandTotal)}
               </span>
             </div>
           </div>
         </div>
 
-        {/* ================= RIGHT COLUMN: PAYMENT GATEWAY & QRIS ================= */}
+        {/* ================= RIGHT COLUMN: QRIS PAYMENT & UPLOAD ================= */}
         <div className="lg:col-span-5 flex flex-col gap-6">
-          {/* 1. Payment Breakdown Card */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-3.5">
-            <h2 className="font-display font-black text-base text-[#172033] uppercase">
-              Ringkasan Pembayaran
-            </h2>
-
-            <div className="space-y-2 text-xs text-[#64748B]">
-              <div className="flex items-center justify-between">
-                <span>Subtotal Pesanan ({totalItems} item)</span>
-                <span className="font-bold text-[#172033]">{formatRupiah(subtotal)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>PB1 / Pajak Restoran (10%)</span>
-                <span className="font-bold text-[#172033]">{formatRupiah(tax)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Biaya Layanan &amp; Packaging</span>
-                <span className="font-bold text-[#172033]">{formatRupiah(packagingFee)}</span>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-[#E0F2FE] flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-mono uppercase text-[#64748B] block">Total Pembayaran</span>
-                <span className="font-mono font-black text-2xl text-[#0284C7]">
-                  {formatRupiah(grandTotal)}
-                </span>
-              </div>
-              <span className="px-3 py-1 rounded-full bg-[#E0F2FE] text-[#0284C7] text-xs font-bold font-mono">
-                QRIS Dinamis
-              </span>
-            </div>
-          </div>
-
-          {/* 2. QRIS Payment Card */}
+          {/* 1. Payment Method Card */}
           <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-4">
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1 border-b border-[#E0F2FE] pb-3">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono uppercase tracking-wider text-[#0284C7] font-bold">
                   Metode Pembayaran

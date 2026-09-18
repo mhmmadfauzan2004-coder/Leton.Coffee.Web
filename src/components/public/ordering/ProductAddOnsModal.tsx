@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { MenuItem, AddOnOption } from '../../../types';
+import { MenuItem, AddOnOption, CustomizationOption, ProductSizeOption } from '../../../types';
+import { useContent } from '../../../context/ContentContext';
 import {
-  TOPPING_OPTIONS,
-  SYRUP_OPTIONS,
+  DEFAULT_SIZES,
+  DEFAULT_MASTER_TOPPINGS,
+  DEFAULT_MASTER_SYRUPS,
+  DEFAULT_SIZE,
   DEFAULT_TOPPING,
   DEFAULT_SYRUP,
   calculateItemUnitPrice,
 } from '../../../data/addOnsData';
 import { formatRupiah } from '../../../utils/formatters';
 import { resolveMediaUrl } from '../../../utils/api';
-import { X, Plus, Minus, Check, Coffee, Sparkles, MessageSquare } from 'lucide-react';
+import { X, Plus, Minus, Coffee, Sparkles, MessageSquare, Layers, Droplets } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ProductAddOnsModalProps {
@@ -18,11 +21,13 @@ interface ProductAddOnsModalProps {
   onClose: () => void;
   onConfirm: (
     product: MenuItem,
+    size: AddOnOption,
     topping: AddOnOption,
     syrup: AddOnOption,
     quantity: number,
     note?: string
   ) => void;
+  initialSize?: AddOnOption;
   initialTopping?: AddOnOption;
   initialSyrup?: AddOnOption;
   initialQuantity?: number;
@@ -34,11 +39,69 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
   isOpen,
   onClose,
   onConfirm,
+  initialSize,
   initialTopping,
   initialSyrup,
   initialQuantity = 1,
   initialNote = '',
 }) => {
+  const { data } = useContent();
+
+  // Dynamic Master Toppings from Context/DB
+  const masterToppings: CustomizationOption[] = useMemo(() => {
+    if (Array.isArray(data.masterToppings) && data.masterToppings.length > 0) {
+      return data.masterToppings.filter((t) => t.isActive);
+    }
+    return DEFAULT_MASTER_TOPPINGS.filter((t) => t.isActive);
+  }, [data.masterToppings]);
+
+  // Dynamic Master Syrups from Context/DB
+  const masterSyrups: CustomizationOption[] = useMemo(() => {
+    if (Array.isArray(data.masterSyrups) && data.masterSyrups.length > 0) {
+      return data.masterSyrups.filter((s) => s.isActive);
+    }
+    return DEFAULT_MASTER_SYRUPS.filter((s) => s.isActive);
+  }, [data.masterSyrups]);
+
+  // Sizes available for this specific product
+  const availableSizes: ProductSizeOption[] = useMemo(() => {
+    if (!product) return DEFAULT_SIZES;
+    if (Array.isArray(product.sizes) && product.sizes.length > 0) {
+      return product.sizes;
+    }
+    return DEFAULT_SIZES;
+  }, [product]);
+
+  // Toppings available for this specific product
+  const availableToppings: AddOnOption[] = useMemo(() => {
+    if (!product || product.hasTopping === false) return [];
+    let list = masterToppings;
+    if (Array.isArray(product.availableToppingIds) && product.availableToppingIds.length > 0) {
+      list = masterToppings.filter(
+        (t) => t.id === 'top-no-topping' || product.availableToppingIds?.includes(t.id)
+      );
+    }
+    return list.map((t) => ({ id: t.id, name: t.name, price: t.price }));
+  }, [product, masterToppings]);
+
+  // Syrups available for this specific product
+  const availableSyrups: AddOnOption[] = useMemo(() => {
+    if (!product || product.hasSyrup === false) return [];
+    let list = masterSyrups;
+    if (Array.isArray(product.availableSyrupIds) && product.availableSyrupIds.length > 0) {
+      list = masterSyrups.filter(
+        (s) => s.id === 'syr-no-syrup' || product.availableSyrupIds?.includes(s.id)
+      );
+    }
+    return list.map((s) => ({ id: s.id, name: s.name, price: s.price }));
+  }, [product, masterSyrups]);
+
+  const hasSizeOption = product?.hasSize !== false && availableSizes.length > 0;
+  const hasToppingOption = product?.hasTopping !== false && availableToppings.length > 0;
+  const hasSyrupOption = product?.hasSyrup !== false && availableSyrups.length > 0;
+
+  // Selected state
+  const [selectedSize, setSelectedSize] = useState<AddOnOption>(DEFAULT_SIZE);
   const [selectedTopping, setSelectedTopping] = useState<AddOnOption>(DEFAULT_TOPPING);
   const [selectedSyrup, setSelectedSyrup] = useState<AddOnOption>(DEFAULT_SYRUP);
   const [quantity, setQuantity] = useState<number>(1);
@@ -47,17 +110,54 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
   // Reset or load initial values whenever product opens
   useEffect(() => {
     if (isOpen && product) {
-      setSelectedTopping(initialTopping || DEFAULT_TOPPING);
-      setSelectedSyrup(initialSyrup || DEFAULT_SYRUP);
+      // 1. Size
+      if (initialSize) {
+        setSelectedSize(initialSize);
+      } else if (availableSizes.length > 0) {
+        setSelectedSize({ name: availableSizes[0].name, price: availableSizes[0].price });
+      } else {
+        setSelectedSize(DEFAULT_SIZE);
+      }
+
+      // 2. Topping
+      if (initialTopping) {
+        setSelectedTopping(initialTopping);
+      } else {
+        const noTop = availableToppings.find((t) => t.name.toLowerCase().includes('no topping'));
+        setSelectedTopping(noTop || availableToppings[0] || DEFAULT_TOPPING);
+      }
+
+      // 3. Syrup
+      if (initialSyrup) {
+        setSelectedSyrup(initialSyrup);
+      } else {
+        const noSyr = availableSyrups.find((s) => s.name.toLowerCase().includes('no syrup'));
+        setSelectedSyrup(noSyr || availableSyrups[0] || DEFAULT_SYRUP);
+      }
+
       setQuantity(initialQuantity > 0 ? initialQuantity : 1);
       setNote(initialNote || '');
     }
-  }, [isOpen, product, initialTopping, initialSyrup, initialQuantity, initialNote]);
+  }, [
+    isOpen,
+    product,
+    initialSize,
+    initialTopping,
+    initialSyrup,
+    initialQuantity,
+    initialNote,
+    availableSizes,
+    availableToppings,
+    availableSyrups,
+  ]);
 
   const unitPrice = useMemo(() => {
     if (!product) return 0;
-    return calculateItemUnitPrice(product.price, selectedTopping, selectedSyrup);
-  }, [product, selectedTopping, selectedSyrup]);
+    const s = hasSizeOption ? selectedSize : { name: 'Regular', price: 0 };
+    const t = hasToppingOption ? selectedTopping : { name: 'No Topping', price: 0 };
+    const sy = hasSyrupOption ? selectedSyrup : { name: 'No Syrup', price: 0 };
+    return calculateItemUnitPrice(product.price, s, t, sy);
+  }, [product, hasSizeOption, selectedSize, hasToppingOption, selectedTopping, hasSyrupOption, selectedSyrup]);
 
   const totalPrice = useMemo(() => {
     return unitPrice * quantity;
@@ -66,7 +166,11 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
   if (!isOpen || !product) return null;
 
   const handleConfirm = () => {
-    onConfirm(product, selectedTopping, selectedSyrup, quantity, note.trim() || undefined);
+    const finalSize = hasSizeOption ? selectedSize : { name: 'Regular', price: 0 };
+    const finalTopping = hasToppingOption ? selectedTopping : { name: 'No Topping', price: 0 };
+    const finalSyrup = hasSyrupOption ? selectedSyrup : { name: 'No Syrup', price: 0 };
+
+    onConfirm(product, finalSize, finalTopping, finalSyrup, quantity, note.trim() || undefined);
     onClose();
   };
 
@@ -103,9 +207,12 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
                 <h3 className="font-display font-black text-base sm:text-lg text-white truncate leading-snug">
                   {product.name}
                 </h3>
-                <span className="font-mono font-bold text-sm text-[#00E5FF] block">
-                  {formatRupiah(product.price)}
-                </span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="font-mono font-bold text-xs text-slate-400">Harga Dasar:</span>
+                  <span className="font-mono font-bold text-sm text-[#00E5FF]">
+                    {formatRupiah(product.price)}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -121,139 +228,200 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
 
           {/* Scrollable Content */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-            {/* TOPPING SECTION */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-display font-black text-xs sm:text-sm text-white uppercase tracking-wider flex items-center gap-2">
-                    <span className="w-1.5 h-3.5 rounded-full bg-[#00E5FF]" />
-                    <span>ADD ONS — TOPPING</span>
-                  </h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Pilih 1 jenis topping untuk memperkaya tekstur minuman Anda (Default: No Topping).
-                  </p>
+            {/* A. SIZE CUP SECTION */}
+            {hasSizeOption && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-display font-black text-xs sm:text-sm text-white uppercase tracking-wider flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-[#00E5FF]" />
+                      <span>A. SIZE CUP</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Pilih ukuran cup yang diinginkan (Wajib pilih 1).
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-mono text-[#00E5FF] bg-[#00E5FF]/10 px-2 py-0.5 rounded-md border border-[#00E5FF]/20">
+                    WAJIB
+                  </span>
                 </div>
-                <span className="text-[10px] font-mono text-[#00E5FF] bg-[#00E5FF]/10 px-2 py-0.5 rounded-md border border-[#00E5FF]/20">
-                  PILIH 1
-                </span>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {TOPPING_OPTIONS.map((opt) => {
-                  const isSelected = selectedTopping.name === opt.name;
-                  return (
-                    <button
-                      key={opt.name}
-                      type="button"
-                      onClick={() => setSelectedTopping(opt)}
-                      className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#00E5FF]/10 border-[#00E5FF] ring-1 ring-[#00E5FF]/50 shadow-md shadow-[#00E5FF]/15 text-white'
-                          : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 text-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div
-                          className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-all ${
-                            isSelected
-                              ? 'border-[#00E5FF] bg-[#00E5FF]'
-                              : 'border-slate-600 bg-slate-950'
-                          }`}
-                        >
-                          {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
-                        </div>
-                        <span className="text-xs font-medium truncate">{opt.name}</span>
-                      </div>
-
-                      <span
-                        className={`text-xs font-mono font-bold whitespace-nowrap ${
-                          opt.price === 0
-                            ? 'text-slate-400'
-                            : isSelected
-                            ? 'text-[#00E5FF]'
-                            : 'text-slate-300'
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {availableSizes.map((sizeOpt) => {
+                    const isSelected = selectedSize.name === sizeOpt.name;
+                    return (
+                      <button
+                        key={sizeOpt.name}
+                        type="button"
+                        onClick={() => setSelectedSize({ name: sizeOpt.name, price: sizeOpt.price })}
+                        className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#00E5FF]/10 border-[#00E5FF] ring-1 ring-[#00E5FF]/50 shadow-md shadow-[#00E5FF]/15 text-white'
+                            : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 text-slate-300'
                         }`}
                       >
-                        {opt.price === 0 ? 'Rp0' : `+${formatRupiah(opt.price)}`}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div
+                            className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-all ${
+                              isSelected ? 'border-[#00E5FF] bg-[#00E5FF]' : 'border-slate-600 bg-slate-950'
+                            }`}
+                          >
+                            {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+                          </div>
+                          <span className="text-xs font-bold truncate">{sizeOpt.name}</span>
+                        </div>
 
-            {/* SYRUP SECTION */}
-            <div className="space-y-3 pt-2 border-t border-slate-800/80">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-display font-black text-xs sm:text-sm text-white uppercase tracking-wider flex items-center gap-2">
-                    <span className="w-1.5 h-3.5 rounded-full bg-[#38BDF8]" />
-                    <span>ADD ONS — SYRUP</span>
-                  </h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    Tambahkan varian syrup aroma spesial (Default: No Syrup).
-                  </p>
-                </div>
-                <span className="text-[10px] font-mono text-[#38BDF8] bg-[#38BDF8]/10 px-2 py-0.5 rounded-md border border-[#38BDF8]/20">
-                  PILIH 1
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {SYRUP_OPTIONS.map((opt) => {
-                  const isSelected = selectedSyrup.name === opt.name;
-                  return (
-                    <button
-                      key={opt.name}
-                      type="button"
-                      onClick={() => setSelectedSyrup(opt)}
-                      className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#38BDF8]/10 border-[#38BDF8] ring-1 ring-[#38BDF8]/50 shadow-md shadow-[#38BDF8]/15 text-white'
-                          : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 text-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div
-                          className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-all ${
-                            isSelected
-                              ? 'border-[#38BDF8] bg-[#38BDF8]'
-                              : 'border-slate-600 bg-slate-950'
+                        <span
+                          className={`text-xs font-mono font-bold whitespace-nowrap ${
+                            sizeOpt.price === 0
+                              ? 'text-slate-400'
+                              : isSelected
+                              ? 'text-[#00E5FF]'
+                              : 'text-slate-300'
                           }`}
                         >
-                          {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
-                        </div>
-                        <span className="text-xs font-medium truncate">{opt.name}</span>
-                      </div>
+                          {sizeOpt.price === 0 ? '+Rp0' : `+${formatRupiah(sizeOpt.price)}`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-                      <span
-                        className={`text-xs font-mono font-bold whitespace-nowrap ${
-                          opt.price === 0
-                            ? 'text-slate-400'
-                            : isSelected
-                            ? 'text-[#38BDF8]'
-                            : 'text-slate-300'
+            {/* B. TOPPING / ADD-ONS SECTION */}
+            {hasToppingOption && (
+              <div className={`space-y-3 ${hasSizeOption ? 'pt-2 border-t border-slate-800/80' : ''}`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-display font-black text-xs sm:text-sm text-white uppercase tracking-wider flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-[#38BDF8]" />
+                      <span>B. TOPPING / ADD-ONS</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Pilih 1 jenis topping untuk memperkaya tekstur minuman (Default: No Topping).
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-mono text-[#38BDF8] bg-[#38BDF8]/10 px-2 py-0.5 rounded-md border border-[#38BDF8]/20">
+                    PILIH 1
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {availableToppings.map((opt) => {
+                    const isSelected = selectedTopping.name === opt.name;
+                    return (
+                      <button
+                        key={opt.name}
+                        type="button"
+                        onClick={() => setSelectedTopping(opt)}
+                        className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#38BDF8]/10 border-[#38BDF8] ring-1 ring-[#38BDF8]/50 shadow-md shadow-[#38BDF8]/15 text-white'
+                            : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 text-slate-300'
                         }`}
                       >
-                        {opt.price === 0 ? 'Rp0' : `+${formatRupiah(opt.price)}`}
-                      </span>
-                    </button>
-                  );
-                })}
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div
+                            className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-all ${
+                              isSelected ? 'border-[#38BDF8] bg-[#38BDF8]' : 'border-slate-600 bg-slate-950'
+                            }`}
+                          >
+                            {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+                          </div>
+                          <span className="text-xs font-medium truncate">{opt.name}</span>
+                        </div>
+
+                        <span
+                          className={`text-xs font-mono font-bold whitespace-nowrap ${
+                            opt.price === 0
+                              ? 'text-slate-400'
+                              : isSelected
+                              ? 'text-[#38BDF8]'
+                              : 'text-slate-300'
+                          }`}
+                        >
+                          {opt.price === 0 ? '+Rp0' : `+${formatRupiah(opt.price)}`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* C. SYRUP / ADD-ONS SECTION */}
+            {hasSyrupOption && (
+              <div className="space-y-3 pt-2 border-t border-slate-800/80">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-display font-black text-xs sm:text-sm text-white uppercase tracking-wider flex items-center gap-2">
+                      <Droplets className="w-4 h-4 text-[#818CF8]" />
+                      <span>C. SYRUP / ADD-ONS</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Tambahkan aroma rasa sirup spesial (Default: No Syrup).
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-mono text-[#818CF8] bg-[#818CF8]/10 px-2 py-0.5 rounded-md border border-[#818CF8]/20">
+                    PILIH 1
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {availableSyrups.map((opt) => {
+                    const isSelected = selectedSyrup.name === opt.name;
+                    return (
+                      <button
+                        key={opt.name}
+                        type="button"
+                        onClick={() => setSelectedSyrup(opt)}
+                        className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#818CF8]/10 border-[#818CF8] ring-1 ring-[#818CF8]/50 shadow-md shadow-[#818CF8]/15 text-white'
+                            : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div
+                            className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-all ${
+                              isSelected ? 'border-[#818CF8] bg-[#818CF8]' : 'border-slate-600 bg-slate-950'
+                            }`}
+                          >
+                            {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+                          </div>
+                          <span className="text-xs font-medium truncate">{opt.name}</span>
+                        </div>
+
+                        <span
+                          className={`text-xs font-mono font-bold whitespace-nowrap ${
+                            opt.price === 0
+                              ? 'text-slate-400'
+                              : isSelected
+                              ? 'text-[#818CF8]'
+                              : 'text-slate-300'
+                          }`}
+                        >
+                          {opt.price === 0 ? '+Rp0' : `+${formatRupiah(opt.price)}`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* SPECIAL NOTE SECTION */}
             <div className="space-y-2 pt-2 border-t border-slate-800/80">
               <div className="flex items-center gap-2 text-xs font-display font-bold text-slate-300 uppercase tracking-wider">
                 <MessageSquare className="w-3.5 h-3.5 text-[#00E5FF]" />
-                <span>CATATAN KHUSUS (OPSIONAL)</span>
+                <span>CATATAN PESANAN (OPSIONAL)</span>
               </div>
               <input
                 type="text"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Contoh: Less ice, pisah gula, cup terpisah..."
+                placeholder="Contoh: Less ice, gula sedikit, pisah cup..."
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[#00E5FF] transition-colors"
                 maxLength={120}
               />
@@ -268,11 +436,14 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
                 <span className="text-[11px] text-slate-400">Rincian per item:</span>
                 <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-slate-300">
                   <span>{formatRupiah(product.price)}</span>
-                  {selectedTopping.price > 0 && (
-                    <span className="text-[#00E5FF]">+{formatRupiah(selectedTopping.price)}</span>
+                  {hasSizeOption && selectedSize.price > 0 && (
+                    <span className="text-[#00E5FF]">+{formatRupiah(selectedSize.price)}</span>
                   )}
-                  {selectedSyrup.price > 0 && (
-                    <span className="text-[#38BDF8]">+{formatRupiah(selectedSyrup.price)}</span>
+                  {hasToppingOption && selectedTopping.price > 0 && (
+                    <span className="text-[#38BDF8]">+{formatRupiah(selectedTopping.price)}</span>
+                  )}
+                  {hasSyrupOption && selectedSyrup.price > 0 && (
+                    <span className="text-[#818CF8]">+{formatRupiah(selectedSyrup.price)}</span>
                   )}
                   <span className="text-slate-500">=</span>
                   <span className="text-white font-bold">{formatRupiah(unitPrice)}</span>

@@ -243,11 +243,15 @@ Halo Barista Leton Coffee, mohon konfirmasi pesanan saya. Terima kasih!`;
 
             <div className="flex flex-col gap-3">
               {order.items.map((item, idx) => {
+                const hasSize = item.size && item.size.name;
                 const hasTopping = item.topping && item.topping.name !== 'No Topping';
                 const hasSyrup = item.syrup && item.syrup.name !== 'No Syrup';
                 const unitPrice =
                   item.unitPrice ||
-                  item.price + (item.topping?.price || 0) + (item.syrup?.price || 0);
+                  item.price +
+                    (item.size?.price || 0) +
+                    (item.topping?.price || 0) +
+                    (item.syrup?.price || 0);
 
                 return (
                   <div
@@ -260,25 +264,35 @@ Halo Barista Leton Coffee, mohon konfirmasi pesanan saya. Terima kasih!`;
                       </div>
                       <div>
                         <h3 className="font-display font-bold text-sm text-[#172033]">{item.name}</h3>
-                        <div className="text-xs text-[#64748B] mt-0.5 space-y-0.5">
+                        <div className="text-xs text-[#64748B] mt-0.5 flex flex-wrap gap-1">
+                          {hasSize && (
+                            <span className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono text-[10px] font-bold">
+                              Size: {item.size!.name}{item.size!.price > 0 ? ` (+${formatRupiah(item.size!.price)})` : ''}
+                            </span>
+                          )}
                           {hasTopping && (
-                            <span className="inline-block mr-2 text-[#0284C7]">
-                              +{item.topping!.name}
+                            <span className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono text-[10px] font-bold">
+                              Top: {item.topping!.name} (+{formatRupiah(item.topping!.price)})
                             </span>
                           )}
                           {hasSyrup && (
-                            <span className="inline-block mr-2 text-[#0284C7]">
-                              +{item.syrup!.name}
+                            <span className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono text-[10px] font-bold">
+                              Syr: {item.syrup!.name} (+{formatRupiah(item.syrup!.price)})
                             </span>
                           )}
-                          {item.note && <span className="italic block">Catatan: {item.note}</span>}
                         </div>
+                        {item.note && <span className="italic block text-[11px] text-slate-500 mt-1">Catatan: {item.note}</span>}
                       </div>
                     </div>
 
-                    <span className="font-mono font-bold text-sm text-[#172033] shrink-0">
-                      {formatRupiah(unitPrice * item.quantity)}
-                    </span>
+                    <div className="text-right font-mono shrink-0">
+                      <span className="font-bold text-sm text-[#172033] block">
+                        {formatRupiah(unitPrice * item.quantity)}
+                      </span>
+                      <span className="text-[10px] text-[#64748B]">
+                        @{formatRupiah(unitPrice)}
+                      </span>
+                    </div>
                   </div>
                 );
               })}

@@ -15,6 +15,7 @@ import { OrderCheckout } from './OrderCheckout';
 import { OrderConfirmation } from './OrderConfirmation';
 import { createNewOrder, generateOrderNumber } from '../../../utils/supabaseOrders';
 import {
+  DEFAULT_SIZE,
   DEFAULT_TOPPING,
   DEFAULT_SYRUP,
   generateCartItemId,
@@ -96,17 +97,23 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
   // Cart operations with Add-ons
   const handleAddToCart = (
     product: MenuItem,
+    size: AddOnOption = DEFAULT_SIZE,
     topping: AddOnOption = DEFAULT_TOPPING,
     syrup: AddOnOption = DEFAULT_SYRUP,
     quantity: number = 1,
     note?: string
   ) => {
-    const cartItemId = generateCartItemId(product.id, topping.name, syrup.name);
+    const cartItemId = generateCartItemId(product.id, size.name, topping.name, syrup.name);
     setCart((prev) => {
       const existingIndex = prev.findIndex(
         (item) =>
-          (item.id || generateCartItemId(item.product.id, item.topping?.name, item.syrup?.name)) ===
-          cartItemId
+          (item.id ||
+            generateCartItemId(
+              item.product.id,
+              item.size?.name,
+              item.topping?.name,
+              item.syrup?.name
+            )) === cartItemId
       );
       if (existingIndex >= 0) {
         const updated = [...prev];
@@ -123,6 +130,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
             id: cartItemId,
             product,
             quantity,
+            size,
             topping,
             syrup,
             note,
@@ -137,7 +145,13 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
       return prev
         .map((item) => {
           const id =
-            item.id || generateCartItemId(item.product.id, item.topping?.name, item.syrup?.name);
+            item.id ||
+            generateCartItemId(
+              item.product.id,
+              item.size?.name,
+              item.topping?.name,
+              item.syrup?.name
+            );
           if (id === cartItemId || item.product.id === cartItemId) {
             const newQty = item.quantity + delta;
             return newQty > 0 ? { ...item, quantity: newQty } : null;
@@ -152,7 +166,13 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
     setCart((prev) =>
       prev.filter((item) => {
         const id =
-          item.id || generateCartItemId(item.product.id, item.topping?.name, item.syrup?.name);
+          item.id ||
+          generateCartItemId(
+            item.product.id,
+            item.size?.name,
+            item.topping?.name,
+            item.syrup?.name
+          );
         return id !== cartItemId && item.product.id !== cartItemId;
       })
     );
@@ -162,7 +182,13 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
     setCart((prev) =>
       prev.map((item) => {
         const id =
-          item.id || generateCartItemId(item.product.id, item.topping?.name, item.syrup?.name);
+          item.id ||
+          generateCartItemId(
+            item.product.id,
+            item.size?.name,
+            item.topping?.name,
+            item.syrup?.name
+          );
         return id === cartItemId || item.product.id === cartItemId ? { ...item, note } : item;
       })
     );
@@ -184,7 +210,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
     try {
       const orderNumber = generateOrderNumber();
       const totalAmount = cart.reduce((acc, item) => {
-        const unit = calculateItemUnitPrice(item.product.price, item.topping, item.syrup);
+        const unit = calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup);
         return acc + unit * item.quantity;
       }, 0);
 
@@ -202,9 +228,10 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
         orderType: details.orderType,
         tableNumber: details.orderType === 'DINE IN' ? details.tableNumber : undefined,
         items: cart.map((item) => {
+          const size = item.size || DEFAULT_SIZE;
           const topping = item.topping || DEFAULT_TOPPING;
           const syrup = item.syrup || DEFAULT_SYRUP;
-          const unitPrice = calculateItemUnitPrice(item.product.price, topping, syrup);
+          const unitPrice = calculateItemUnitPrice(item.product.price, size, topping, syrup);
           return {
             id: `item-${Date.now()}-${item.product.id}-${Math.random().toString(36).slice(2, 6)}`,
             productId: item.product.id,
@@ -214,11 +241,17 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
             quantity: item.quantity,
             image: item.product.image,
             note: item.note,
+            size: {
+              name: size.name,
+              price: size.price,
+            },
             topping: {
+              id: topping.id,
               name: topping.name,
               price: topping.price,
             },
             syrup: {
+              id: syrup.id,
               name: syrup.name,
               price: syrup.price,
             },

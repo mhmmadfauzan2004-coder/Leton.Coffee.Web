@@ -825,10 +825,12 @@ export const OrderManager: React.FC = () => {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                     {order.items.map((it, idx) => {
+                      const sizePrice = it.size?.price || 0;
                       const topPrice = it.topping?.price || 0;
                       const syrPrice = it.syrup?.price || 0;
-                      const unitPrice = it.unitPrice || (it.price + topPrice + syrPrice);
+                      const unitPrice = it.unitPrice || (it.price + sizePrice + topPrice + syrPrice);
                       const itemSubtotal = unitPrice * it.quantity;
+                      const hasSize = it.size && it.size.name;
                       const hasTopping = it.topping && it.topping.name !== 'No Topping';
                       const hasSyrup = it.syrup && it.syrup.name !== 'No Syrup';
 
@@ -852,9 +854,17 @@ export const OrderManager: React.FC = () => {
                               </span>
                             </div>
 
+                            {/* Size Details */}
+                            {hasSize && (
+                              <div className="text-[11px] font-mono text-[#00E5FF] flex items-center justify-between pl-1">
+                                <span>Size: {it.size!.name}</span>
+                                <span>{sizePrice > 0 ? `+${formatRupiah(sizePrice)}` : 'Rp0'}</span>
+                              </div>
+                            )}
+
                             {/* Topping Details */}
                             {hasTopping ? (
-                              <div className="text-[11px] font-mono text-[#00E5FF] flex items-center justify-between pl-1">
+                              <div className="text-[11px] font-mono text-[#38BDF8] flex items-center justify-between pl-1">
                                 <span>Topping: {it.topping!.name}</span>
                                 <span>+{formatRupiah(topPrice)}</span>
                               </div>
@@ -866,7 +876,7 @@ export const OrderManager: React.FC = () => {
 
                             {/* Syrup Details */}
                             {hasSyrup ? (
-                              <div className="text-[11px] font-mono text-[#38BDF8] flex items-center justify-between pl-1">
+                              <div className="text-[11px] font-mono text-[#818CF8] flex items-center justify-between pl-1">
                                 <span>Syrup: {it.syrup!.name}</span>
                                 <span>+{formatRupiah(syrPrice)}</span>
                               </div>

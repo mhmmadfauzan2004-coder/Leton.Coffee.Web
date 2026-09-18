@@ -9,8 +9,10 @@ import {
   ContactSettings,
   SiteSettings,
   BaristasSectionContent,
+  CustomizationOption,
 } from '../types';
 import { initialLetonData } from '../data/initialData';
+import { DEFAULT_MASTER_TOPPINGS, DEFAULT_MASTER_SYRUPS } from '../data/addOnsData';
 import { saveGlobalDataToIdb, loadGlobalDataFromIdb } from './idbStorage';
 import {
   safeSetItem,
@@ -157,9 +159,23 @@ export function sanitizeLoadedData(raw: any): LetonData {
               ...fallbackItem,
               ...m,
               image: resolveCleanImage(m?.image, fallbackItem?.image),
+              hasSize: typeof m?.hasSize === 'boolean' ? m.hasSize : (fallbackItem?.hasSize ?? true),
+              sizes: Array.isArray(m?.sizes) && m.sizes.length > 0 ? m.sizes : fallbackItem?.sizes,
+              hasTopping: typeof m?.hasTopping === 'boolean' ? m.hasTopping : (fallbackItem?.hasTopping ?? true),
+              availableToppingIds: Array.isArray(m?.availableToppingIds) ? m.availableToppingIds : fallbackItem?.availableToppingIds,
+              hasSyrup: typeof m?.hasSyrup === 'boolean' ? m.hasSyrup : (fallbackItem?.hasSyrup ?? true),
+              availableSyrupIds: Array.isArray(m?.availableSyrupIds) ? m.availableSyrupIds : fallbackItem?.availableSyrupIds,
             };
           })
         : initialLetonData.menuItems,
+    masterToppings:
+      Array.isArray(raw.masterToppings) && raw.masterToppings.length > 0
+        ? raw.masterToppings
+        : (initialLetonData.masterToppings || DEFAULT_MASTER_TOPPINGS),
+    masterSyrups:
+      Array.isArray(raw.masterSyrups) && raw.masterSyrups.length > 0
+        ? raw.masterSyrups
+        : (initialLetonData.masterSyrups || DEFAULT_MASTER_SYRUPS),
     baristas:
       Array.isArray(raw.baristas) && raw.baristas.length > 0
         ? raw.baristas.map((b: any, idx: number) => {

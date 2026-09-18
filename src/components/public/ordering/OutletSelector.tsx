@@ -14,7 +14,12 @@ interface OutletSelectorProps {
 export const OutletSelector: React.FC<OutletSelectorProps> = ({ onSelectOutlet }) => {
   const { data } = useContent();
 
-  const outlets: OrderOutlet[] = DEFAULT_OUTLETS.map((outlet, index) => {
+  // Only Sudirman and Kelakap 7 are available for Online Order
+  const availableOutlets = DEFAULT_OUTLETS.filter(
+    (o) => o.id === 'sudirman' || o.id === 'kelakap_7'
+  );
+
+  const outlets: OrderOutlet[] = availableOutlets.map((outlet) => {
     let dynamicImage = outlet.image;
     let dynamicAddress = outlet.address;
     let dynamicHours = outlet.hours;
@@ -23,12 +28,10 @@ export const OutletSelector: React.FC<OutletSelectorProps> = ({ onSelectOutlet }
       dynamicImage = data.branches[0].bgImage || outlet.image;
       dynamicAddress = data.branches[0].address || outlet.address;
       dynamicHours = data.branches[0].openingHours || outlet.hours;
-    } else if ((outlet.id === 'kelakap_7' || outlet.id === 'ratusima') && data.branches[1]) {
+    } else if (outlet.id === 'kelakap_7' && data.branches[1]) {
       dynamicImage = data.branches[1].bgImage || outlet.image;
       dynamicAddress = data.branches[1].address || outlet.address;
       dynamicHours = data.branches[1].openingHours || outlet.hours;
-    } else if ((outlet.id === 'letgo-mpp' || outlet.id === 'letgo') && data.mobileService) {
-      dynamicImage = data.mobileService.bgImage || data.mobileService.truckImage || outlet.image;
     }
 
     return {
@@ -52,12 +55,12 @@ export const OutletSelector: React.FC<OutletSelectorProps> = ({ onSelectOutlet }
           PILIH OUTLET LETON COFFEE
         </h2>
         <p className="mt-2 text-slate-300 text-xs sm:text-sm max-w-md mx-auto leading-relaxed">
-          Silakan pilih cabang atau booth terdekat untuk melihat ketersediaan menu dan melakukan pemesanan.
+          Silakan pilih cabang terdekat untuk melihat ketersediaan menu dan melakukan pemesanan.
         </p>
       </div>
 
-      {/* Outlet Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6">
+      {/* Outlet Cards Grid (2 Outlets) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-8 max-w-3xl mx-auto">
         {outlets.map((outlet, idx) => (
           <motion.div
             key={outlet.id}

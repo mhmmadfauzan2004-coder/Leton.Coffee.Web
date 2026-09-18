@@ -23,6 +23,7 @@ interface OrderMenuProps {
   cart: CartItem[];
   onAddToCart: (
     product: MenuItem,
+    size?: AddOnOption,
     topping?: AddOnOption,
     syrup?: AddOnOption,
     quantity?: number,
@@ -106,12 +107,13 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
 
   const handleConfirmAddOns = (
     product: MenuItem,
+    size: AddOnOption,
     topping: AddOnOption,
     syrup: AddOnOption,
     quantity: number,
     note?: string
   ) => {
-    onAddToCart(product, topping, syrup, quantity, note);
+    onAddToCart(product, size, topping, syrup, quantity, note);
   };
 
   return (

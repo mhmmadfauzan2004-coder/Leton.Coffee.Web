@@ -13,7 +13,9 @@ import {
   ArrowLeft,
   FileText,
   Store,
+  Layers,
   Sparkles,
+  Droplets,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -43,11 +45,14 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
   const [editingNoteForId, setEditingNoteForId] = useState<string | null>(null);
 
   const getItemId = (item: CartItem): string => {
-    return item.id || generateCartItemId(item.product.id, item.topping?.name, item.syrup?.name);
+    return (
+      item.id ||
+      generateCartItemId(item.product.id, item.size?.name, item.topping?.name, item.syrup?.name)
+    );
   };
 
   const getItemUnitPrice = (item: CartItem): number => {
-    return calculateItemUnitPrice(item.product.price, item.topping, item.syrup);
+    return calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup);
   };
 
   const subtotal = cart.reduce(
@@ -100,7 +105,7 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
               </div>
               <p className="font-display font-bold text-white text-base">Keranjang Anda Masih Kosong</p>
               <p className="text-slate-400 text-xs mt-1 max-w-xs">
-                Pilih menu kopi atau makanan favorit Anda untuk memulai pesanan.
+                Pilih menu kopi atau minuman favorit Anda untuk memulai pesanan.
               </p>
               <button
                 onClick={onClose}
@@ -117,6 +122,7 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
                   const unitPrice = getItemUnitPrice(item);
                   const itemSubtotal = unitPrice * item.quantity;
                   const isEditingNote = editingNoteForId === itemId;
+                  const hasSize = item.size && item.size.name;
                   const hasTopping = item.topping && item.topping.name !== 'No Topping';
                   const hasSyrup = item.syrup && item.syrup.name !== 'No Syrup';
 
@@ -144,35 +150,46 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
                             {item.product.name}
                           </h4>
                           <span className="font-mono text-xs text-slate-400 block mt-0.5">
-                            Menu: {formatRupiah(item.product.price)}
+                            Harga Dasar: {formatRupiah(item.product.price)}
                           </span>
 
-                          {/* Add-on labels */}
+                          {/* Customization Details */}
                           <div className="mt-1 space-y-0.5 text-[11px] font-mono">
-                            {hasTopping ? (
+                            {hasSize && (
                               <div className="text-[#00E5FF] flex items-center gap-1">
+                                <Layers className="w-3 h-3 text-[#00E5FF]" />
+                                <span className="text-slate-400">Size:</span>
+                                <span className="font-bold">{item.size!.name}</span>
+                                {item.size!.price > 0 && <span>(+{formatRupiah(item.size!.price)})</span>}
+                              </div>
+                            )}
+
+                            {hasTopping && (
+                              <div className="text-[#38BDF8] flex items-center gap-1">
+                                <Sparkles className="w-3 h-3 text-[#38BDF8]" />
                                 <span className="text-slate-400">Topping:</span>
                                 <span className="font-bold">{item.topping!.name}</span>
                                 <span>(+{formatRupiah(item.topping!.price)})</span>
                               </div>
-                            ) : (
-                              <div className="text-slate-500">Topping: No Topping (Rp0)</div>
                             )}
 
-                            {hasSyrup ? (
-                              <div className="text-[#38BDF8] flex items-center gap-1">
+                            {hasSyrup && (
+                              <div className="text-[#818CF8] flex items-center gap-1">
+                                <Droplets className="w-3 h-3 text-[#818CF8]" />
                                 <span className="text-slate-400">Syrup:</span>
                                 <span className="font-bold">{item.syrup!.name}</span>
                                 <span>(+{formatRupiah(item.syrup!.price)})</span>
                               </div>
-                            ) : (
-                              <div className="text-slate-500">Syrup: No Syrup (Rp0)</div>
                             )}
                           </div>
 
-                          <span className="font-mono font-bold text-xs text-[#00E5FF] block mt-1.5">
-                            Subtotal item: {formatRupiah(itemSubtotal)}
-                          </span>
+                          <div className="mt-1.5 flex items-center gap-2 font-mono">
+                            <span className="text-[11px] text-slate-400">Harga/item: {formatRupiah(unitPrice)}</span>
+                            <span className="text-slate-600">•</span>
+                            <span className="font-bold text-xs text-[#00E5FF]">
+                              Total: {formatRupiah(itemSubtotal)}
+                            </span>
+                          </div>
                         </div>
 
                         {/* Quantity Controls */}
@@ -199,7 +216,7 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
                         {/* Delete Button */}
                         <button
                           onClick={() => onRemoveItem(itemId)}
-                          className="p-2 text-slate-500 hover:text-rose-400 hover:bg-slate-800/60 rounded-xl transition-colors shrink-0"
+                          className="p-2 text-slate-500 hover:text-rose-400 hover:bg-slate-800/60 rounded-xl transition-colors shrink-0 cursor-pointer"
                           title="Hapus menu"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -220,7 +237,7 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
                             />
                             <button
                               onClick={() => setEditingNoteForId(null)}
-                              className="px-2.5 py-1.5 rounded-lg bg-[#2563EB] text-white text-[11px] font-bold"
+                              className="px-2.5 py-1.5 rounded-lg bg-[#2563EB] text-white text-[11px] font-bold cursor-pointer"
                             >
                               Simpan
                             </button>
@@ -232,7 +249,7 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
                             </span>
                             <button
                               onClick={() => setEditingNoteForId(itemId)}
-                              className="text-[#00E5FF] hover:underline font-mono text-[11px] shrink-0"
+                              className="text-[#00E5FF] hover:underline font-mono text-[11px] shrink-0 cursor-pointer"
                             >
                               {item.note ? 'Ubah Catatan' : '+ Tambah Catatan'}
                             </button>
@@ -254,7 +271,7 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
                   rows={2}
                   value={generalNote}
                   onChange={(e) => onUpdateGeneralNote(e.target.value)}
-                  placeholder="Misal: Siapkan sedotan kertas, dibuat sekarang..."
+                  placeholder="Misal: Siapkan sedotan, dibuat sekarang..."
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs placeholder-slate-500 focus:outline-none focus:border-[#2563EB] resize-none"
                 />
               </div>

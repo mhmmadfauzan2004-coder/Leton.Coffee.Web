@@ -56,16 +56,37 @@ export interface MenuCategory {
   order: number;
 }
 
+export interface ProductSizeOption {
+  name: string; // e.g. 'Regular', 'Large'
+  price: number; // e.g. 0, 5000
+}
+
+export interface CustomizationOption {
+  id: string;
+  name: string;
+  price: number;
+  isActive: boolean;
+  order: number;
+}
+
 export interface MenuItem {
   id: string;
   name: string;
   categoryId: string;
-  price: number;
+  price: number; // Base Price
   description: string;
   image: string;
   isAvailable: boolean;
   badge?: string;
   order: number;
+
+  // Customization Configuration
+  hasSize?: boolean;
+  sizes?: ProductSizeOption[];
+  hasTopping?: boolean;
+  availableToppingIds?: string[];
+  hasSyrup?: boolean;
+  availableSyrupIds?: string[];
 }
 
 export interface AboutFact {
@@ -126,6 +147,8 @@ export interface LetonData {
   mobileService: MobileService;
   menuCategories: MenuCategory[];
   menuItems: MenuItem[];
+  masterToppings?: CustomizationOption[];
+  masterSyrups?: CustomizationOption[];
   baristasContent?: BaristasSectionContent;
   baristas: BaristaItem[];
   aboutContent: AboutContent;
@@ -177,6 +200,7 @@ export type PaymentStatus =
 export type OrderStatus = 'NEW' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
 
 export interface AddOnOption {
+  id?: string;
   name: string;
   price: number;
 }
@@ -186,10 +210,11 @@ export interface OrderItem {
   productId: string;
   name: string;
   price: number; // base menu price
-  unitPrice?: number; // price with add-ons
+  unitPrice?: number; // price with all customizations
   quantity: number;
   image?: string;
   note?: string;
+  size?: AddOnOption;
   topping?: AddOnOption;
   syrup?: AddOnOption;
 }
@@ -222,6 +247,7 @@ export interface CartItem {
   product: MenuItem;
   quantity: number;
   note?: string;
+  size?: AddOnOption;
   topping?: AddOnOption;
   syrup?: AddOnOption;
 }

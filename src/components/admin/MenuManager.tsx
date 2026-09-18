@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useContent } from '../../context/ContentContext';
-import { MenuItem, MenuCategory } from '../../types';
+import { MenuItem, MenuCategory, CustomizationOption } from '../../types';
 import { initialLetonData } from '../../data/initialData';
+import { DEFAULT_MASTER_TOPPINGS, DEFAULT_MASTER_SYRUPS } from '../../data/addOnsData';
 import { ImageUploadField } from './ImageUploadField';
 import { formatRupiah } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
@@ -11,22 +12,24 @@ import {
   Trash2,
   Save,
   X,
-  Check,
   Search,
   CheckCircle,
   XCircle,
   MoveUp,
   MoveDown,
-  Layers,
   UtensilsCrossed,
+  Sparkles,
+  Droplet,
 } from 'lucide-react';
 
 export const MenuManager: React.FC = () => {
   const { data, saveData } = useContent();
   const { menuCategories, menuItems } = data;
+  const masterToppings = data.masterToppings || DEFAULT_MASTER_TOPPINGS;
+  const masterSyrups = data.masterSyrups || DEFAULT_MASTER_SYRUPS;
 
-  // Active tab: "items" | "categories"
-  const [activeSubTab, setActiveSubTab] = useState<'items' | 'categories'>('items');
+  // Active tab: "items" | "categories" | "toppings" | "syrups"
+  const [activeSubTab, setActiveSubTab] = useState<'items' | 'categories' | 'toppings' | 'syrups'>('items');
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedCatFilter, setSelectedCatFilter] = useState('all');
 
@@ -54,9 +57,21 @@ export const MenuManager: React.FC = () => {
     order: 0,
   });
 
+  // Customization (Topping / Syrup) modal state
+  const [isCustomOptionModalOpen, setIsCustomOptionModalOpen] = useState(false);
+  const [customOptionType, setCustomOptionType] = useState<'topping' | 'syrup'>('topping');
+  const [editingCustomOption, setEditingCustomOption] = useState<CustomizationOption | null>(null);
+  const [customOptionForm, setCustomOptionForm] = useState<CustomizationOption>({
+    id: '',
+    name: '',
+    price: 6000,
+    isActive: true,
+    order: 1,
+  });
+
   // Delete confirmation modal state
   const [deleteConfirm, setDeleteConfirm] = useState<{
-    type: 'item' | 'category';
+    type: 'item' | 'category' | 'topping' | 'syrup';
     id: string;
     name: string;
   } | null>(null);
@@ -173,6 +188,76 @@ export const MenuManager: React.FC = () => {
   };
 
   // ----------------------------------------
+  // Customization (Topping / Syrup) Actions
+  // ----------------------------------------
+  const handleToggleTopping = async (id: string) => {
+    const updated = masterToppings.map((t) => (t.id === id ? { ...t, isActive: !t.isActive } : t));
+    await saveData({
+      ...data,
+      masterToppings: updated,
+    });
+  };
+
+  const handleToggleSyrup = async (id: string) => {
+    const updated = masterSyrups.map((s) => (s.id === id ? { ...s, isActive: !s.isActive } : s));
+    await saveData({
+      ...data,
+      masterSyrups: updated,
+    });
+  };
+
+  const handleOpenAddCustomOption = (type: 'topping' | 'syrup') => {
+    setCustomOptionType(type);
+    setEditingCustomOption(null);
+    const list = type === 'topping' ? masterToppings : masterSyrups;
+    setCustomOptionForm({
+      id: `${type}-${Date.now()}`,
+      name: '',
+      price: 6000,
+      isActive: true,
+      order: list.length + 1,
+    });
+    setIsCustomOptionModalOpen(true);
+  };
+
+  const handleOpenEditCustomOption = (type: 'topping' | 'syrup', option: CustomizationOption) => {
+    setCustomOptionType(type);
+    setEditingCustomOption(option);
+    setCustomOptionForm({ ...option });
+    setIsCustomOptionModalOpen(true);
+  };
+
+  const handleSaveCustomOption = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customOptionForm.name.trim()) return;
+
+    if (customOptionType === 'topping') {
+      let updated = [...masterToppings];
+      if (editingCustomOption) {
+        updated = updated.map((o) => (o.id === editingCustomOption.id ? customOptionForm : o));
+      } else {
+        updated.push(customOptionForm);
+      }
+      await saveData({
+        ...data,
+        masterToppings: updated,
+      });
+    } else {
+      let updated = [...masterSyrups];
+      if (editingCustomOption) {
+        updated = updated.map((o) => (o.id === editingCustomOption.id ? customOptionForm : o));
+      } else {
+        updated.push(customOptionForm);
+      }
+      await saveData({
+        ...data,
+        masterSyrups: updated,
+      });
+    }
+    setIsCustomOptionModalOpen(false);
+  };
+
+  // ----------------------------------------
   // Delete Execution
   // ----------------------------------------
   const executeDelete = async () => {
@@ -186,7 +271,6 @@ export const MenuManager: React.FC = () => {
       });
     } else if (deleteConfirm.type === 'category') {
       const updatedCats = menuCategories.filter((c) => c.id !== deleteConfirm.id);
-      // fallback items to first remaining category
       const fallbackCat = updatedCats[0]?.id || 'general';
       const updatedItems = menuItems.map((item) =>
         item.categoryId === deleteConfirm.id ? { ...item, categoryId: fallbackCat } : item
@@ -195,6 +279,18 @@ export const MenuManager: React.FC = () => {
         ...data,
         menuCategories: updatedCats,
         menuItems: updatedItems,
+      });
+    } else if (deleteConfirm.type === 'topping') {
+      const updated = masterToppings.filter((t) => t.id !== deleteConfirm.id);
+      await saveData({
+        ...data,
+        masterToppings: updated,
+      });
+    } else if (deleteConfirm.type === 'syrup') {
+      const updated = masterSyrups.filter((s) => s.id !== deleteConfirm.id);
+      await saveData({
+        ...data,
+        masterSyrups: updated,
       });
     }
     setDeleteConfirm(null);
@@ -216,35 +312,59 @@ export const MenuManager: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
         <div>
           <h2 className="font-display font-black text-2xl text-white uppercase tracking-tight">
-            MANAJEMEN MENU & KATEGORI
+            MANAJEMEN MENU & CUSTOMIZATION
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Tambah menu baru, atur harga, foto, ketersediaan, serta kelola kategori menu.
+            Tambah menu baru, atur harga, ketersediaan, serta kelola topping & syrup dengan update realtime.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setActiveSubTab('items')}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-colors cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-colors cursor-pointer ${
               activeSubTab === 'items'
                 ? 'bg-[#00E5FF] text-black shadow-md'
                 : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
             }`}
           >
-            Daftar Menu ({menuItems.length})
+            Menu ({menuItems.length})
           </button>
           <button
             type="button"
             onClick={() => setActiveSubTab('categories')}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-colors cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-colors cursor-pointer ${
               activeSubTab === 'categories'
                 ? 'bg-[#00E5FF] text-black shadow-md'
                 : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
             }`}
           >
             Kategori ({menuCategories.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('toppings')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-colors cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'toppings'
+                ? 'bg-[#00E5FF] text-black shadow-md'
+                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Topping ({masterToppings.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('syrups')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-colors cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'syrups'
+                ? 'bg-[#00E5FF] text-black shadow-md'
+                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+            }`}
+          >
+            <Droplet className="w-3.5 h-3.5" />
+            <span>Syrup ({masterSyrups.length})</span>
           </button>
         </div>
       </div>
@@ -482,6 +602,154 @@ export const MenuManager: React.FC = () => {
         </div>
       )}
 
+      {/* SUBTAB 3: TOPPINGS */}
+      {activeSubTab === 'toppings' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-400">
+              Kelola daftar pilihan topping custom untuk pesanan online.
+            </p>
+            <button
+              type="button"
+              onClick={() => handleOpenAddCustomOption('topping')}
+              className="px-4 py-2 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tambah Topping</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {masterToppings.map((top) => (
+              <div
+                key={top.id}
+                className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between"
+              >
+                <div>
+                  <span className="text-[10px] font-mono tracking-widest text-cyan-400 uppercase">
+                    TOPPING
+                  </span>
+                  <h4 className="font-display font-bold text-base text-white mt-0.5">
+                    {top.name}
+                  </h4>
+                  <p className="font-mono font-bold text-xs text-[#00E5FF] mt-1">
+                    {formatRupiah(top.price)}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleTopping(top.id)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold cursor-pointer transition-colors ${
+                      top.isActive
+                        ? 'bg-emerald-950/80 border border-emerald-500/40 text-emerald-300'
+                        : 'bg-rose-950/80 border border-rose-500/40 text-rose-300'
+                    }`}
+                  >
+                    {top.isActive ? 'Aktif' : 'Nonaktif'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditCustomOption('topping', top)}
+                    className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer"
+                    title="Edit Topping"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  {top.id !== 'top-no-topping' && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDeleteConfirm({ type: 'topping', id: top.id, name: top.name })
+                      }
+                      className="p-2 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 cursor-pointer"
+                      title="Hapus Topping"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* SUBTAB 4: SYRUPS */}
+      {activeSubTab === 'syrups' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-400">
+              Kelola daftar pilihan syrup custom untuk pesanan online.
+            </p>
+            <button
+              type="button"
+              onClick={() => handleOpenAddCustomOption('syrup')}
+              className="px-4 py-2 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tambah Syrup</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {masterSyrups.map((syr) => (
+              <div
+                key={syr.id}
+                className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between"
+              >
+                <div>
+                  <span className="text-[10px] font-mono tracking-widest text-amber-400 uppercase">
+                    SYRUP
+                  </span>
+                  <h4 className="font-display font-bold text-base text-white mt-0.5">
+                    {syr.name}
+                  </h4>
+                  <p className="font-mono font-bold text-xs text-[#00E5FF] mt-1">
+                    {formatRupiah(syr.price)}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleSyrup(syr.id)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold cursor-pointer transition-colors ${
+                      syr.isActive
+                        ? 'bg-emerald-950/80 border border-emerald-500/40 text-emerald-300'
+                        : 'bg-rose-950/80 border border-rose-500/40 text-rose-300'
+                    }`}
+                  >
+                    {syr.isActive ? 'Aktif' : 'Nonaktif'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditCustomOption('syrup', syr)}
+                    className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer"
+                    title="Edit Syrup"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  {syr.id !== 'syr-no-syrup' && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDeleteConfirm({ type: 'syrup', id: syr.id, name: syr.name })
+                      }
+                      className="p-2 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 cursor-pointer"
+                      title="Hapus Syrup"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ------------------------------------------- */}
       {/* MODAL: ADD / EDIT MENU ITEM                 */}
       {/* ------------------------------------------- */}
@@ -683,6 +951,96 @@ export const MenuManager: React.FC = () => {
       )}
 
       {/* ------------------------------------------- */}
+      {/* MODAL: ADD / EDIT TOPPING / SYRUP           */}
+      {/* ------------------------------------------- */}
+      {isCustomOptionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <h3 className="font-display font-black text-xl text-white uppercase tracking-tight">
+                {editingCustomOption
+                  ? `EDIT ${customOptionType === 'topping' ? 'TOPPING' : 'SYRUP'}`
+                  : `TAMBAH ${customOptionType === 'topping' ? 'TOPPING' : 'SYRUP'} BARU`}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsCustomOptionModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCustomOption} className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
+                  Nama {customOptionType === 'topping' ? 'Topping' : 'Syrup'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={customOptionForm.name}
+                  onChange={(e) => setCustomOptionForm({ ...customOptionForm, name: e.target.value })}
+                  placeholder={customOptionType === 'topping' ? 'Contoh: Float' : 'Contoh: Vanilla'}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
+                  Harga Tambahan (IDR)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  step={1000}
+                  value={customOptionForm.price}
+                  onChange={(e) =>
+                    setCustomOptionForm({ ...customOptionForm, price: parseInt(e.target.value) || 0 })
+                  }
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <input
+                  type="checkbox"
+                  id="custom-option-active-cb"
+                  checked={customOptionForm.isActive}
+                  onChange={(e) => setCustomOptionForm({ ...customOptionForm, isActive: e.target.checked })}
+                  className="w-4 h-4 rounded text-cyan-400 bg-slate-950 border-slate-800 focus:ring-0"
+                />
+                <label
+                  htmlFor="custom-option-active-cb"
+                  className="text-xs text-slate-300 font-medium cursor-pointer"
+                >
+                  Status: <span className="font-bold text-white">Aktif (Tersedia untuk Customization)</span>
+                </label>
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomOptionModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer shadow-lg shadow-[#00E5FF]/20"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Simpan {customOptionType === 'topping' ? 'Topping' : 'Syrup'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------- */}
       {/* MODAL: DELETE CONFIRMATION                  */}
       {/* ------------------------------------------- */}
       {deleteConfirm && (
@@ -693,7 +1051,7 @@ export const MenuManager: React.FC = () => {
             </div>
             <h4 className="font-display font-bold text-lg text-white">Konfirmasi Hapus</h4>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Apakah Anda yakin ingin menghapus {deleteConfirm.type === 'item' ? 'menu' : 'kategori'}{' '}
+              Apakah Anda yakin ingin menghapus {deleteConfirm.type}{' '}
               <strong className="text-white font-semibold">"{deleteConfirm.name}"</strong>? Tindakan ini
               akan langsung tersimpan ke database.
             </p>

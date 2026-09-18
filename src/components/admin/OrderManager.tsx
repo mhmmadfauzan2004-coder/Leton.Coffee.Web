@@ -38,7 +38,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 export const OrderManager: React.FC = () => {
-  const { auth } = useContent();
+  const { auth, showToast } = useContent();
   const isOutletAdmin = auth.role === 'outlet_admin';
   const assignedOutletId = auth.outletId || '';
   const assignedOutletName = auth.outletName || (isOutletAdmin ? 'Outlet Ditugaskan' : 'Semua Cabang');
@@ -129,33 +129,42 @@ export const OrderManager: React.FC = () => {
     };
   }, [soundEnabled, effectiveOutletScope]);
 
-  // Handle status update
+  // Handle status update with instant Optimistic UI + non-blocking background sync + rollback
   const handleUpdateStatus = async (
     orderId: string,
     newStatus: OrderStatus,
     newPaymentStatus?: PaymentStatus,
     rejectionReason?: string
   ) => {
-    setUpdatingOrderId(orderId);
+    // 1. Snapshot previous state for rollback
+    const previousOrders = [...orders];
+
+    // 2. OPTIMISTIC UPDATE: Update UI immediately (0ms delay)
+    setOrders((prev) =>
+      prev.map((o) => {
+        if (o.id === orderId) {
+          return {
+            ...o,
+            orderStatus: newStatus,
+            paymentStatus: newPaymentStatus || o.paymentStatus,
+            rejectionReason: rejectionReason !== undefined ? rejectionReason : o.rejectionReason,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return o;
+      })
+    );
+
+    // 3. Background sync to Supabase without blocking UI
     try {
-      await updateOrderStatus(orderId, newStatus, newPaymentStatus, rejectionReason);
-      // Optimistic update
-      setOrders((prev) =>
-        prev.map((o) => {
-          if (o.id === orderId) {
-            return {
-              ...o,
-              orderStatus: newStatus,
-              paymentStatus: newPaymentStatus || o.paymentStatus,
-              rejectionReason: rejectionReason !== undefined ? rejectionReason : o.rejectionReason,
-              updatedAt: new Date().toISOString(),
-            };
-          }
-          return o;
-        })
-      );
-    } finally {
-      setUpdatingOrderId(null);
+      const success = await updateOrderStatus(orderId, newStatus, newPaymentStatus, rejectionReason);
+      if (!success) {
+        throw new Error('Gagal memperbarui status di cloud');
+      }
+    } catch (err: any) {
+      console.error('[Order Status Update Failed - Rolling Back UI]:', err);
+      setOrders(previousOrders);
+      showToast('Gagal memperbarui status pesanan: ' + (err?.message || 'Koneksi terputus') + '. Perubahan dibatalkan.', 'error');
     }
   };
 

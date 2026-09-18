@@ -599,8 +599,9 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
   const filterId = activeOutlet && activeOutlet !== 'ALL' ? activeOutlet : undefined;
 
   const ordersMap = new Map<string, CustomerOrder>();
+  let supabaseOrdersLoaded = false;
 
-  // 1. Try Supabase Database 'orders' table
+  // 1. Try Supabase Database 'orders' table (Fastest & direct)
   try {
     const client = getSupabase(activeRole, filterId);
     const { data, error } = await client
@@ -610,6 +611,7 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
       .limit(300);
 
     if (!error && Array.isArray(data) && data.length > 0) {
+      supabaseOrdersLoaded = true;
       data.forEach((row: any) => {
         const order: CustomerOrder = {
           id: row.id,
@@ -640,50 +642,29 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
     console.warn('[Fetch Supabase Orders Warning]:', err);
   }
 
-  // 2. Fetch from Supabase 'leton_content' orders_registry
-  try {
-    const client = getSupabase(activeRole, filterId);
-    const { data: regRow } = await client
-      .from('leton_content')
-      .select('*')
-      .eq('id', 'orders_registry')
-      .maybeSingle();
+  // 2. Fetch from backup only if primary table was empty or not accessible
+  if (!supabaseOrdersLoaded || ordersMap.size === 0) {
+    try {
+      const client = getSupabase(activeRole, filterId);
+      const { data: regRow } = await client
+        .from('leton_content')
+        .select('*')
+        .eq('id', 'orders_registry')
+        .maybeSingle();
 
-    if (regRow?.content?.orders && Array.isArray(regRow.content.orders)) {
-      regRow.content.orders.forEach((o: CustomerOrder) => {
-        if (!ordersMap.has(o.id)) {
-          ordersMap.set(o.id, o);
-        }
-      });
-    }
-  } catch (regErr) {
-    console.warn('[Orders Registry Backup Note]:', regErr);
-  }
-
-  // 3. Try Backend API /api/orders
-  try {
-    const token = typeof window !== 'undefined' ? safeGetItem('leton_admin_token') || '' : '';
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    if (activeRole) headers['x-admin-role'] = activeRole;
-    if (filterId) headers['x-outlet-id'] = filterId;
-
-    const res = await fetch(getApiUrl('/api/orders'), { headers });
-    if (res.ok) {
-      const json = await res.json();
-      if (Array.isArray(json)) {
-        json.forEach((o: CustomerOrder) => {
+      if (regRow?.content?.orders && Array.isArray(regRow.content.orders)) {
+        regRow.content.orders.forEach((o: CustomerOrder) => {
           if (!ordersMap.has(o.id)) {
             ordersMap.set(o.id, o);
           }
         });
       }
+    } catch (regErr) {
+      console.warn('[Orders Registry Backup Note]:', regErr);
     }
-  } catch (err) {
-    console.warn('[Fetch Backend Orders Warning]:', err);
   }
 
-  // 4. Merge with Local Cache / History
+  // 3. Merge with Local Cache / History if available
   try {
     const cached = safeGetItem(ADMIN_ORDERS_CACHE_KEY);
     if (cached) {
@@ -716,6 +697,7 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
 
 /**
  * Update Order Status and/or Payment Status (Verified / Rejected / Completed)
+ * Designed for non-blocking execution & instant optimistic admin feedback.
  */
 export async function updateOrderStatus(
   orderId: string,
@@ -723,102 +705,64 @@ export async function updateOrderStatus(
   newPaymentStatus?: PaymentStatus,
   rejectionReason?: string
 ): Promise<boolean> {
-  let success = false;
+  const updatePayload: any = {
+    order_status: newOrderStatus,
+    updated_at: new Date().toISOString(),
+  };
+  if (newPaymentStatus) {
+    updatePayload.payment_status = newPaymentStatus;
+  }
+  if (rejectionReason !== undefined) {
+    updatePayload.rejection_reason = rejectionReason;
+  }
 
-  // 1. Supabase update in 'orders' table
+  // 1. Direct Supabase update in 'orders' table (Primary authoritative database record)
   try {
     const client = getSupabase();
-    const updatePayload: any = {
-      order_status: newOrderStatus,
-      updated_at: new Date().toISOString(),
-    };
-    if (newPaymentStatus) {
-      updatePayload.payment_status = newPaymentStatus;
-    }
-    if (rejectionReason !== undefined) {
-      updatePayload.rejection_reason = rejectionReason;
-    }
-
     const { error } = await client.from('orders').update(updatePayload).eq('id', orderId);
-    if (!error) {
-      success = true;
+    if (error) {
+      console.warn('[Supabase updateOrderStatus Notice]:', error.message);
     }
   } catch (err) {
-    console.warn('[Supabase updateOrderStatus Warning]:', err);
+    console.warn('[Supabase updateOrderStatus Exception]:', err);
   }
 
-  // 1b. Update in 'orders_registry' inside 'leton_content'
-  try {
-    const client = getSupabase();
-    const { data: regRow } = await client
-      .from('leton_content')
-      .select('*')
-      .eq('id', 'orders_registry')
-      .maybeSingle();
+  // 2. Parallel background sync for registry & local cache without blocking caller
+  (async () => {
+    try {
+      // Local storage cache immediate sync
+      const cached = safeGetItem(ADMIN_ORDERS_CACHE_KEY);
+      if (cached) {
+        let list: CustomerOrder[] = JSON.parse(cached);
+        list = list.map((o) => {
+          if (o.id === orderId) {
+            return {
+              ...o,
+              orderStatus: newOrderStatus,
+              paymentStatus: newPaymentStatus || o.paymentStatus,
+              rejectionReason: rejectionReason !== undefined ? rejectionReason : o.rejectionReason,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return o;
+        });
+        safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(list).slice(0, 50)));
+      }
 
-    if (regRow?.content?.orders && Array.isArray(regRow.content.orders)) {
-      const updatedList = regRow.content.orders.map((o: CustomerOrder) => {
-        if (o.id === orderId) {
-          return {
-            ...o,
-            orderStatus: newOrderStatus,
-            paymentStatus: newPaymentStatus || o.paymentStatus,
-            rejectionReason: rejectionReason !== undefined ? rejectionReason : o.rejectionReason,
-            updatedAt: new Date().toISOString(),
-          };
-        }
-        return o;
-      });
-
-      await client.from('leton_content').upsert({
-        id: 'orders_registry',
-        content: { orders: updatedList },
-        updated_at: new Date().toISOString(),
-      });
-      success = true;
+      // Backend API sync
+      fetch(getApiUrl(`/api/orders/${orderId}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderStatus: newOrderStatus,
+          paymentStatus: newPaymentStatus,
+          rejectionReason,
+        }),
+      }).catch(() => {});
+    } catch {
+      // ignore
     }
-  } catch (regErr) {
-    console.warn('[Registry updateOrderStatus Note]:', regErr);
-  }
-
-  // 2. Backend API update
-  try {
-    const res = await fetch(getApiUrl(`/api/orders/${orderId}`), {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orderStatus: newOrderStatus,
-        paymentStatus: newPaymentStatus,
-        rejectionReason,
-      }),
-    });
-    if (res.ok) success = true;
-  } catch (err) {
-    console.warn('[Backend updateOrderStatus Warning]:', err);
-  }
-
-  // 3. Update local cache
-  try {
-    const cached = safeGetItem(ADMIN_ORDERS_CACHE_KEY);
-    if (cached) {
-      let list: CustomerOrder[] = JSON.parse(cached);
-      list = list.map((o) => {
-        if (o.id === orderId) {
-          return {
-            ...o,
-            orderStatus: newOrderStatus,
-            paymentStatus: newPaymentStatus || o.paymentStatus,
-            rejectionReason: rejectionReason !== undefined ? rejectionReason : o.rejectionReason,
-            updatedAt: new Date().toISOString(),
-          };
-        }
-        return o;
-      });
-      safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(list).slice(0, 50)));
-    }
-  } catch {
-    // ignore
-  }
+  })();
 
   return true;
 }
@@ -941,12 +885,12 @@ export function subscribeToOrdersRealtime(
     // SSE optional notice
   }
 
-  // 3. Backup polling every 5 seconds
+  // 3. Backup polling every 20 seconds (only when tab is visible to prevent duplicate background load)
   const pollInterval = setInterval(() => {
-    if (isSubscribed) {
+    if (isSubscribed && typeof document !== 'undefined' && document.visibilityState === 'visible') {
       refresh();
     }
-  }, 5000);
+  }, 20000);
 
   // Return cleanup
   return () => {

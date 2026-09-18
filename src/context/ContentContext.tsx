@@ -285,7 +285,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [auth.token]);
 
-  // Save content permanently to Supabase Database, server API, and local storage cache
+  // Save content with Instant Optimistic UI + Background Cloud Synchronization + Rollback Protection
   const saveData = async (newData: LetonData): Promise<boolean> => {
     try {
       if (!auth.isAuthenticated) {
@@ -308,54 +308,55 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       }
 
+      const previousData = data;
       const sanitized = sanitizeLoadedData(newData);
 
-      // 1. Save directly to Supabase Database (Primary)
-      let supabaseSaved = false;
-      const supabaseRes = await saveContentToSupabase(sanitized);
-      if (supabaseRes.success) {
-        supabaseSaved = true;
-      } else {
-        console.warn('[Supabase Database Warning] Gagal menyimpan ke Supabase:', supabaseRes.error);
-      }
-
-      // 2. Also send to Express backend API (Secondary fallback)
-      let serverSaved = false;
-      try {
-        const res = await fetch(getApiUrl('/api/content'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${auth.token || 'leton_local_token'}`,
-          },
-          body: JSON.stringify(sanitized),
-        });
-
-        const json = await res.json().catch(() => ({ success: true }));
-        if (res.ok && json.success) {
-          serverSaved = true;
-        }
-      } catch (networkErr) {
-        // Optional backend fallback notice
-      }
-
-      // 3. Update local state and storage cache
+      // 1. OPTIMISTIC UPDATE: Update React state & Local Storage instantly (0ms UI delay)
       setData(sanitized);
       saveStoredContent(sanitized);
       setLastUpdated(Date.now());
 
-      // 4. Preload the new logo image in memory
-      if (sanitized.siteSettings?.logoUrl) {
-        preloadImage(sanitized.siteSettings.logoUrl).catch(() => {});
-      }
+      // 2. Non-blocking Background Sync to Supabase & Backend API in parallel
+      (async () => {
+        try {
+          const syncTasks: Promise<any>[] = [];
 
-      if (supabaseSaved) {
-        showToast('Perubahan berhasil disimpan permanen ke Supabase Database & tersinkron Realtime!', 'success');
-      } else if (serverSaved) {
-        showToast('Perubahan berhasil disimpan permanen ke server backend!', 'success');
-      } else {
-        showToast('Perubahan berhasil disimpan di memori & cache lokal browser.', 'info');
-      }
+          if (isSupabaseConfigured()) {
+            syncTasks.push(saveContentToSupabase(sanitized));
+          }
+
+          syncTasks.push(
+            fetch(getApiUrl('/api/content'), {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${auth.token || 'leton_local_token'}`,
+              },
+              body: JSON.stringify(sanitized),
+            }).then((r) => r.ok).catch(() => false)
+          );
+
+          const results = await Promise.allSettled(syncTasks);
+          const sbResult = isSupabaseConfigured() && results[0]?.status === 'fulfilled' ? results[0].value : null;
+
+          if (isSupabaseConfigured() && sbResult && !sbResult.success) {
+            throw new Error(sbResult.error || 'Gagal menyimpan data ke Supabase.');
+          }
+
+          // Preload updated logo in background if changed
+          if (sanitized.siteSettings?.logoUrl && sanitized.siteSettings.logoUrl !== previousData.siteSettings?.logoUrl) {
+            preloadImage(sanitized.siteSettings.logoUrl).catch(() => {});
+          }
+        } catch (err: any) {
+          console.error('[Background Sync Failed - Rolling Back UI]:', err);
+          // Rollback to previous state on failure
+          setData(previousData);
+          saveStoredContent(previousData);
+          setLastUpdated(Date.now());
+          showToast('Gagal sinkronisasi data ke cloud: ' + (err?.message || 'Koneksi terputus') + '. Perubahan dibatalkan.', 'error');
+        }
+      })();
+
       return true;
     } catch (err: any) {
       console.error('Save error in ContentContext:', err);

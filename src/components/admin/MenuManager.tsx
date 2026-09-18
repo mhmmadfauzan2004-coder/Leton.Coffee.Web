@@ -110,7 +110,7 @@ export const MenuManager: React.FC = () => {
       categoryId: menuCategories[0]?.id || 'coffee',
       price: 20000,
       description: '',
-      image: initialLetonData.menuItems[0]?.image || '',
+      image: '',
       isAvailable: true,
       badge: '',
       order: menuItems.length + 1,

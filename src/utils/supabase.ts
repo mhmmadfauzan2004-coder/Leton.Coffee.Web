@@ -282,6 +282,37 @@ export async function uploadImageToSupabase(
 }
 
 /**
+ * Deletes an old image asset from Supabase Storage bucket as cleanup AFTER database update succeeds.
+ */
+export async function deleteImageFromSupabase(imageUrl?: string | null): Promise<boolean> {
+  if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.trim()) return false;
+  try {
+    const client = getSupabase();
+    if (!imageUrl.includes('/' + SUPABASE_STORAGE_BUCKET + '/')) {
+      return false;
+    }
+
+    const parts = imageUrl.split('/' + SUPABASE_STORAGE_BUCKET + '/');
+    const pathInBucket = parts[1];
+    if (!pathInBucket) return false;
+
+    const { error } = await client.storage
+      .from(SUPABASE_STORAGE_BUCKET)
+      .remove([pathInBucket]);
+
+    if (error) {
+      console.warn('[Supabase Storage Cleanup Notice]:', error.message);
+      return false;
+    }
+    console.log('[Supabase Storage Cleanup Success]: Deleted old image file:', pathInBucket);
+    return true;
+  } catch (err) {
+    console.warn('[Supabase Storage Cleanup Error]:', err);
+    return false;
+  }
+}
+
+/**
  * 6. Setup Supabase Realtime Listener (supabase.channel)
  * Listens for INSERT, UPDATE, or DELETE on 'leton_content' table.
  * Instant broadcast update across all devices and browsers!

@@ -24,6 +24,7 @@ import {
   fetchContentFromSupabase,
   saveContentToSupabase,
   uploadImageToSupabase,
+  deleteImageFromSupabase,
   subscribeToSupabaseRealtime,
   isSupabaseConfigured,
   updateSupabaseAuthPassword,
@@ -396,13 +397,23 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       const existingIdx = data.menuItems.findIndex((i) => i.id === item.id);
       let nextItems = [...data.menuItems];
+      let oldImage: string | undefined;
+
       if (existingIdx >= 0) {
+        oldImage = nextItems[existingIdx]?.image;
         nextItems[existingIdx] = item;
       } else {
         nextItems.push(item);
       }
       const nextData = { ...data, menuItems: nextItems };
-      return await saveData(nextData);
+      const savedSuccess = await saveData(nextData);
+
+      // Cleanup old image from Supabase Storage ONLY AFTER database save succeeds
+      if (savedSuccess && oldImage && oldImage !== item.image && isSupabaseConfigured()) {
+        deleteImageFromSupabase(oldImage).catch(() => {});
+      }
+
+      return savedSuccess;
     } catch (err: any) {
       showToast('Gagal menyimpan item menu: ' + err.message, 'error');
       return false;

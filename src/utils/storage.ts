@@ -43,23 +43,19 @@ export const LETON_KEY_ABOUT_CONTENT = 'leton_about_content';
 export const LETON_KEY_CONTACT_SETTINGS = 'leton_contact_settings';
 
 /**
- * Checks if a given image URL is a temporary placeholder, stock, or unsplash URL.
+ * Checks if a given image URL is an explicit placeholder string.
  */
 export function isPlaceholderOrUnsplash(url?: string | null): boolean {
   if (!url || typeof url !== 'string' || !url.trim()) return true;
   const lower = url.toLowerCase();
-  return (
-    lower.includes('images.unsplash.com') ||
-    lower.includes('placeholder') ||
-    lower.includes('picsum.photos')
-  );
+  return lower.includes('placeholder') || lower.includes('picsum.photos');
 }
 
 /**
- * Resolves a valid non-placeholder image, falling back to the original authentic asset.
+ * Resolves a valid image URL, prioritizing any user-specified custom URL without forcing seed fallback.
  */
 export function resolveCleanImage(customUrl?: string | null, fallbackUrl?: string | null): string {
-  if (customUrl && !isPlaceholderOrUnsplash(customUrl)) {
+  if (typeof customUrl === 'string' && customUrl.trim()) {
     return customUrl.trim();
   }
   return fallbackUrl || '';
@@ -158,7 +154,7 @@ export function sanitizeLoadedData(raw: any): LetonData {
             return {
               ...fallbackItem,
               ...m,
-              image: resolveCleanImage(m?.image, fallbackItem?.image),
+              image: typeof m?.image === 'string' && m.image.trim() ? m.image.trim() : (fallbackItem?.image || ''),
               hasSize: typeof m?.hasSize === 'boolean' ? m.hasSize : (fallbackItem?.hasSize ?? true),
               sizes: Array.isArray(m?.sizes) && m.sizes.length > 0 ? m.sizes : fallbackItem?.sizes,
               hasTopping: typeof m?.hasTopping === 'boolean' ? m.hasTopping : (fallbackItem?.hasTopping ?? true),

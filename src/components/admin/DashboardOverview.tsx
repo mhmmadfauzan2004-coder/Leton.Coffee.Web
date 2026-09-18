@@ -21,6 +21,7 @@ import {
   Radio,
   CheckCircle2,
   ShoppingBag,
+  TrendingUp,
   Boxes,
   Building2,
 } from 'lucide-react';
@@ -180,6 +181,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
   }
 
   const quickActions = [
+    {
+      title: 'LAPORAN SALES & OMSET OUTLET',
+      description: 'Pantau total penjualan semua outlet, breakdown Sudirman & Kelakap 7, dan audit bukti QRIS.',
+      tab: 'sales',
+      icon: TrendingUp,
+      color: 'text-emerald-400',
+    },
     {
       title: 'EDIT HERO & BRANDING',
       description: 'Ubah logo, hero background, tagline, judul headline & deskripsi.',

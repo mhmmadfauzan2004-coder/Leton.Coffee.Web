@@ -1,11 +1,17 @@
 import { CustomerOrder, OrderStatus, PaymentStatus } from '../types';
 import { getSupabase, isSupabaseConfigured } from './supabase';
 import { matchesOutlet } from '../data/adminAccounts';
+import { getApiUrl } from './api';
 
 const ORDERS_STORAGE_KEY = 'leton_orders_history';
 const ADMIN_ORDERS_CACHE_KEY = 'leton_admin_orders_cache';
 
-export const ORDERS_SQL_SCHEMA = `-- 1. Buat Tabel Outlets
+export const ORDERS_SQL_SCHEMA = `-- ==============================================================================
+-- LETON COFFEE DUMAI - DATABASE MIGRATION & RLS POLICIES
+-- Outlets, Orders, Order Items, Realtime, & Storage 'leton-images'
+-- ==============================================================================
+
+-- 1. Buat Tabel Outlets (Cabang Leton Coffee)
 CREATE TABLE IF NOT EXISTS public.outlets (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -18,7 +24,20 @@ CREATE TABLE IF NOT EXISTS public.outlets (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Buat Tabel Orders (Pesanan Pelanggan)
+-- Seed data outlets dasar jika belum ada
+INSERT INTO public.outlets (id, name, short_name, address, hours, badge)
+VALUES
+  ('sudirman', 'Leton Coffee — Jalan Jendral Sudirman', 'Leton Sudirman', 'Jl. Jend. Sudirman No. 88, Dumai Kota, Riau', '08:00 – 23:00 WIB', 'CHAPTER 5 • URBAN HUB'),
+  ('kelakap_7', 'Leton Coffee — Ratusima / Kelakap 7', 'Leton Kelakap 7', 'Jl. Ratu Sima / Kelakap 7, Dumai Barat, Riau', '09:00 – 23:30 WIB', 'CHAPTER 6 • OPEN AIR SPOT'),
+  ('letgo-mpp', 'LetGo — depan MPP', 'LetGo MPP', 'Area Parkir Depan Mall Pelayanan Publik (MPP), Dumai', '16:00 – 22:30 WIB', 'MOBILE COFFEE BOOTH')
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  short_name = EXCLUDED.short_name,
+  address = EXCLUDED.address,
+  hours = EXCLUDED.hours,
+  badge = EXCLUDED.badge;
+
+-- 2. Buat Tabel Orders (Pesanan Pelanggan Online)
 CREATE TABLE IF NOT EXISTS public.orders (
   id TEXT PRIMARY KEY,
   order_number TEXT NOT NULL UNIQUE,
@@ -32,21 +51,29 @@ CREATE TABLE IF NOT EXISTS public.orders (
   total_amount NUMERIC NOT NULL DEFAULT 0,
   payment_method TEXT NOT NULL, -- 'QRIS' | 'TUNAI'
   payment_status TEXT NOT NULL DEFAULT 'WAITING PAYMENT', -- 'WAITING PAYMENT' | 'WAITING VERIFICATION' | 'PAY AT STORE' | 'PAID' | 'PAYMENT REJECTED'
-  payment_receipt_url TEXT, -- URL file bukti pembayaran (Supabase Storage)
-  payment_receipt_path TEXT, -- Path unik file bukti pembayaran di Storage
-  rejection_reason TEXT, -- Alasan jika pembayaran ditolak
+  payment_proof_path TEXT, -- Path file bukti transfer di Supabase Storage
+  payment_receipt_url TEXT, -- URL file bukti pembayaran
+  payment_receipt_path TEXT, -- Path unik file bukti pembayaran
+  rejection_reason TEXT, -- Catatan penolakan jika pembayaran / pesanan ditolak
   order_status TEXT NOT NULL DEFAULT 'NEW', -- 'NEW' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED'
   customer_note TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Tambah kolom jika tabel sudah ada sebelumnya
+-- Pastikan seluruh kolom wajib tersedia jika tabel sudah ada sebelumnya
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS outlet_id TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS outlet_name TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_phone TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS table_number TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_proof_path TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_receipt_url TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_receipt_path TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_note TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
--- 3. Buat Tabel Order Items (Rincian Produk per Pesanan)
+-- 3. Buat Tabel Order Items (Relasi Produk)
 CREATE TABLE IF NOT EXISTS public.order_items (
   id TEXT PRIMARY KEY,
   order_id TEXT REFERENCES public.orders(id) ON DELETE CASCADE,
@@ -56,6 +83,8 @@ CREATE TABLE IF NOT EXISTS public.order_items (
   quantity INTEGER NOT NULL DEFAULT 1,
   image TEXT,
   note TEXT,
+  topping JSONB,
+  syrup JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -95,37 +124,41 @@ DROP POLICY IF EXISTS "Public Read Access Orders" ON public.orders;
 DROP POLICY IF EXISTS "Public Insert Access Orders" ON public.orders;
 DROP POLICY IF EXISTS "Public Update Access Orders" ON public.orders;
 DROP POLICY IF EXISTS "Orders Super Admin Full Access" ON public.orders;
+DROP POLICY IF EXISTS "Orders Super Admin Read Only" ON public.orders;
 DROP POLICY IF EXISTS "Orders Outlet Admin Access" ON public.orders;
 DROP POLICY IF EXISTS "Orders Public Insert" ON public.orders;
 DROP POLICY IF EXISTS "Orders Public Read Open" ON public.orders;
 
--- a. SUPER ADMIN: Akses penuh (SELECT, INSERT, UPDATE, DELETE) ke seluruh data semua outlet
-CREATE POLICY "Orders Super Admin Full Access" ON public.orders
-FOR ALL TO anon, authenticated
+-- a. SUPER ADMIN:
+-- Super Admin hanya boleh membaca (SELECT) data order untuk keperluan laporan dan sales analytics,
+-- bukan untuk kitchen display ataupun mutasi operasional pesanan dapur.
+CREATE POLICY "Orders Super Admin Read Only" ON public.orders
+FOR SELECT TO anon, authenticated
 USING (
-  get_current_admin_role() = 'super_admin'
-)
-WITH CHECK (
   get_current_admin_role() = 'super_admin'
 );
 
--- b. OUTLET ADMIN: Hanya dapat membaca & mengupdate pesanan di outlet yang ditugaskan
+-- b. OUTLET ADMIN:
+-- Hanya dapat membaca dan mengupdate pesanan yang terdaftar di outlet miliknya sendiri.
+-- Mendukung isolasi ketat Sudirman dan Kelakap 7 (termasuk alias Ratusima).
 CREATE POLICY "Orders Outlet Admin Access" ON public.orders
 FOR ALL TO anon, authenticated
 USING (
   get_current_admin_role() = 'outlet_admin'
   AND (
     outlet_id = get_current_outlet_id()
-    OR outlet_id ILIKE '%' || get_current_outlet_id() || '%'
-    OR get_current_outlet_id() ILIKE '%' || outlet_id || '%'
+    OR (get_current_outlet_id() = 'kelakap_7' AND (outlet_id = 'kelakap_7' OR outlet_id = 'ratusima' OR outlet_id ILIKE '%kelakap%'))
+    OR (get_current_outlet_id() = 'sudirman' AND (outlet_id = 'sudirman' OR outlet_id ILIKE '%sudirman%'))
+    OR (get_current_outlet_id() = 'letgo-mpp' AND (outlet_id = 'letgo-mpp' OR outlet_id ILIKE '%letgo%'))
   )
 )
 WITH CHECK (
   get_current_admin_role() = 'outlet_admin'
   AND (
     outlet_id = get_current_outlet_id()
-    OR outlet_id ILIKE '%' || get_current_outlet_id() || '%'
-    OR get_current_outlet_id() ILIKE '%' || outlet_id || '%'
+    OR (get_current_outlet_id() = 'kelakap_7' AND (outlet_id = 'kelakap_7' OR outlet_id = 'ratusima' OR outlet_id ILIKE '%kelakap%'))
+    OR (get_current_outlet_id() = 'sudirman' AND (outlet_id = 'sudirman' OR outlet_id ILIKE '%sudirman%'))
+    OR (get_current_outlet_id() = 'letgo-mpp' AND (outlet_id = 'letgo-mpp' OR outlet_id ILIKE '%letgo%'))
   )
 );
 
@@ -134,63 +167,79 @@ CREATE POLICY "Orders Public Insert" ON public.orders
 FOR INSERT TO anon, authenticated
 WITH CHECK (true);
 
--- d. Customer Publik: Dapat membaca pesanan untuk pelacakan status
+-- d. Customer Publik: Dapat membaca pesanan untuk pelacakan status pesanan
 CREATE POLICY "Orders Public Read Open" ON public.orders
 FOR SELECT TO anon, authenticated
 USING (
   get_current_admin_role() = '' OR get_current_admin_role() IS NULL
 );
 
--- 6. Kebijakan Akses Order Items (Relasi Otomatis mengikuti Induk Order)
-DROP POLICY IF EXISTS "Public Read Access Order Items" ON public.order_items;
-DROP POLICY IF EXISTS "Public Insert Access Order Items" ON public.order_items;
-DROP POLICY IF EXISTS "Order Items Super Admin Access" ON public.order_items;
-DROP POLICY IF EXISTS "Order Items Outlet Admin Access" ON public.order_items;
-DROP POLICY IF EXISTS "Order Items Public Access" ON public.order_items;
+-- 6. Kebijakan Keamanan RLS Order Items
+DROP POLICY IF EXISTS "Order Items Public Select" ON public.order_items;
+DROP POLICY IF EXISTS "Order Items Public Insert" ON public.order_items;
 
-CREATE POLICY "Order Items Super Admin Access" ON public.order_items
-FOR ALL TO anon, authenticated
-USING (
-  get_current_admin_role() = 'super_admin'
-)
-WITH CHECK (
-  get_current_admin_role() = 'super_admin'
-);
+CREATE POLICY "Order Items Public Select" ON public.order_items
+FOR SELECT TO anon, authenticated
+USING (true);
 
-CREATE POLICY "Order Items Outlet Admin Access" ON public.order_items
-FOR ALL TO anon, authenticated
-USING (
-  get_current_admin_role() = 'outlet_admin'
-  AND EXISTS (
-    SELECT 1 FROM public.orders o
-    WHERE o.id = order_items.order_id
-    AND (
-      o.outlet_id = get_current_outlet_id()
-      OR o.outlet_id ILIKE '%' || get_current_outlet_id() || '%'
-      OR get_current_outlet_id() ILIKE '%' || o.outlet_id || '%'
-    )
-  )
-)
-WITH CHECK (
-  get_current_admin_role() = 'outlet_admin'
-  AND EXISTS (
-    SELECT 1 FROM public.orders o
-    WHERE o.id = order_items.order_id
-    AND (
-      o.outlet_id = get_current_outlet_id()
-      OR o.outlet_id ILIKE '%' || get_current_outlet_id() || '%'
-      OR get_current_outlet_id() ILIKE '%' || o.outlet_id || '%'
-    )
-  )
-);
-
-CREATE POLICY "Order Items Public Access" ON public.order_items
-FOR ALL TO anon, authenticated
-USING (true)
+CREATE POLICY "Order Items Public Insert" ON public.order_items
+FOR INSERT TO anon, authenticated
 WITH CHECK (true);
 
--- 7. Realtime Replication
-ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;`;
+-- 7. Kebijakan Keamanan RLS Outlets
+DROP POLICY IF EXISTS "Outlets Public Select" ON public.outlets;
+DROP POLICY IF EXISTS "Outlets Super Admin Manage" ON public.outlets;
+
+CREATE POLICY "Outlets Public Select" ON public.outlets
+FOR SELECT TO anon, authenticated
+USING (true);
+
+CREATE POLICY "Outlets Super Admin Manage" ON public.outlets
+FOR ALL TO anon, authenticated
+USING (get_current_admin_role() = 'super_admin')
+WITH CHECK (get_current_admin_role() = 'super_admin');
+
+-- 8. STORAGE BUCKET 'leton-images' (Foto Menu & Bukti Transfer QRIS)
+-- Membuat bucket publik 'leton-images' dengan batas ukuran 10MB
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'leton-images',
+  'leton-images',
+  true,
+  10485760, -- 10MB
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/jpg']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = true,
+  file_size_limit = 10485760;
+
+-- Kebijakan Storage leton-images: Public Upload
+DROP POLICY IF EXISTS "Public Upload to leton-images" ON storage.objects;
+CREATE POLICY "Public Upload to leton-images"
+ON storage.objects FOR INSERT TO public
+WITH CHECK (bucket_id = 'leton-images');
+
+-- Kebijakan Storage leton-images: Public View
+DROP POLICY IF EXISTS "Public View leton-images" ON storage.objects;
+CREATE POLICY "Public View leton-images"
+ON storage.objects FOR SELECT TO public
+USING (bucket_id = 'leton-images');
+
+-- Kebijakan Storage leton-images: Public Update
+DROP POLICY IF EXISTS "Public Update leton-images" ON storage.objects;
+CREATE POLICY "Public Update leton-images"
+ON storage.objects FOR UPDATE TO public
+USING (bucket_id = 'leton-images');
+
+-- Kebijakan Storage leton-images: Public Delete
+DROP POLICY IF EXISTS "Public Delete leton-images" ON storage.objects;
+CREATE POLICY "Public Delete leton-images"
+ON storage.objects FOR DELETE TO public
+USING (bucket_id = 'leton-images');
+
+-- 9. Aktifkan Realtime Replication untuk Tabel Orders
+ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
+`;
 
 /**
  * Generate unique order code e.g. "LTN-7842"
@@ -246,17 +295,71 @@ function updateLocalCache(order: CustomerOrder): void {
 }
 
 /**
- * Upload Payment Receipt to Supabase Storage (strictly as file, NEVER Base64 in database)
- * Valid formats: JPG, JPEG, PNG, WEBP
+ * Helper to compress image in browser to lightweight JPEG before saving
+ */
+async function compressImageForCloud(file: File, maxDim = 1200, quality = 0.82): Promise<string> {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      resolve('');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve((e.target?.result as string) || '');
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve(dataUrl);
+        } catch {
+          resolve((e.target?.result as string) || '');
+        }
+      };
+      img.onerror = () => resolve((e.target?.result as string) || '');
+      img.src = (e.target?.result as string) || '';
+    };
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Upload Payment Receipt (QRIS)
+ * Valid formats: JPG, JPEG, PNG, WEBP (Max 10MB)
+ * Multi-layer storage strategy:
+ * 1. Supabase Storage bucket 'leton-images' (Direct Cloud Storage)
+ * 2. Backend API /api/upload-receipt (Node Server Storage)
+ * 3. Supabase Cloud Database Record in 'leton_content' (High-resilience fallback)
+ * Ensures user is NEVER blocked by "Bucket not found" or network misconfigurations.
  */
 export async function uploadPaymentReceipt(
   file: File,
   orderNumber: string
 ): Promise<{ success: boolean; url?: string; path?: string; error?: string }> {
-  // 1. Format validation
+  // 1. Format validation (JPG, JPEG, PNG, WEBP)
   const validExtensions = ['jpg', 'jpeg', 'png', 'webp'];
   const ext = (file.name.split('.').pop() || '').toLowerCase();
-  if (!validExtensions.includes(ext)) {
+  const validMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+
+  if (!validExtensions.includes(ext) && !validMimes.includes(file.type)) {
     return {
       success: false,
       error: 'Format file tidak didukung. Harap upload file JPG, JPEG, PNG, atau WEBP.',
@@ -273,11 +376,12 @@ export async function uploadPaymentReceipt(
 
   // 3. Generate unique file path with order number and timestamp
   const timestamp = Date.now();
-  const safeOrderCode = orderNumber.replace(/[^a-zA-Z0-9_-]/g, '');
+  const safeOrderCode = (orderNumber || `ORD-${timestamp}`).replace(/[^a-zA-Z0-9_-]/g, '');
   const uniqueToken = Math.random().toString(36).substring(2, 8);
-  const filePath = `receipts/${safeOrderCode}_${timestamp}_${uniqueToken}.${ext}`;
+  const fileExt = ext || 'jpg';
+  const filePath = `receipts/${safeOrderCode}_${timestamp}_${uniqueToken}.${fileExt}`;
 
-  // 4. Try Supabase Storage first
+  // 4. Layer 1: Supabase Storage bucket 'leton-images'
   try {
     const client = getSupabase();
     const bucketName = 'leton-images';
@@ -286,8 +390,8 @@ export async function uploadPaymentReceipt(
       .from(bucketName)
       .upload(filePath, file, {
         cacheControl: '3600',
-        upsert: false,
-        contentType: file.type || `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+        upsert: true,
+        contentType: file.type || `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
       });
 
     if (!uploadError) {
@@ -300,19 +404,20 @@ export async function uploadPaymentReceipt(
         };
       }
     } else {
-      console.warn('[Supabase Storage Receipt Upload Notice]:', uploadError.message);
+      console.warn('[Supabase Storage Notice]:', uploadError.message);
     }
   } catch (err) {
-    console.warn('[Supabase Storage Receipt Exception]:', err);
+    console.warn('[Supabase Storage Exception]:', err);
   }
 
-  // 5. High-reliability Server Storage fallback (so customer is never blocked)
+  // 5. Layer 2: Backend API /api/upload-receipt (Express server)
   try {
     const formData = new FormData();
     formData.append('receipt', file);
     formData.append('orderNumber', safeOrderCode);
 
-    const res = await fetch('/api/upload-receipt', {
+    const backendEndpoint = getApiUrl('/api/upload-receipt');
+    const res = await fetch(backendEndpoint, {
       method: 'POST',
       body: formData,
     });
@@ -328,7 +433,36 @@ export async function uploadPaymentReceipt(
       }
     }
   } catch (backendErr) {
-    console.warn('[Backend Receipt Upload Fallback Note]:', backendErr);
+    console.warn('[Backend Receipt Upload Notice]:', backendErr);
+  }
+
+  // 6. Layer 3: Supabase Database Cloud Persistence Fallback
+  // If bucket 'leton-images' has not been created in Supabase yet, store compressed receipt in leton_content
+  try {
+    const compressedDataUrl = await compressImageForCloud(file);
+    if (compressedDataUrl) {
+      const client = getSupabase();
+      const receiptDocId = `receipt_${safeOrderCode}`;
+
+      await client.from('leton_content').upsert({
+        id: receiptDocId,
+        content: {
+          orderNumber: safeOrderCode,
+          imageDataUrl: compressedDataUrl,
+          uploadedAt: new Date().toISOString(),
+          fileName: file.name,
+        },
+        updated_at: new Date().toISOString(),
+      });
+
+      return {
+        success: true,
+        url: compressedDataUrl,
+        path: `supabase://leton_content/${receiptDocId}`,
+      };
+    }
+  } catch (dbErr) {
+    console.warn('[Supabase DB Receipt Fallback Note]:', dbErr);
   }
 
   return {
@@ -338,17 +472,18 @@ export async function uploadPaymentReceipt(
 }
 
 /**
- * Post Order to Supabase and Backend API with Fallback
+ * Post Order to Supabase and Backend API with Multi-level Fallback
  */
-export async function createNewOrder(orderData: CustomerOrder): Promise<{ success: boolean; order: CustomerOrder; error?: string }> {
+export async function createNewOrder(
+  orderData: CustomerOrder
+): Promise<{ success: boolean; order: CustomerOrder; error?: string }> {
   // Always update local cache & history first
   saveOrderToLocalHistory(orderData);
   updateLocalCache(orderData);
 
-  let supabaseSuccess = false;
-  let backendSuccess = false;
+  const receiptProofPath = orderData.paymentProofPath || orderData.paymentReceiptPath || orderData.paymentReceiptUrl || null;
 
-  // 1. Try Supabase Insert
+  // 1. Try Supabase Insert into 'orders' table
   try {
     const client = getSupabase();
     const payload = {
@@ -364,8 +499,9 @@ export async function createNewOrder(orderData: CustomerOrder): Promise<{ succes
       total_amount: orderData.totalAmount,
       payment_method: orderData.paymentMethod,
       payment_status: orderData.paymentStatus,
+      payment_proof_path: receiptProofPath,
       payment_receipt_url: orderData.paymentReceiptUrl || null,
-      payment_receipt_path: orderData.paymentReceiptPath || null,
+      payment_receipt_path: receiptProofPath,
       rejection_reason: orderData.rejectionReason || null,
       order_status: orderData.orderStatus,
       customer_note: orderData.customerNote || null,
@@ -373,12 +509,11 @@ export async function createNewOrder(orderData: CustomerOrder): Promise<{ succes
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await client.from('orders').insert(payload);
-    if (!error) {
-      supabaseSuccess = true;
-      console.log('[Supabase Orders] Order successfully inserted into Supabase:', orderData.orderNumber);
+    const { error: insertError } = await client.from('orders').insert(payload);
+    if (!insertError) {
+      console.log('[Supabase Orders] Order inserted successfully into public.orders:', orderData.orderNumber);
 
-      // Also try inserting items into order_items table for normalized relations if possible
+      // Try inserting into order_items table
       try {
         const itemRows = orderData.items.map((it, idx) => ({
           id: `${orderData.id}-item-${idx}`,
@@ -389,30 +524,56 @@ export async function createNewOrder(orderData: CustomerOrder): Promise<{ succes
           quantity: it.quantity,
           image: it.image || null,
           note: it.note || null,
+          topping: it.topping || null,
+          syrup: it.syrup || null,
           created_at: new Date().toISOString(),
         }));
         await client.from('order_items').insert(itemRows);
       } catch (itemErr) {
-        // Soft fail on order_items if table doesn't exist
         console.warn('[Supabase Order Items Note]:', itemErr);
       }
     } else {
-      console.warn('[Supabase Order Insert Warning]:', error.message);
+      console.warn('[Supabase Order Insert Notice]:', insertError.message);
     }
   } catch (err: any) {
-    console.warn('[Supabase Exception on createOrder]:', err);
+    console.warn('[Supabase Orders Exception]:', err);
   }
 
-  // 2. Post to backend server API /api/orders (for backup & local SSE broadcast)
+  // 2. Cloud Database Backup to 'leton_content' (orders_registry)
+  // Ensures persistence even before the user executes the full SQL migration in Supabase
   try {
-    const res = await fetch('/api/orders', {
+    const client = getSupabase();
+    const { data: regRow } = await client
+      .from('leton_content')
+      .select('*')
+      .eq('id', 'orders_registry')
+      .maybeSingle();
+
+    const existingList: CustomerOrder[] =
+      regRow?.content?.orders && Array.isArray(regRow.content.orders)
+        ? regRow.content.orders
+        : [];
+
+    const mergedList = [orderData, ...existingList.filter((o) => o.id !== orderData.id)].slice(0, 500);
+
+    await client.from('leton_content').upsert({
+      id: 'orders_registry',
+      content: { orders: mergedList },
+      updated_at: new Date().toISOString(),
+    });
+  } catch (regErr) {
+    console.warn('[Orders Registry Backup Note]:', regErr);
+  }
+
+  // 3. Post to backend server API /api/orders (Express server fallback)
+  try {
+    const res = await fetch(getApiUrl('/api/orders'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(orderData),
     });
     if (res.ok) {
-      backendSuccess = true;
-      console.log('[Backend API] Order stored in server backend.');
+      console.log('[Backend API] Order registered on server backend.');
     }
   } catch (err) {
     console.warn('[Backend API Order Note]:', err);
@@ -425,23 +586,22 @@ export async function createNewOrder(orderData: CustomerOrder): Promise<{ succes
 }
 
 /**
- * Fetch all orders for Admin Dashboard (from Supabase, then backend, then local cache)
+ * Fetch all orders for Admin Dashboard & Kitchen Display
  * If targetOutletId is specified and not 'ALL', strictly filters orders for that outlet.
  */
 export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerOrder[]> {
   const activeRole = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '';
   const activeOutlet = targetOutletId || (typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '');
-  const isOutletRestricted = activeRole === 'outlet_admin' || (Boolean(activeOutlet) && activeOutlet !== 'ALL');
   const filterId = activeOutlet && activeOutlet !== 'ALL' ? activeOutlet : undefined;
 
-  // 1. Try Supabase Database
+  // 1. Try Supabase Database 'orders' table
   try {
     const client = getSupabase(activeRole, filterId);
     let query = client
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(200);
+      .limit(300);
 
     if (filterId) {
       query = query.or(`outlet_id.eq.${filterId},outlet_id.ilike.%${filterId}%`);
@@ -463,8 +623,9 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
         totalAmount: Number(row.total_amount || row.totalAmount || 0),
         paymentMethod: row.payment_method || row.paymentMethod || 'QRIS',
         paymentStatus: row.payment_status || row.paymentStatus || 'WAITING PAYMENT',
+        paymentProofPath: row.payment_proof_path || row.payment_receipt_path || row.paymentReceiptPath,
         paymentReceiptUrl: row.payment_receipt_url || row.paymentReceiptUrl,
-        paymentReceiptPath: row.payment_receipt_path || row.paymentReceiptPath,
+        paymentReceiptPath: row.payment_receipt_path || row.payment_proof_path || row.paymentReceiptPath,
         rejectionReason: row.rejection_reason || row.rejectionReason,
         orderStatus: row.order_status || row.orderStatus || 'NEW',
         customerNote: row.customer_note || row.customerNote || '',
@@ -476,15 +637,32 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
         mapped = mapped.filter((o) => matchesOutlet(o.outletId, filterId));
       }
 
-      // Cache locally
       localStorage.setItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(mapped));
       return mapped;
+    }
+
+    // 1b. If 'orders' table returned error (e.g. table not created yet), check 'orders_registry' in leton_content
+    if (error) {
+      const { data: regRow } = await client
+        .from('leton_content')
+        .select('*')
+        .eq('id', 'orders_registry')
+        .maybeSingle();
+
+      if (regRow?.content?.orders && Array.isArray(regRow.content.orders)) {
+        let registryOrders: CustomerOrder[] = regRow.content.orders;
+        if (filterId) {
+          registryOrders = registryOrders.filter((o) => matchesOutlet(o.outletId, filterId));
+        }
+        localStorage.setItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(registryOrders));
+        return registryOrders;
+      }
     }
   } catch (err) {
     console.warn('[Fetch Supabase Orders Warning]:', err);
   }
 
-  // 2. Try Backend API /api/orders (with Role & Outlet headers)
+  // 2. Try Backend API /api/orders
   try {
     const token = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_token') || '' : '';
     const headers: Record<string, string> = {};
@@ -492,7 +670,7 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
     if (activeRole) headers['x-admin-role'] = activeRole;
     if (filterId) headers['x-outlet-id'] = filterId;
 
-    const res = await fetch('/api/orders', { headers });
+    const res = await fetch(getApiUrl('/api/orders'), { headers });
     if (res.ok) {
       const json = await res.json();
       if (Array.isArray(json)) {
@@ -528,8 +706,7 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
 }
 
 /**
- * Update Order Status (NEW, ACCEPTED, PREPARING, READY, COMPLETED, CANCELLED)
- * and/or Payment Status (WAITING PAYMENT, WAITING VERIFICATION, PAY AT STORE, PAID, PAYMENT REJECTED)
+ * Update Order Status and/or Payment Status (Verified / Rejected / Completed)
  */
 export async function updateOrderStatus(
   orderId: string,
@@ -539,7 +716,7 @@ export async function updateOrderStatus(
 ): Promise<boolean> {
   let success = false;
 
-  // 1. Supabase update
+  // 1. Supabase update in 'orders' table
   try {
     const client = getSupabase();
     const updatePayload: any = {
@@ -553,11 +730,7 @@ export async function updateOrderStatus(
       updatePayload.rejection_reason = rejectionReason;
     }
 
-    const { error } = await client
-      .from('orders')
-      .update(updatePayload)
-      .eq('id', orderId);
-
+    const { error } = await client.from('orders').update(updatePayload).eq('id', orderId);
     if (!error) {
       success = true;
     }
@@ -565,9 +738,43 @@ export async function updateOrderStatus(
     console.warn('[Supabase updateOrderStatus Warning]:', err);
   }
 
+  // 1b. Update in 'orders_registry' inside 'leton_content'
+  try {
+    const client = getSupabase();
+    const { data: regRow } = await client
+      .from('leton_content')
+      .select('*')
+      .eq('id', 'orders_registry')
+      .maybeSingle();
+
+    if (regRow?.content?.orders && Array.isArray(regRow.content.orders)) {
+      const updatedList = regRow.content.orders.map((o: CustomerOrder) => {
+        if (o.id === orderId) {
+          return {
+            ...o,
+            orderStatus: newOrderStatus,
+            paymentStatus: newPaymentStatus || o.paymentStatus,
+            rejectionReason: rejectionReason !== undefined ? rejectionReason : o.rejectionReason,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return o;
+      });
+
+      await client.from('leton_content').upsert({
+        id: 'orders_registry',
+        content: { orders: updatedList },
+        updated_at: new Date().toISOString(),
+      });
+      success = true;
+    }
+  } catch (regErr) {
+    console.warn('[Registry updateOrderStatus Note]:', regErr);
+  }
+
   // 2. Backend API update
   try {
-    const res = await fetch(`/api/orders/${orderId}`, {
+    const res = await fetch(getApiUrl(`/api/orders/${orderId}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -631,8 +838,8 @@ export function subscribeToOrdersRealtime(
     const orders = await fetchAllOrders(filterOutletId);
     onOrdersChange(orders);
     if (alertOrder && onNewOrderAlert) {
-      // Only play audio chime if this order belongs to the admin's outlet or if Super Admin
-      if (!filterOutletId || matchesOutlet(alertOrder.outletId, filterOutletId)) {
+      // Super Admin TIDAK menerima realtime kitchen order dan TIDAK memainkan suara notifikasi order dapur
+      if (activeRole !== 'super_admin' && (!filterOutletId || matchesOutlet(alertOrder.outletId, filterOutletId))) {
         onNewOrderAlert(alertOrder);
       }
     }
@@ -666,21 +873,36 @@ export function subscribeToOrdersRealtime(
               totalAmount: Number(raw.total_amount || raw.totalAmount || 0),
               paymentMethod: raw.payment_method || raw.paymentMethod || 'QRIS',
               paymentStatus: raw.payment_status || raw.paymentStatus || 'WAITING PAYMENT',
+              paymentProofPath: raw.payment_proof_path || raw.payment_receipt_path || raw.paymentReceiptPath,
               paymentReceiptUrl: raw.payment_receipt_url || raw.paymentReceiptUrl,
-              paymentReceiptPath: raw.payment_receipt_path || raw.paymentReceiptPath,
+              paymentReceiptPath: raw.payment_receipt_path || raw.payment_proof_path || raw.paymentReceiptPath,
               rejectionReason: raw.rejection_reason || raw.rejectionReason,
               orderStatus: raw.order_status || raw.orderStatus || 'NEW',
               customerNote: raw.customer_note || raw.customerNote || '',
               createdAt: raw.created_at || raw.createdAt || new Date().toISOString(),
             };
 
-            // Check if this event belongs to the active outlet
-            if (!filterOutletId || matchesOutlet(newOrder.outletId, filterOutletId)) {
+            // Check if this event belongs to the active outlet (Super Admin doesn't get kitchen alerts)
+            if (activeRole !== 'super_admin' && (!filterOutletId || matchesOutlet(newOrder.outletId, filterOutletId))) {
               refresh(newOrder);
+            } else {
+              refresh();
             }
           } else {
             refresh();
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'leton_content',
+          filter: 'id=eq.orders_registry',
+        },
+        () => {
+          refresh();
         }
       )
       .subscribe();

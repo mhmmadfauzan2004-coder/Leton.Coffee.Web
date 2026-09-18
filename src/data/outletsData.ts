@@ -16,9 +16,9 @@ export const DEFAULT_OUTLETS: OrderOutlet[] = [
     whatsapp: '6281234567890',
   },
   {
-    id: 'ratusima',
+    id: 'kelakap_7',
     name: 'Leton Coffee — Ratusima / Kelakap 7',
-    shortName: 'Leton Ratu Sima',
+    shortName: 'Leton Kelakap 7',
     address: 'Jl. Ratu Sima / Kelakap 7, Dumai Barat, Riau',
     hours: '09:00 – 23:30 WIB',
     image: chapter6?.bgImage || '',

@@ -169,9 +169,11 @@ export type PaymentMethod = 'QRIS' | 'TUNAI';
 export type PaymentStatus =
   | 'WAITING PAYMENT'
   | 'WAITING VERIFICATION'
+  | 'WAITING_VERIFICATION'
   | 'PAY AT STORE'
   | 'PAID'
-  | 'PAYMENT REJECTED';
+  | 'PAYMENT REJECTED'
+  | 'REJECTED';
 export type OrderStatus = 'NEW' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
 
 export interface AddOnOption {
@@ -207,6 +209,7 @@ export interface CustomerOrder {
   paymentStatus: PaymentStatus;
   paymentReceiptUrl?: string;
   paymentReceiptPath?: string;
+  paymentProofPath?: string;
   rejectionReason?: string;
   orderStatus: OrderStatus;
   customerNote?: string;

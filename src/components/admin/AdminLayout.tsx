@@ -13,6 +13,7 @@ import { ContactEditor } from './ContactEditor';
 import { SettingsEditor } from './SettingsEditor';
 import { OrderManager } from './OrderManager';
 import { StockManager } from './StockManager';
+import { SalesReportManager } from './SalesReportManager';
 import {
   LayoutDashboard,
   Home,
@@ -31,6 +32,7 @@ import {
   X,
   Radio,
   ShoppingBag,
+  TrendingUp,
   Boxes,
   ShieldCheck,
   ShieldAlert,
@@ -59,7 +61,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
 
   const superAdminNavItems = [
     { id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard },
-    { id: 'orders', label: 'PESANAN MASUK', icon: ShoppingBag },
+    { id: 'sales', label: 'LAPORAN SALES', icon: TrendingUp },
+    { id: 'orders', label: 'AUDIT PESANAN', icon: ShoppingBag },
     { id: 'home', label: 'HOME / HERO', icon: Home },
     { id: 'chapter-5', label: 'CHAPTER 5', icon: MapPin },
     { id: 'chapter-6', label: 'CHAPTER 6', icon: MapPin },
@@ -335,6 +338,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
         ) : (
           <>
             {activeTab === 'dashboard' && <DashboardOverview onNavigateTab={handleSelectTab} />}
+            {activeTab === 'sales' && <SalesReportManager />}
             {activeTab === 'orders' && <OrderManager />}
             {activeTab === 'stock' && <StockManager />}
             {!isOutletAdmin && (

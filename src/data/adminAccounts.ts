@@ -35,25 +35,25 @@ export const PRESET_ADMIN_ACCOUNTS: AdminCredential[] = [
   },
   {
     username: 'admin_kelakap',
-    name: 'Admin Ratu Sima / Kelakap 7 (Chapter 6)',
+    name: 'Admin Kelakap 7 (Chapter 6)',
     role: 'outlet_admin',
-    outletId: 'ratusima',
+    outletId: 'kelakap_7',
     outletName: 'Leton Coffee — Ratusima / Kelakap 7',
     password: 'LetonKelakap2026!',
   },
   {
     username: 'admin_ratusima',
-    name: 'Admin Ratu Sima / Kelakap 7 (Chapter 6)',
+    name: 'Admin Kelakap 7 (Chapter 6)',
     role: 'outlet_admin',
-    outletId: 'ratusima',
+    outletId: 'kelakap_7',
     outletName: 'Leton Coffee — Ratusima / Kelakap 7',
     password: 'LetonKelakap2026!',
   },
   {
     username: 'kelakap',
-    name: 'Admin Ratu Sima / Kelakap 7 (Chapter 6)',
+    name: 'Admin Kelakap 7 (Chapter 6)',
     role: 'outlet_admin',
-    outletId: 'ratusima',
+    outletId: 'kelakap_7',
     outletName: 'Leton Coffee — Ratusima / Kelakap 7',
     password: 'LetonKelakap2026!',
   },
@@ -77,7 +77,7 @@ export const PRESET_ADMIN_ACCOUNTS: AdminCredential[] = [
 
 /**
  * Check if an order belongs to a given target outlet ID.
- * Robust against variations like 'letgo' vs 'letgo-mpp', 'ratusima' vs 'kelakap', etc.
+ * Robust against variations like 'letgo' vs 'letgo-mpp', 'kelakap_7' vs 'kelakap' vs 'ratusima', etc.
  */
 export function matchesOutlet(orderOutletId?: string | null, targetOutletId?: string | null): boolean {
   if (!targetOutletId || targetOutletId === 'ALL') return true;
@@ -89,13 +89,17 @@ export function matchesOutlet(orderOutletId?: string | null, targetOutletId?: st
   if (o === t) return true;
 
   // Sudirman check
-  if (t === 'sudirman' && o.includes('sudirman')) return true;
-  if (o === 'sudirman' && t.includes('sudirman')) return true;
+  if (
+    (t === 'sudirman' || t.includes('sudirman')) &&
+    (o === 'sudirman' || o.includes('sudirman'))
+  ) {
+    return true;
+  }
 
   // Ratusima / Kelakap 7 check
   if (
-    (t === 'ratusima' || t === 'kelakap' || t.includes('ratusima') || t.includes('kelakap')) &&
-    (o.includes('ratusima') || o.includes('kelakap'))
+    (t === 'kelakap_7' || t === 'kelakap' || t === 'ratusima' || t.includes('kelakap') || t.includes('ratusima')) &&
+    (o === 'kelakap_7' || o === 'kelakap' || o === 'ratusima' || o.includes('kelakap') || o.includes('ratusima'))
   ) {
     return true;
   }
@@ -103,7 +107,7 @@ export function matchesOutlet(orderOutletId?: string | null, targetOutletId?: st
   // LetGo check
   if (
     (t === 'letgo' || t === 'letgo-mpp' || t.includes('letgo') || t.includes('mpp')) &&
-    (o.includes('letgo') || o.includes('mpp'))
+    (o === 'letgo' || o === 'letgo-mpp' || o.includes('letgo') || o.includes('mpp'))
   ) {
     return true;
   }

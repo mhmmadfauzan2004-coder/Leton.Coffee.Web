@@ -37,24 +37,28 @@ export function pruneStorageCache(): void {
  * Full images remain safely persisted in IndexedDB and Supabase.
  */
 export function stripHeavyBase64Images<T>(val: T): T {
-  if (!val || typeof val !== 'object') return val;
+  if (val === null || val === undefined) return val;
+
+  if (typeof val === 'string') {
+    if (val.startsWith('data:') || val.length > 1024) {
+      return '' as unknown as T;
+    }
+    return val as unknown as T;
+  }
 
   if (Array.isArray(val)) {
     return val.map((item) => stripHeavyBase64Images(item)) as unknown as T;
   }
 
-  const result: Record<string, any> = {};
-  for (const [k, v] of Object.entries(val)) {
-    if (typeof v === 'string' && v.startsWith('data:image') && v.length > 1024) {
-      // Omit bulky base64 from localStorage payload
-      result[k] = '';
-    } else if (typeof v === 'object' && v !== null) {
+  if (typeof val === 'object') {
+    const result: Record<string, any> = {};
+    for (const [k, v] of Object.entries(val)) {
       result[k] = stripHeavyBase64Images(v);
-    } else {
-      result[k] = v;
     }
+    return result as T;
   }
-  return result as T;
+
+  return val;
 }
 
 /**

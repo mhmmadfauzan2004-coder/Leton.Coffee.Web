@@ -402,17 +402,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         nextItems.push(item);
       }
       const nextData = { ...data, menuItems: nextItems };
-      setData(nextData);
-      saveStoredContent(nextData);
-      setLastUpdated(Date.now());
-
-      if (isSupabaseConfigured()) {
-        const res = await saveSingleMenuItemGranular(item, nextData);
-        if (!res.success) {
-          showToast('Peringatan simpan cloud: ' + (res.error || 'Gagal sync'), 'error');
-        }
-      }
-      return true;
+      return await saveData(nextData);
     } catch (err: any) {
       showToast('Gagal menyimpan item menu: ' + err.message, 'error');
       return false;
@@ -423,17 +413,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       const nextItems = data.menuItems.filter((i) => i.id !== itemId);
       const nextData = { ...data, menuItems: nextItems };
-      setData(nextData);
-      saveStoredContent(nextData);
-      setLastUpdated(Date.now());
-
-      if (isSupabaseConfigured()) {
-        const res = await deleteSingleMenuItemGranular(itemId, nextData);
-        if (!res.success) {
-          showToast('Peringatan hapus cloud: ' + (res.error || 'Gagal sync'), 'error');
-        }
-      }
-      return true;
+      return await saveData(nextData);
     } catch (err: any) {
       showToast('Gagal menghapus item menu: ' + err.message, 'error');
       return false;
@@ -450,17 +430,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         nextCats.push(category);
       }
       const nextData = { ...data, menuCategories: nextCats };
-      setData(nextData);
-      saveStoredContent(nextData);
-      setLastUpdated(Date.now());
-
-      if (isSupabaseConfigured()) {
-        const res = await saveSingleCategoryGranular(category, nextData);
-        if (!res.success) {
-          showToast('Peringatan simpan kategori cloud: ' + (res.error || 'Gagal sync'), 'error');
-        }
-      }
-      return true;
+      return await saveData(nextData);
     } catch (err: any) {
       showToast('Gagal menyimpan kategori: ' + err.message, 'error');
       return false;
@@ -475,17 +445,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         item.categoryId === catId ? { ...item, categoryId: fallbackCat } : item
       );
       const nextData = { ...data, menuCategories: nextCats, menuItems: nextItems };
-      setData(nextData);
-      saveStoredContent(nextData);
-      setLastUpdated(Date.now());
-
-      if (isSupabaseConfigured()) {
-        const res = await deleteSingleCategoryGranular(catId, nextData);
-        if (!res.success) {
-          showToast('Peringatan hapus kategori cloud: ' + (res.error || 'Gagal sync'), 'error');
-        }
-      }
-      return true;
+      return await saveData(nextData);
     } catch (err: any) {
       showToast('Gagal menghapus kategori: ' + err.message, 'error');
       return false;
@@ -506,17 +466,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const nextData = isTopping
         ? { ...data, masterToppings: nextList }
         : { ...data, masterSyrups: nextList };
-      setData(nextData);
-      saveStoredContent(nextData);
-      setLastUpdated(Date.now());
-
-      if (isSupabaseConfigured()) {
-        const res = await saveSingleCustomOptionGranular(type, option, nextData);
-        if (!res.success) {
-          showToast(`Peringatan simpan ${type} cloud: ` + (res.error || 'Gagal sync'), 'error');
-        }
-      }
-      return true;
+      return await saveData(nextData);
     } catch (err: any) {
       showToast(`Gagal menyimpan ${type}: ` + err.message, 'error');
       return false;
@@ -531,17 +481,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const nextData = isTopping
         ? { ...data, masterToppings: nextList }
         : { ...data, masterSyrups: nextList };
-      setData(nextData);
-      saveStoredContent(nextData);
-      setLastUpdated(Date.now());
-
-      if (isSupabaseConfigured()) {
-        const res = await deleteSingleCustomOptionGranular(type, optionId, nextData);
-        if (!res.success) {
-          showToast(`Peringatan hapus ${type} cloud: ` + (res.error || 'Gagal sync'), 'error');
-        }
-      }
-      return true;
+      return await saveData(nextData);
     } catch (err: any) {
       showToast(`Gagal menghapus ${type}: ` + err.message, 'error');
       return false;
@@ -551,17 +491,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const saveMasterSizes = async (sizes: ProductSizeOption[]): Promise<boolean> => {
     try {
       const nextData = { ...data, masterSizes: sizes };
-      setData(nextData);
-      saveStoredContent(nextData);
-      setLastUpdated(Date.now());
-
-      if (isSupabaseConfigured()) {
-        const res = await saveContentToSupabase(nextData);
-        if (!res.success) {
-          showToast('Peringatan simpan size cloud: ' + (res.error || 'Gagal sync'), 'error');
-        }
-      }
-      return true;
+      return await saveData(nextData);
     } catch (err: any) {
       showToast('Gagal menyimpan opsi ukuran: ' + err.message, 'error');
       return false;

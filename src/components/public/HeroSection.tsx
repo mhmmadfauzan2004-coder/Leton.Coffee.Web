@@ -1,9 +1,8 @@
 import React from 'react';
 import { useContent } from '../../context/ContentContext';
-import { createWhatsAppLink } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
-import { MessageCircle, ArrowDown, Sparkles, ShoppingBag, Coffee, ArrowRight } from 'lucide-react';
+import { ShoppingBag, BookOpen, Coffee, Star, CheckCircle2, Award } from 'lucide-react';
 
 interface HeroSectionProps {
   onOpenOrder?: () => void;
@@ -11,12 +10,7 @@ interface HeroSectionProps {
 
 export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenOrder }) => {
   const { data } = useContent();
-  const { siteSettings, contactSettings } = data;
-
-  const orderWALink = createWhatsAppLink(
-    contactSettings.whatsapp,
-    `Halo ${siteSettings.brandName}, saya ingin pesan kopi & menu spesialti.`
-  );
+  const { siteSettings } = data;
 
   const scrollToMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -29,110 +23,133 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenOrder }) => {
   return (
     <section
       id="home"
-      className="relative min-h-screen w-full flex items-center justify-center overflow-hidden bg-[#070b12]"
+      className="relative w-full overflow-hidden pt-28 sm:pt-36 pb-16 lg:pb-28 bg-[#F8FBFF]"
     >
-      {/* Background Image with slow zoom */}
-      <div className="absolute inset-0 z-0 overflow-hidden">
-        <motion.div
-          initial={{ scale: 1.08 }}
-          animate={{ scale: 1 }}
-          transition={{ duration: 3, ease: 'easeOut' }}
-          className="w-full h-full"
-        >
-          <img
-            src={resolveMediaUrl(siteSettings.heroBgImage)}
-            alt={siteSettings.brandName}
-            className="w-full h-full object-cover object-center filter brightness-60 contrast-110"
-            referrerPolicy="no-referrer"
-          />
-        </motion.div>
-        {/* Dark Navy / Cyan Gradient Overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#070b12] via-[#070b12]/60 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#070b12]/80 via-transparent to-[#070b12]/70" />
-        <div className="absolute inset-0 bg-radial from-transparent via-[#070b12]/30 to-[#070b12]/90" />
-      </div>
+      {/* Ambient Luminous Shapes */}
+      <div className="absolute -top-24 -left-20 w-96 h-96 rounded-full bg-[#E0F2FE]/50 blur-3xl pointer-events-none" />
+      <div className="absolute top-1/2 -right-24 w-[30rem] h-[30rem] rounded-full bg-[#BAE6FD]/30 blur-3xl pointer-events-none" />
 
-      {/* Content Container */}
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-32 sm:py-36 text-center flex flex-col items-center">
-        {/* Section Badge */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#2563EB]/20 border border-[#2563EB]/40 text-[#60A5FA] text-xs font-mono tracking-widest uppercase mb-6 backdrop-blur-md shadow-lg shadow-[#2563EB]/10"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-[#60A5FA] animate-pulse" />
-          <span>01 — {siteSettings.tagline || 'EVERYDAY SPECIALTY COFFEE'}</span>
-        </motion.div>
-
-        {/* Brand Name / Title */}
-        <motion.h1
-          initial={{ opacity: 0, y: 25 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.35 }}
-          className="font-display font-black text-4xl sm:text-6xl md:text-7xl lg:text-8xl tracking-tight text-white uppercase max-w-5xl leading-[1.05]"
-        >
-          {siteSettings.heroTitle}
-        </motion.h1>
-
-        {/* Subtitle / Description */}
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.5 }}
-          className="mt-6 text-base sm:text-lg md:text-xl text-slate-200 max-w-2xl font-normal leading-relaxed text-balance"
-        >
-          {siteSettings.heroDescription}
-        </motion.p>
-
-        {/* Redesigned Premium Specialty Coffee CTA */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.65 }}
-          className="mt-10 flex flex-col items-center justify-center w-full sm:w-auto"
-        >
-          <div className="relative group inline-flex items-center justify-center w-full sm:w-auto">
-            {/* Ambient Electric Blue Aura Glow */}
-            <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-[#00E5FF]/50 via-[#38BDF8]/60 to-[#2563EB]/50 blur-xl opacity-75 group-hover:opacity-100 group-hover:blur-2xl transition-all duration-500 pointer-events-none" />
-
-            {/* Main Interactive CTA Button */}
-            <button
-              onClick={onOpenOrder}
-              id="hero-order-online-cta"
-              className="relative w-full sm:w-auto flex items-center justify-center gap-3.5 px-8 sm:px-10 py-4 sm:py-4.5 rounded-full bg-gradient-to-r from-[#00E5FF] via-[#38BDF8] to-[#00E5FF] hover:from-[#3cf0ff] hover:to-[#38bdf8] text-slate-950 font-display font-black text-sm sm:text-base tracking-[0.16em] uppercase shadow-[0_0_25px_rgba(0,229,255,0.45)] hover:shadow-[0_0_40px_rgba(0,229,255,0.7)] transform hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 cursor-pointer overflow-hidden border border-white/30"
-            >
-              {/* Coffee culture emblem circle */}
-              <span className="w-8 h-8 rounded-full bg-slate-950 flex items-center justify-center text-[#00E5FF] shrink-0 shadow-inner group-hover:rotate-12 transition-transform duration-300">
-                <Coffee className="w-4 h-4" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+          {/* Hero Text Column (7 cols) */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="lg:col-span-7 flex flex-col items-start gap-4 sm:gap-5"
+          >
+            {/* Pill Badge */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#E0F2FE] text-[#0284C7] shadow-sm">
+              <Coffee className="w-4 h-4 text-[#0284C7]" />
+              <span className="text-xs uppercase tracking-wider font-bold">
+                {siteSettings.tagline || "Dumai's First Specialty Roaster & Cafe"}
               </span>
+            </div>
 
-              {/* Precise high-contrast typography */}
-              <span className="leading-none text-slate-950">ORDER ONLINE</span>
+            {/* Main Headline */}
+            <h1 className="font-display font-black text-3xl sm:text-5xl lg:text-6xl text-[#172033] tracking-tight leading-[1.12]">
+              {siteSettings.heroTitle || 'Segelas Kopi Istimewa di Pesisir Dumai.'}
+            </h1>
 
-              {/* Directional arrow badge */}
-              <span className="w-7 h-7 rounded-full bg-slate-950/10 flex items-center justify-center text-slate-950 shrink-0 group-hover:translate-x-1 transition-transform duration-300">
-                <ArrowRight className="w-4 h-4" />
-              </span>
-            </button>
-          </div>
+            {/* Subtitle */}
+            <p className="text-base sm:text-lg text-[#64748B] max-w-2xl leading-relaxed">
+              {siteSettings.heroDescription ||
+                'Biji kopi artisan pilihan Nusantara disangrai dan diracik presisi oleh barista bersertifikat untuk menemani setiap cerita Anda di Kota Minyak. Nikmati kesegaran racikan pesisir modern.'}
+            </p>
 
-          {/* Specialty Micro-Indicator */}
-          <div className="mt-3.5 flex items-center justify-center gap-2 text-[11px] font-mono tracking-wider text-slate-300/80">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#00E5FF] animate-pulse" />
-            <span className="text-[#00E5FF] font-bold">Dumai Chapter 5 & 6</span>
-            <span className="text-slate-500">•</span>
-            <span>Dine In & Take Away</span>
-          </div>
-        </motion.div>
-      </div>
+            {/* Dual CTA Buttons */}
+            <div className="flex flex-wrap items-center gap-3 pt-2 w-full sm:w-auto">
+              {onOpenOrder && (
+                <button
+                  onClick={onOpenOrder}
+                  id="hero-order-online-cta"
+                  className="inline-flex items-center justify-center gap-2.5 px-6 sm:px-7 py-3.5 rounded-xl bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold text-sm shadow-[0_4px_14px_rgba(2,132,199,0.25)] hover:shadow-none transition-all group cursor-pointer"
+                >
+                  <ShoppingBag className="w-5 h-5 transition-transform group-hover:scale-110" />
+                  <span>ORDER ONLINE SEKARANG</span>
+                </button>
+              )}
 
-      {/* Bottom Scene Indicator */}
-      <div className="absolute bottom-8 left-0 right-0 z-10 flex flex-col items-center pointer-events-none opacity-80">
-        <span className="text-[11px] font-mono tracking-widest text-slate-400 uppercase mb-2">
-          SCROLL TO EXPLORE CHAPTERS
-        </span>
-        <ArrowDown className="w-4 h-4 text-[#60A5FA] animate-bounce" />
+              <a
+                href="#menu"
+                onClick={scrollToMenu}
+                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-white text-[#172033] font-bold text-sm border border-[#E0F2FE] shadow-sm hover:bg-[#F0F7FF] transition-all"
+              >
+                <BookOpen className="w-5 h-5 text-[#0284C7]" />
+                <span>Lihat Daftar Menu</span>
+              </a>
+            </div>
+
+            {/* Trust Badges Bar */}
+            <div className="pt-4 grid grid-cols-3 gap-3 sm:gap-5 w-full max-w-xl">
+              <div className="p-3 sm:p-3.5 rounded-xl bg-white border border-[#E0F2FE] shadow-sm flex flex-col">
+                <span className="text-base sm:text-xl text-[#0284C7] font-extrabold">100%</span>
+                <span className="text-xs text-[#64748B] mt-0.5 leading-snug">Arabica &amp; Fine Robusta</span>
+              </div>
+              <div className="p-3 sm:p-3.5 rounded-xl bg-white border border-[#E0F2FE] shadow-sm flex flex-col">
+                <span className="text-base sm:text-xl text-[#0284C7] font-extrabold">2 Outlet</span>
+                <span className="text-xs text-[#64748B] mt-0.5 leading-snug">Sudirman &amp; Kelakap 7</span>
+              </div>
+              <div className="p-3 sm:p-3.5 rounded-xl bg-white border border-[#E0F2FE] shadow-sm flex flex-col">
+                <span className="text-base sm:text-xl text-[#0284C7] font-extrabold flex items-center gap-1">
+                  4.9 <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500 fill-amber-500 inline" />
+                </span>
+                <span className="text-xs text-[#64748B] mt-0.5 leading-snug">5.000+ Ulasan Google</span>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Hero Visual Bento Presentation (5 cols) */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.7, delay: 0.2 }}
+            className="lg:col-span-5 relative"
+          >
+            <div className="relative mx-auto w-full max-w-lg">
+              {/* Main Hero Visual Card */}
+              <div className="relative rounded-3xl bg-white p-3 border border-[#E0F2FE] shadow-xl overflow-hidden">
+                <div className="relative w-full h-[360px] sm:h-[400px] rounded-2xl overflow-hidden bg-[#F0F7FF]">
+                  <img
+                    src={resolveMediaUrl(siteSettings.heroBgImage)}
+                    alt={siteSettings.brandName}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#172033]/85 via-[#172033]/20 to-transparent" />
+                  <div className="absolute bottom-4 left-4 right-4 text-white">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs uppercase mb-1 font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#38BDF8]" />
+                      <span>Dumai Coastal Roast</span>
+                    </div>
+                    <h3 className="text-lg font-bold">Crafted with Pure Coastal Soul</h3>
+                    <p className="text-xs text-slate-200 opacity-90">
+                      Slow bar, single origin pour-overs &amp; artisan cold brew.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Overlapping Floating Card 1: Featured Beverage Highlight */}
+              <div className="absolute -bottom-5 -left-3 sm:-left-6 bg-white p-3 rounded-2xl border border-[#E0F2FE] shadow-xl flex items-center gap-3 max-w-xs">
+                <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-[#F0F7FF] border border-[#E0F2FE] flex items-center justify-center">
+                  <Coffee className="w-6 h-6 text-[#0284C7]" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-[#0284C7] font-bold uppercase tracking-wider">BEST SELLER #1</span>
+                  <span className="text-xs sm:text-sm text-[#172033] font-bold leading-tight">Leton Aren Signature</span>
+                  <span className="text-[11px] text-[#64748B]">Organic palm sugar &amp; sea-salt</span>
+                </div>
+              </div>
+
+              {/* Overlapping Floating Pill 2: Roasting Freshness */}
+              <div className="hidden sm:flex absolute -top-3 -right-3 bg-[#0284C7] text-white px-3.5 py-1.5 rounded-full shadow-lg items-center gap-1.5 text-xs font-bold tracking-wide">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>FRESH ROAST DAILY</span>
+              </div>
+            </div>
+          </motion.div>
+        </div>
       </div>
     </section>
   );

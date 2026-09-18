@@ -2,6 +2,7 @@ import { CustomerOrder, OrderStatus, PaymentStatus } from '../types';
 import { getSupabase, isSupabaseConfigured } from './supabase';
 import { matchesOutlet } from '../data/adminAccounts';
 import { getApiUrl } from './api';
+import { safeSetItem, safeGetItem, stripHeavyBase64Images } from './safeStorage';
 
 const ORDERS_STORAGE_KEY = 'leton_orders_history';
 const ADMIN_ORDERS_CACHE_KEY = 'leton_admin_orders_cache';
@@ -256,8 +257,10 @@ export function saveOrderToLocalHistory(order: CustomerOrder): void {
   try {
     const existing = getLocalOrderHistory();
     const filtered = existing.filter((o) => o.id !== order.id);
-    const updated = [order, ...filtered].slice(0, 20); // keep last 20 orders
-    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(updated));
+    // Keep heavy receipt images out of localStorage history to save quota
+    const sanitizedOrder = stripHeavyBase64Images(order);
+    const updated = [sanitizedOrder, ...filtered].slice(0, 20); // keep last 20 orders
+    safeSetItem(ORDERS_STORAGE_KEY, JSON.stringify(updated));
   } catch (err) {
     console.warn('Failed to save order to local history:', err);
   }
@@ -265,7 +268,7 @@ export function saveOrderToLocalHistory(order: CustomerOrder): void {
 
 export function getLocalOrderHistory(): CustomerOrder[] {
   try {
-    const raw = localStorage.getItem(ORDERS_STORAGE_KEY);
+    const raw = safeGetItem(ORDERS_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -279,16 +282,17 @@ export function getLocalOrderHistory(): CustomerOrder[] {
  */
 function updateLocalCache(order: CustomerOrder): void {
   try {
-    const raw = localStorage.getItem(ADMIN_ORDERS_CACHE_KEY);
+    const raw = safeGetItem(ADMIN_ORDERS_CACHE_KEY);
     let orders: CustomerOrder[] = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(orders)) orders = [];
+    const sanitizedOrder = stripHeavyBase64Images(order);
     const index = orders.findIndex((o) => o.id === order.id);
     if (index >= 0) {
-      orders[index] = order;
+      orders[index] = sanitizedOrder;
     } else {
-      orders.unshift(order);
+      orders.unshift(sanitizedOrder);
     }
-    localStorage.setItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(orders.slice(0, 200)));
+    safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(orders.slice(0, 50)));
   } catch (err) {
     console.warn('Local cache update failed:', err);
   }
@@ -637,7 +641,7 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
         mapped = mapped.filter((o) => matchesOutlet(o.outletId, filterId));
       }
 
-      localStorage.setItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(mapped));
+      safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(mapped).slice(0, 50)));
       return mapped;
     }
 
@@ -654,7 +658,7 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
         if (filterId) {
           registryOrders = registryOrders.filter((o) => matchesOutlet(o.outletId, filterId));
         }
-        localStorage.setItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(registryOrders));
+        safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(registryOrders).slice(0, 50)));
         return registryOrders;
       }
     }
@@ -664,7 +668,7 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
 
   // 2. Try Backend API /api/orders
   try {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_token') || '' : '';
+    const token = typeof window !== 'undefined' ? safeGetItem('leton_admin_token') || '' : '';
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     if (activeRole) headers['x-admin-role'] = activeRole;
@@ -678,7 +682,7 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
         if (filterId) {
           filtered = json.filter((o: CustomerOrder) => matchesOutlet(o.outletId, filterId));
         }
-        localStorage.setItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(filtered));
+        safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(filtered).slice(0, 50)));
         return filtered;
       }
     }
@@ -688,7 +692,7 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
 
   // 3. Fallback to Local Cache
   try {
-    const cached = localStorage.getItem(ADMIN_ORDERS_CACHE_KEY);
+    const cached = safeGetItem(ADMIN_ORDERS_CACHE_KEY);
     if (cached) {
       const parsed: CustomerOrder[] = JSON.parse(cached);
       if (Array.isArray(parsed)) {
@@ -790,7 +794,7 @@ export async function updateOrderStatus(
 
   // 3. Update local cache
   try {
-    const cached = localStorage.getItem(ADMIN_ORDERS_CACHE_KEY);
+    const cached = safeGetItem(ADMIN_ORDERS_CACHE_KEY);
     if (cached) {
       let list: CustomerOrder[] = JSON.parse(cached);
       list = list.map((o) => {
@@ -805,7 +809,7 @@ export async function updateOrderStatus(
         }
         return o;
       });
-      localStorage.setItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(list));
+      safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(list).slice(0, 50)));
     }
   } catch {
     // ignore

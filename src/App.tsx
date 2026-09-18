@@ -96,7 +96,7 @@ const AppContent: React.FC = () => {
   );
 
   return (
-    <div className="relative min-h-screen bg-[#070b12] text-slate-100 selection:bg-[#00E5FF] selection:text-black">
+    <div className="relative min-h-screen bg-[#F8FBFF] text-[#172033] selection:bg-[#38BDF8] selection:text-white">
       <AnimatePresence mode="wait">
         {isLoading ? (
           <PageSkeletonLoader key="loading-screen" onComplete={completeLoading} />

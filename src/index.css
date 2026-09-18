@@ -1,41 +1,63 @@
 @import "tailwindcss";
 
+/* ============================================================ */
+/* LETON COFFEE GLOBAL DESIGN TOKENS (LIGHT THEME WHITE + BLUE)  */
+/* ============================================================ */
+:root {
+  --bg-main: #F8FBFF;
+  --primary-light-blue: #38BDF8;
+  --primary-dark-blue: #0284C7;
+  --accent: #7DD3FC;
+  --card: #FFFFFF;
+  --border: #E0F2FE;
+  --main-text: #172033;
+  --secondary-text: #64748B;
+  --success: #16A34A;
+  --error: #DC2626;
+  color-scheme: light;
+}
+
 @layer base {
   body {
+    background-color: var(--bg-main);
+    color: var(--main-text);
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
-  h1, h2, h3, h4, .font-display {
+  h1, h2, h3, h4, h5, h6, .font-display {
     font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--main-text);
   }
 }
 
-/* Smooth custom scrollbars */
+/* ============================================================ */
+/* SMOOTH CUSTOM SCROLLBARS (LIGHT THEME)                       */
+/* ============================================================ */
 ::-webkit-scrollbar {
   width: 7px;
   height: 7px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #070b12;
+  background: var(--bg-main);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #BAE6FD;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #00E5FF;
+  background: var(--primary-light-blue);
 }
 
 /* Subtle pulsing ambient glow for minimal loader */
 @keyframes loader-subtle-pulse {
   0%, 100% {
-    opacity: 0.4;
+    opacity: 0.5;
     transform: scale(0.98);
   }
   50% {
-    opacity: 0.7;
+    opacity: 0.85;
     transform: scale(1.02);
   }
 }
@@ -44,6 +66,374 @@
   animation: loader-subtle-pulse 3s ease-in-out infinite;
 }
 
+/* ============================================================ */
+/* GLOBAL THEME OVERRIDES: WHITE + LIGHT BLUE SYSTEM            */
+/* ============================================================ */
 
+/* 1. Universal Page, Section & Container Backgrounds */
+body,
+#root,
+.bg-\[\#070b12\],
+.bg-\[\#05080e\],
+.bg-\[\#060a10\],
+.bg-\[\#0c1427\],
+.bg-\[\#04070d\],
+.bg-\[\#0B1524\],
+.bg-slate-950,
+[class*="bg-slate-950"],
+[class*="bg-\[\#070b12\]"],
+[class*="bg-\[\#05080e\]"],
+[class*="bg-\[\#060a10\]"] {
+  background-color: var(--bg-main) !important;
+}
 
+/* 2. Cards, Containers, Drawers, Modals, Popovers -> Pure White Card */
+.bg-slate-900,
+.bg-slate-900\/90,
+.bg-slate-900\/80,
+.bg-slate-900\/60,
+.bg-slate-900\/40,
+[class*="bg-slate-900"],
+.bg-\[\#141311\],
+.bg-\[\#1C1A17\],
+.bg-\[\#24211D\],
+.bg-\[\#2C2925\],
+.bg-\[\#1a1815\],
+.bg-\[\#FDFBF7\],
+.bg-\[\#FDFBF7\]\/95,
+[class*="bg-\[\#141311\]"],
+[class*="bg-\[\#1C1A17\]"],
+[class*="bg-\[\#24211D\]"],
+[class*="bg-\[\#2C2925\]"],
+[class*="bg-\[\#FDFBF7\]"] {
+  background-color: var(--card) !important;
+  color: var(--main-text);
+  border-color: var(--border) !important;
+  box-shadow: 0 4px 20px -2px rgba(2, 132, 199, 0.05), 0 1px 3px 0 rgba(2, 132, 199, 0.03);
+}
 
+/* Secondary cards / subtle containers -> very soft light blue */
+.bg-slate-800,
+.bg-slate-800\/80,
+.bg-slate-800\/60,
+.bg-slate-800\/40,
+[class*="bg-slate-800"],
+.bg-\[\#26231F\],
+.bg-\[\#221F1B\],
+.bg-\[\#292520\] {
+  background-color: #F0F7FF !important;
+  border-color: var(--border) !important;
+  color: var(--main-text);
+}
+
+/* 3. Global Borders & Dividers -> #E0F2FE */
+.border-slate-800,
+.border-slate-700,
+.border-slate-900,
+[class*="border-slate-800"],
+[class*="border-slate-700"],
+[class*="border-slate-900"],
+.border-\[\#2C2925\],
+.border-\[\#3E3A33\],
+.border-\[\#332E27\],
+.border-\[\#2F2B26\],
+.border-\[\#292520\],
+.border-\[\#292622\],
+[class*="border-\[\#2C2925\]"],
+[class*="border-\[\#3E3A33\]"],
+[class*="border-\[\#332E27\]"],
+[class*="border-\[\#2F2B26\]"],
+[class*="border-\[\#292520\]"],
+[class*="border-\[\#292622\]"],
+[class*="border-white\/10"],
+[class*="border-white\/20"],
+[class*="border-white\/30"],
+[class*="border-white\/5"],
+[class*="border-cyan-500\/20"],
+[class*="border-cyan-500\/30"],
+[class*="border-cyan-500\/40"],
+[class*="border-\[\#00E5FF\]\/20"],
+[class*="border-\[\#00E5FF\]\/30"],
+[class*="border-\[\#00E5FF\]\/40"],
+[class*="border-\[\#2563EB\]\/20"],
+[class*="border-\[\#2563EB\]\/25"],
+[class*="border-\[\#2563EB\]\/30"],
+[class*="border-\[\#2563EB\]\/40"],
+[class*="border-\[\#8E7051\]\/30"] {
+  border-color: var(--border) !important;
+}
+
+[class*="divide-slate-800"] > :not([hidden]) ~ :not([hidden]),
+[class*="divide-slate-700"] > :not([hidden]) ~ :not([hidden]),
+[class*="divide-\[\#26231F\]"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border) !important;
+}
+
+/* 4. Headings & High-Contrast Typography */
+h1, h2, h3, h4, h5, h6,
+.font-display {
+  color: var(--main-text) !important;
+}
+
+.text-white,
+.text-slate-100,
+.text-slate-200 {
+  color: var(--main-text) !important;
+}
+
+.text-slate-300,
+.text-slate-400,
+.text-stone-300,
+.text-stone-400,
+.text-\[\#A8A29E\] {
+  color: var(--secondary-text) !important;
+}
+
+.text-slate-500,
+.text-slate-600,
+.text-stone-500 {
+  color: #94A3B8 !important;
+}
+
+/* Blue & Cyan Text Accents mapped to Dark Navy Blue */
+.text-\[\#00E5FF\],
+.text-\[\#60A5FA\],
+.text-cyan-400,
+.text-sky-400,
+.text-\[\#CCA985\] {
+  color: var(--primary-dark-blue) !important;
+}
+
+/* 5. Buttons: Primary Light Blue & Secondary White with Light Blue Border */
+.bg-\[\#00E5FF\],
+.bg-\[\#2563EB\],
+.bg-\[\#8E7051\],
+.bg-cyan-500,
+.bg-blue-600,
+[class*="bg-gradient-to-r"][class*="from-\[\#00E5FF\]"],
+[class*="bg-gradient-to-r"][class*="from-\[\#2563EB\]"] {
+  background: linear-gradient(135deg, var(--primary-light-blue) 0%, var(--primary-dark-blue) 100%) !important;
+  color: #FFFFFF !important;
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
+  box-shadow: 0 4px 14px 0 rgba(2, 132, 199, 0.25) !important;
+}
+
+.bg-\[\#00E5FF\]:hover,
+.bg-\[\#2563EB\]:hover,
+.bg-\[\#8E7051\]:hover,
+[class*="bg-gradient-to-r"][class*="from-\[\#00E5FF\]"]:hover,
+[class*="bg-gradient-to-r"][class*="from-\[\#2563EB\]"]:hover {
+  background: linear-gradient(135deg, var(--primary-dark-blue) 0%, #0369A1 100%) !important;
+  box-shadow: 0 6px 20px 0 rgba(2, 132, 199, 0.35) !important;
+}
+
+/* Ensure text & icons inside primary buttons remain crisp white */
+.bg-\[\#00E5FF\] *,
+.bg-\[\#2563EB\] *,
+.bg-\[\#8E7051\] *,
+[class*="from-\[\#00E5FF\]"] *,
+[class*="from-\[\#2563EB\]"] * {
+  color: #FFFFFF !important;
+}
+
+/* Secondary Buttons */
+button.bg-slate-900,
+button.bg-slate-900\/80,
+button.bg-slate-900\/90,
+button.bg-slate-800,
+button.bg-slate-950,
+button[class*="bg-slate-800"],
+button[class*="bg-slate-900"],
+button[class*="bg-slate-950"] {
+  background-color: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--primary-dark-blue) !important;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.05);
+}
+
+button.bg-slate-900:hover,
+button.bg-slate-800:hover,
+button[class*="bg-slate-800"]:hover,
+button[class*="bg-slate-900"]:hover {
+  background-color: #F0F7FF !important;
+  border-color: var(--primary-light-blue) !important;
+  color: var(--primary-dark-blue) !important;
+}
+
+/* 6. Form Inputs, Textareas & Selects */
+input,
+textarea,
+select {
+  background-color: var(--card) !important;
+  color: var(--main-text) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 1px 2px rgba(2, 132, 199, 0.04);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #94A3B8 !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--primary-light-blue) !important;
+  outline: 2px solid rgba(56, 189, 248, 0.25) !important;
+  background-color: #FFFFFF !important;
+}
+
+select option {
+  background-color: #FFFFFF !important;
+  color: var(--main-text) !important;
+}
+
+/* 7. Tables (Sales Reports, Orders, Audit, Menus) */
+table thead tr,
+table thead th {
+  background-color: #F0F7FF !important;
+  color: var(--main-text) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+table tbody tr {
+  border-bottom: 1px solid var(--border) !important;
+}
+
+table tbody tr:hover {
+  background-color: #F8FBFF !important;
+}
+
+/* 8. Public Navbar */
+#main-navbar {
+  background: rgba(248, 251, 255, 0.92) !important;
+  backdrop-filter: blur(14px) !important;
+  border-bottom: 1px solid var(--border) !important;
+  box-shadow: 0 4px 20px -2px rgba(2, 132, 199, 0.06) !important;
+}
+
+#main-navbar a,
+#main-navbar span {
+  color: var(--main-text);
+}
+
+#main-navbar .text-\[\#00E5FF\] {
+  color: var(--primary-dark-blue) !important;
+}
+
+/* 9. Hero Section Light Scrims & Smooth Gradients */
+#home .bg-gradient-to-t {
+  background-image: linear-gradient(to top, #F8FBFF 0%, rgba(248, 251, 255, 0.6) 35%, transparent 100%) !important;
+}
+
+#home .bg-gradient-to-r {
+  background-image: linear-gradient(to right, rgba(248, 251, 255, 0.7) 0%, transparent 50%, rgba(248, 251, 255, 0.6) 100%) !important;
+}
+
+#home .bg-radial {
+  background-image: radial-gradient(circle, transparent 20%, rgba(248, 251, 255, 0.35) 60%, #F8FBFF 100%) !important;
+}
+
+/* 10. Badges and Status Pills */
+/* Soft Light Blue Pill */
+.bg-\[\#2563EB\]\/15,
+.bg-\[\#2563EB\]\/20,
+.bg-cyan-500\/10,
+.bg-\[\#00E5FF\]\/15,
+.bg-\[\#00E5FF\]\/10,
+.bg-\[\#8E7051\]\/20 {
+  background-color: #E0F2FE !important;
+  border-color: #BAE6FD !important;
+  color: var(--primary-dark-blue) !important;
+}
+
+.bg-\[\#2563EB\]\/15 *,
+.bg-\[\#2563EB\]\/20 *,
+.bg-cyan-500\/10 *,
+.bg-\[\#00E5FF\]\/15 *,
+.bg-\[\#00E5FF\]\/10 *,
+.bg-\[\#8E7051\]\/20 * {
+  color: var(--primary-dark-blue) !important;
+}
+
+/* Success */
+[class*="bg-emerald"],
+[class*="text-emerald"] {
+  background-color: #DCFCE7 !important;
+  color: var(--success) !important;
+  border-color: #BBF7D0 !important;
+}
+
+/* Error / Rejected */
+[class*="bg-rose"],
+[class*="bg-red"],
+[class*="text-rose"],
+[class*="text-red"] {
+  background-color: #FEE2E2 !important;
+  color: var(--error) !important;
+  border-color: #FECACA !important;
+}
+
+/* Warning / Pending */
+[class*="bg-amber"],
+[class*="text-amber"] {
+  background-color: #FEF3C7 !important;
+  color: #D97706 !important;
+  border-color: #FDE68A !important;
+}
+
+/* 11. Modal, Dialog & Drawer Overlays */
+[class*="fixed"][class*="inset-0"][class*="bg-black"],
+[class*="fixed"][class*="inset-0"][class*="bg-slate-950"] {
+  background-color: rgba(23, 32, 51, 0.45) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+/* 12. Admin Navigation & Sidebar */
+aside.bg-slate-900,
+aside[class*="bg-slate-900"] {
+  background-color: var(--card) !important;
+  border-right: 1px solid var(--border) !important;
+}
+
+header.bg-slate-900,
+header[class*="bg-slate-900"] {
+  background-color: var(--card) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+/* Active Navigation Item in Admin */
+aside button[class*="bg-[#00E5FF]"],
+aside button.bg-\[\#00E5FF\] {
+  background: #E0F2FE !important;
+  color: var(--primary-dark-blue) !important;
+  border: 1px solid #BAE6FD !important;
+  box-shadow: none !important;
+}
+
+aside button[class*="bg-[#00E5FF]"] *,
+aside button.bg-\[\#00E5FF\] * {
+  color: var(--primary-dark-blue) !important;
+}
+
+aside button[class*="text-slate-400"] {
+  color: var(--secondary-text) !important;
+}
+
+aside button[class*="text-slate-400"]:hover {
+  background-color: #F0F7FF !important;
+  color: var(--primary-dark-blue) !important;
+}
+
+/* 13. Culture Banner & Cards */
+[class*="from-slate-950"][class*="via-\[\#0a1528\]"] {
+  background: linear-gradient(135deg, #FFFFFF 0%, #F0F7FF 100%) !important;
+  border: 1px solid var(--border) !important;
+}
+
+/* Gallery indicators */
+.bg-white\/25,
+.bg-white\/20,
+.bg-white\/30 {
+  background-color: #BAE6FD !important;
+}

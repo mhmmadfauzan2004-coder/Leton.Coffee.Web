@@ -5,26 +5,24 @@ import {
   OrderType,
   PaymentMethod,
 } from '../../../types';
-import { calculateItemUnitPrice, generateCartItemId } from '../../../data/addOnsData';
+import { calculateItemUnitPrice } from '../../../data/addOnsData';
 import { formatRupiah } from '../../../utils/formatters';
-import { QrisPaymentCard } from './QrisPaymentCard';
 import { uploadPaymentReceipt } from '../../../utils/supabaseOrders';
 import {
   Utensils,
   Package,
-  QrCode,
-  Banknote,
-  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
-  User,
-  Phone,
-  Sparkles,
   Store,
+  UploadCloud,
+  FileCheck,
+  AlertCircle,
+  Bolt,
   ShieldCheck,
   Info,
+  Clock,
+  Trash2,
 } from 'lucide-react';
-import { motion } from 'motion/react';
 
 interface OrderCheckoutProps {
   outlet: OrderOutlet;
@@ -56,6 +54,7 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   const [tableNumber, setTableNumber] = useState<string>('');
   const [customerName, setCustomerName] = useState<string>('');
   const [customerPhone, setCustomerPhone] = useState<string>('');
+  const [orderNote, setOrderNote] = useState<string>(generalNote || '');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('QRIS');
   const [formError, setFormError] = useState<string>('');
 
@@ -64,6 +63,8 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   const [uploadedReceiptPath, setUploadedReceiptPath] = useState<string | null>(null);
   const [isUploadingReceipt, setIsUploadingReceipt] = useState<boolean>(false);
   const [receiptUploadError, setReceiptUploadError] = useState<string | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadedFileSize, setUploadedFileSize] = useState<string | null>(null);
 
   const subtotal = cart.reduce(
     (acc, item) =>
@@ -71,13 +72,26 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
     0
   );
   const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
+  const tax = Math.round(subtotal * 0.1);
+  const packagingFee = 1000;
+  const grandTotal = subtotal + tax + packagingFee;
 
   // File upload handler for QRIS
-  const handleUploadReceiptFile = async (file: File) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setReceiptUploadError('Ukuran file maksimal 5 MB.');
+      return;
+    }
+
     setIsUploadingReceipt(true);
     setReceiptUploadError(null);
+    setUploadedFileName(file.name);
+    setUploadedFileSize(`${(file.size / 1024).toFixed(0)} KB`);
+
     try {
-      // Temporary order code reference for unique file identification
       const tempOrderRef = `ORD-${Date.now().toString().slice(-6)}`;
       const result = await uploadPaymentReceipt(file, tempOrderRef);
       if (result.success && result.url) {
@@ -97,6 +111,8 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
     setUploadedReceiptUrl(null);
     setUploadedReceiptPath(null);
     setReceiptUploadError(null);
+    setUploadedFileName(null);
+    setUploadedFileSize(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -113,7 +129,6 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
       return;
     }
 
-    // QRIS Validation: Bukti pembayaran WAJIB diupload sebelum customer dapat menekan tombol PLACE ORDER
     if (paymentMethod === 'QRIS' && !uploadedReceiptUrl) {
       setFormError('Bukti transfer / pembayaran QRIS wajib diupload sebelum Anda dapat menekan tombol PLACE ORDER.');
       return;
@@ -136,418 +151,479 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
     (paymentMethod === 'QRIS' && !uploadedReceiptUrl);
 
   return (
-    <div className="w-full max-w-3xl mx-auto px-4 py-8">
-      {/* Back Button */}
-      <button
-        onClick={onBackToCart}
-        className="inline-flex items-center gap-2 text-xs font-mono uppercase text-slate-400 hover:text-white transition-colors mb-6 cursor-pointer"
-      >
-        <ArrowLeft className="w-4 h-4 text-[#00E5FF]" />
-        <span>Kembali ke Keranjang</span>
-      </button>
-
-      {/* Header */}
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#60A5FA] text-xs font-mono tracking-widest uppercase mb-3 shadow-md">
-          <Sparkles className="w-3.5 h-3.5 text-[#00E5FF]" />
-          <span>LANGKAH 3 — TIPE PESANAN & PEMBAYARAN</span>
+    <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12 bg-[#F8FBFF]">
+      {/* Top Step Bar & Visual Indicator */}
+      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center px-3 py-1 rounded-full bg-[#E0F2FE] text-[#0284C7] text-xs font-bold uppercase tracking-wider">
+              Checkout &amp; Instant Pay
+            </span>
+            <span className="text-xs text-[#64748B] font-mono">{outlet.name} Barista Station</span>
+          </div>
+          <h1 className="font-display font-black text-2xl sm:text-3xl text-[#172033] tracking-tight mt-1">
+            Konfirmasi &amp; Bayar Pesanan
+          </h1>
         </div>
-        <h2 className="font-display font-black text-2xl sm:text-4xl text-white uppercase tracking-tight">
-          KONFIRMASI PESANAN
-        </h2>
-        <div className="flex items-center justify-center gap-2 text-xs font-mono text-slate-400 mt-2">
-          <Store className="w-3.5 h-3.5 text-[#00E5FF]" />
-          <span>{outlet.name}</span>
+
+        {/* Stepper Indicator */}
+        <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-2xl border border-[#E0F2FE] shadow-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-[#0284C7] text-white flex items-center justify-center text-xs font-bold">
+              1
+            </div>
+            <span className="text-xs text-[#172033] font-medium">Review</span>
+          </div>
+          <div className="w-6 h-0.5 bg-[#0284C7]" />
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-[#0284C7] text-white flex items-center justify-center text-xs font-bold">
+              2
+            </div>
+            <span className="text-xs text-[#0284C7] font-bold">QRIS Pay</span>
+          </div>
+          <div className="w-6 h-0.5 bg-[#E0F2FE]" />
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-[#F0F7FF] text-[#64748B] flex items-center justify-center text-xs font-bold">
+              3
+            </div>
+            <span className="text-xs text-[#64748B]">Seduh</span>
+          </div>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Step 1: Pilih Order Type (DINE IN / TAKE AWAY) */}
-        <div className="p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-slate-900/90 border border-slate-800 space-y-4">
-          <h3 className="font-display font-black text-base sm:text-lg text-white uppercase tracking-wider flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg bg-[#2563EB] text-white flex items-center justify-center text-xs font-mono">
-              1
-            </span>
-            <span>TIPE PESANAN</span>
-          </h3>
+      {/* Back Button */}
+      <div className="mb-6">
+        <button
+          onClick={onBackToCart}
+          className="inline-flex items-center gap-2 text-xs font-semibold uppercase text-[#64748B] hover:text-[#0284C7] transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#0284C7]" />
+          <span>Kembali ke Keranjang Pesanan</span>
+        </button>
+      </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            {/* DINE IN */}
-            <button
-              type="button"
-              onClick={() => setOrderType('DINE IN')}
-              className={`p-4 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
-                orderType === 'DINE IN'
-                  ? 'bg-[#2563EB]/20 border-[#00E5FF] shadow-lg shadow-[#00E5FF]/10'
-                  : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <Utensils
-                  className={`w-6 h-6 ${
-                    orderType === 'DINE IN' ? 'text-[#00E5FF]' : 'text-slate-500'
-                  }`}
-                />
-                <span
-                  className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+      {formError && (
+        <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2 font-medium">
+          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{formError}</span>
+        </div>
+      )}
+
+      {/* 2-COLUMN MAIN CONTENT */}
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* ================= LEFT COLUMN: ORDER DETAILS & CUSTOMER ================= */}
+        <div className="lg:col-span-7 flex flex-col gap-6">
+          {/* 1. Outlet & Service Type Confirmation */}
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-5">
+            {/* Selected Outlet Header */}
+            <div className="flex items-center justify-between bg-[#F8FBFF] p-4 rounded-xl border border-[#E0F2FE]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center">
+                  <Store className="w-5 h-5" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] uppercase tracking-wider text-[#64748B] font-bold font-mono">
+                    Outlet Ditugaskan
+                  </span>
+                  <span className="font-display font-black text-base text-[#172033]">
+                    {outlet.name}
+                  </span>
+                  <span className="text-xs text-[#64748B]">{outlet.address}</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onBackToCart}
+                className="text-xs text-[#0284C7] hover:underline font-bold transition-colors cursor-pointer"
+              >
+                Ubah
+              </button>
+            </div>
+
+            {/* Service Type Switcher (Dine-in / Take-away) */}
+            <div className="space-y-2">
+              <label className="text-xs text-[#172033] font-bold flex items-center gap-1.5 uppercase tracking-wide">
+                <Utensils className="w-4 h-4 text-[#0284C7]" />
+                <span>Tipe Layanan</span>
+              </label>
+              <div className="grid grid-cols-2 gap-3 p-1 bg-[#F0F7FF] rounded-xl border border-[#E0F2FE]">
+                <button
+                  type="button"
+                  onClick={() => setOrderType('DINE IN')}
+                  className={`py-3 px-4 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     orderType === 'DINE IN'
-                      ? 'border-[#00E5FF] bg-[#00E5FF]'
-                      : 'border-slate-600'
+                      ? 'bg-white text-[#0284C7] shadow-sm border border-[#E0F2FE]'
+                      : 'text-[#64748B] hover:text-[#172033]'
                   }`}
                 >
-                  {orderType === 'DINE IN' && <span className="w-1.5 h-1.5 rounded-full bg-black" />}
-                </span>
-              </div>
-              <div className="mt-3">
-                <h4 className="font-display font-black text-sm text-white uppercase">DINE IN</h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">Makan / Minum di Meja Outlet</p>
-              </div>
-            </button>
-
-            {/* TAKE AWAY */}
-            <button
-              type="button"
-              onClick={() => setOrderType('TAKE AWAY')}
-              className={`p-4 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
-                orderType === 'TAKE AWAY'
-                  ? 'bg-[#2563EB]/20 border-[#00E5FF] shadow-lg shadow-[#00E5FF]/10'
-                  : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <Package
-                  className={`w-6 h-6 ${
-                    orderType === 'TAKE AWAY' ? 'text-[#00E5FF]' : 'text-slate-500'
-                  }`}
-                />
-                <span
-                  className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                  <Utensils className="w-4 h-4" />
+                  <span>Dine In (Makan di Tempat)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderType('TAKE AWAY')}
+                  className={`py-3 px-4 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     orderType === 'TAKE AWAY'
-                      ? 'border-[#00E5FF] bg-[#00E5FF]'
-                      : 'border-slate-600'
+                      ? 'bg-white text-[#0284C7] shadow-sm border border-[#E0F2FE]'
+                      : 'text-[#64748B] hover:text-[#172033]'
                   }`}
                 >
-                  {orderType === 'TAKE AWAY' && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-black" />
-                  )}
-                </span>
+                  <Package className="w-4 h-4" />
+                  <span>Take Away (Bawa Pulang)</span>
+                </button>
               </div>
-              <div className="mt-3">
-                <h4 className="font-display font-black text-sm text-white uppercase">TAKE AWAY</h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">Bungkus / Bawa Pulang</p>
-              </div>
-            </button>
-          </div>
-
-          {/* Conditional Table Number for DINE IN */}
-          {orderType === 'DINE IN' && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              className="pt-2"
-            >
-              <label className="block text-xs font-mono uppercase text-slate-300 font-bold mb-1.5">
-                Nomor Meja <span className="text-[#00E5FF]">*Wajib Diisi</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={tableNumber}
-                onChange={(e) => setTableNumber(e.target.value)}
-                placeholder="Contoh: Meja 04, Bar 02..."
-                className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-[#00E5FF] transition-colors font-mono"
-              />
-              <p className="text-[11px] text-slate-400 mt-1">
-                Silakan lihat nomor yang tertera pada meja tempat Anda duduk di {outlet.shortName || outlet.name}.
-              </p>
-            </motion.div>
-          )}
-        </div>
-
-        {/* Step 2: Data Diri Pemesan */}
-        <div className="p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-slate-900/90 border border-slate-800 space-y-4">
-          <h3 className="font-display font-black text-base sm:text-lg text-white uppercase tracking-wider flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg bg-[#2563EB] text-white flex items-center justify-center text-xs font-mono">
-              2
-            </span>
-            <span>INFORMASI PEMESAN</span>
-          </h3>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-mono uppercase text-slate-300 font-bold mb-1.5 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-[#00E5FF]" />
-                <span>Nama Customer <span className="text-rose-400">*</span></span>
-              </label>
-              <input
-                type="text"
-                required
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Nama pemesan..."
-                className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-[#00E5FF] transition-colors"
-              />
             </div>
 
-            <div>
-              <label className="block text-xs font-mono uppercase text-slate-300 font-bold mb-1.5 flex items-center gap-1.5">
-                <Phone className="w-3.5 h-3.5 text-[#00E5FF]" />
-                <span>No. WhatsApp (Opsional)</span>
-              </label>
-              <input
-                type="tel"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="0812xxxxxx..."
-                className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-[#00E5FF] transition-colors font-mono"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Step 3: Metode Pembayaran (QRIS / TUNAI) */}
-        <div className="p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-slate-900/90 border border-slate-800 space-y-5">
-          <h3 className="font-display font-black text-base sm:text-lg text-white uppercase tracking-wider flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg bg-[#2563EB] text-white flex items-center justify-center text-xs font-mono">
-              3
-            </span>
-            <span>PILIH METODE PEMBAYARAN</span>
-          </h3>
-
-          {/* Toggle buttons between QRIS and TUNAI */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            {/* Opsi 1: QRIS */}
-            <button
-              type="button"
-              onClick={() => setPaymentMethod('QRIS')}
-              className={`p-4 sm:p-5 rounded-2xl border transition-all text-left flex items-start gap-3.5 cursor-pointer ${
-                paymentMethod === 'QRIS'
-                  ? 'bg-[#2563EB]/20 border-[#00E5FF] shadow-lg shadow-[#00E5FF]/10 ring-1 ring-[#00E5FF]/40'
-                  : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-              }`}
-            >
-              <div
-                className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-                  paymentMethod === 'QRIS'
-                    ? 'bg-[#00E5FF] text-slate-950 font-black shadow-md shadow-cyan-500/30'
-                    : 'bg-slate-800 text-slate-400'
-                }`}
-              >
-                <QrCode className="w-6 h-6" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-display font-black text-base text-white uppercase">QRIS</h4>
-                  {paymentMethod === 'QRIS' && (
-                    <CheckCircle2 className="w-4 h-4 text-[#00E5FF]" />
-                  )}
-                </div>
-                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                  Scan QRIS & upload bukti transfer.
-                </p>
-                <span className="inline-block mt-2 text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
-                  Status: WAITING VERIFICATION
-                </span>
-              </div>
-            </button>
-
-            {/* Opsi 2: TUNAI */}
-            <button
-              type="button"
-              onClick={() => setPaymentMethod('TUNAI')}
-              className={`p-4 sm:p-5 rounded-2xl border transition-all text-left flex items-start gap-3.5 cursor-pointer ${
-                paymentMethod === 'TUNAI'
-                  ? 'bg-[#2563EB]/20 border-[#00E5FF] shadow-lg shadow-[#00E5FF]/10 ring-1 ring-[#00E5FF]/40'
-                  : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-              }`}
-            >
-              <div
-                className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-                  paymentMethod === 'TUNAI'
-                    ? 'bg-[#00E5FF] text-slate-950 font-black shadow-md shadow-cyan-500/30'
-                    : 'bg-slate-800 text-slate-400'
-                }`}
-              >
-                <Banknote className="w-6 h-6" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-display font-black text-base text-white uppercase">TUNAI</h4>
-                  {paymentMethod === 'TUNAI' && (
-                    <CheckCircle2 className="w-4 h-4 text-[#00E5FF]" />
-                  )}
-                </div>
-                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                  Bayar langsung di kasir outlet.
-                </p>
-                <span className="inline-block mt-2 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-                  Status: PAY AT STORE
-                </span>
-              </div>
-            </button>
-          </div>
-
-          {/* Conditional Payment UI based on method selection */}
-          {paymentMethod === 'QRIS' ? (
-            /* QRIS Flow: QRIS image, total, instructions, and upload field */
-            <div className="pt-2">
-              <QrisPaymentCard
-                totalAmount={subtotal}
-                outlet={outlet}
-                uploadedReceiptUrl={uploadedReceiptUrl}
-                uploadedReceiptPath={uploadedReceiptPath}
-                isUploading={isUploadingReceipt}
-                uploadError={receiptUploadError}
-                onReceiptUploaded={(url, path) => {
-                  setUploadedReceiptUrl(url);
-                  setUploadedReceiptPath(path || url);
-                }}
-                onClearReceipt={handleClearReceipt}
-                onUploadFile={handleUploadReceiptFile}
-              />
-            </div>
-          ) : (
-            /* TUNAI Flow: Bayar di kasir, tidak perlu upload */
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3"
-            >
-              <div className="flex items-center gap-2 text-white font-display font-black text-sm uppercase">
-                <Banknote className="w-5 h-5 text-[#00E5FF]" />
-                <span>TUNAI</span>
-              </div>
-
-              <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-xs text-emerald-200 leading-relaxed space-y-1">
-                <p className="font-bold text-emerald-300">
-                  “Pembayaran dilakukan langsung di kasir outlet.”
-                </p>
-                <p className="text-slate-300">
-                  Tidak perlu upload bukti pembayaran. Setelah menekan tombol <strong>PLACE ORDER</strong>, Anda akan menerima nomor pesanan untuk ditunjukkan ke kasir {outlet.shortName || outlet.name}.
-                </p>
-              </div>
-
-              <div className="pt-2 flex justify-between items-center text-xs">
-                <span className="text-slate-400 font-mono">Status Pembayaran Setelah Order:</span>
-                <span className="font-mono font-bold text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-md border border-emerald-500/40">
-                  PAY AT STORE
-                </span>
-              </div>
-            </motion.div>
-          )}
-        </div>
-
-        {/* Ringkasan Pesanan */}
-        <div className="p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-slate-900/90 border border-slate-800 space-y-3">
-          <h4 className="font-display font-black text-sm text-white uppercase tracking-wider">
-            RINGKASAN ITEM ({totalItems} ITEM)
-          </h4>
-
-          <div className="divide-y divide-slate-800/80 max-h-48 overflow-y-auto">
-            {cart.map((item) => {
-              const itemId =
-                item.id ||
-                generateCartItemId(item.product.id, item.topping?.name, item.syrup?.name);
-              const unitPrice = calculateItemUnitPrice(
-                item.product.price,
-                item.topping,
-                item.syrup
-              );
-              const hasTopping = item.topping && item.topping.name !== 'No Topping';
-              const hasSyrup = item.syrup && item.syrup.name !== 'No Syrup';
-
-              return (
-                <div key={itemId} className="py-2.5 flex items-start justify-between text-xs gap-3">
-                  <div className="flex items-start gap-2">
-                    <span className="font-mono font-bold text-white px-1.5 py-0.5 rounded bg-slate-800 shrink-0">
-                      {item.quantity}x
-                    </span>
-                    <div>
-                      <span className="text-slate-200 font-medium">{item.product.name}</span>
-                      <div className="text-[11px] font-mono text-slate-400 mt-0.5 space-y-0.5">
-                        {hasTopping && (
-                          <div className="text-[#00E5FF]">
-                            Topping: {item.topping!.name} (+{formatRupiah(item.topping!.price)})
-                          </div>
-                        )}
-                        {hasSyrup && (
-                          <div className="text-[#38BDF8]">
-                            Syrup: {item.syrup!.name} (+{formatRupiah(item.syrup!.price)})
-                          </div>
-                        )}
-                        {item.note && (
-                          <span className="text-slate-400 block italic">"{item.note}"</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <span className="font-mono text-slate-300 shrink-0">
-                    {formatRupiah(unitPrice * item.quantity)}
+            {/* Table Number Selector (When Dine In) */}
+            {orderType === 'DINE IN' && (
+              <div className="space-y-1.5">
+                <label className="text-xs text-[#172033] font-bold flex items-center gap-1.5 uppercase tracking-wide">
+                  <span className="text-[#0284C7] font-mono">#</span>
+                  <span>Nomor Meja Pelanggan <span className="text-rose-500">*</span></span>
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Meja 14 (Lantai 1)"
+                    value={tableNumber}
+                    onChange={(e) => setTableNumber(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white border border-[#E0F2FE] rounded-xl text-sm font-semibold text-[#172033] focus:outline-none focus:border-[#38BDF8]"
+                  />
+                  <span className="absolute right-3 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#E0F2FE] text-[#0284C7] text-[10px] font-bold">
+                    Dine In
                   </span>
                 </div>
-              );
-            })}
+              </div>
+            )}
+
+            {/* Customer Info Fields */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
+              <div className="space-y-1.5">
+                <label className="text-xs text-[#172033] font-bold">
+                  Nama Lengkap <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Nama pemesan..."
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-[#E0F2FE] rounded-xl text-sm text-[#172033] focus:outline-none focus:border-[#38BDF8]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs text-[#172033] font-bold">No. WhatsApp</label>
+                <input
+                  type="tel"
+                  placeholder="0812-xxxx-xxxx"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-[#E0F2FE] rounded-xl text-sm text-[#172033] focus:outline-none focus:border-[#38BDF8]"
+                />
+              </div>
+
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="text-xs text-[#172033] font-bold">Catatan Tambahan untuk Barista</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Pisahkan es batu, less sweet, dll..."
+                  value={orderNote}
+                  onChange={(e) => setOrderNote(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-[#E0F2FE] rounded-xl text-sm text-[#172033] focus:outline-none focus:border-[#38BDF8]"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-800 flex justify-between items-baseline">
-            <span className="font-display font-bold text-sm text-white uppercase">TOTAL AKHIR</span>
-            <span className="font-mono font-black text-2xl text-[#00E5FF]">
-              {formatRupiah(subtotal)}
-            </span>
+          {/* 2. Cart Items List */}
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h2 className="font-display font-black text-base text-[#172033] uppercase">
+                  Rincian Minuman &amp; Makanan
+                </h2>
+              </div>
+              <span className="px-2.5 py-1 rounded-full bg-[#F0F7FF] text-[#0284C7] text-xs font-bold">
+                {totalItems} Menu Dipilih
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {cart.map((item, idx) => {
+                const unitPrice = calculateItemUnitPrice(item.product.price, item.topping, item.syrup);
+                const hasTopping = item.topping && item.topping.name !== 'No Topping';
+                const hasSyrup = item.syrup && item.syrup.name !== 'No Syrup';
+
+                return (
+                  <div
+                    key={idx}
+                    className="p-3.5 rounded-xl bg-[#F8FBFF] border border-[#E0F2FE] flex items-start justify-between gap-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-12 h-12 rounded-lg bg-white border border-[#E0F2FE] flex items-center justify-center font-bold text-[#0284C7] shrink-0 font-mono">
+                        {item.quantity}x
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-display font-bold text-sm text-[#172033]">
+                          {item.product.name}
+                        </span>
+                        <div className="flex flex-wrap gap-1 mt-0.5 text-[11px] text-[#64748B]">
+                          {hasTopping && (
+                            <span className="px-1.5 py-0.2 bg-[#E0F2FE] text-[#0284C7] rounded">
+                              +{item.topping!.name}
+                            </span>
+                          )}
+                          {hasSyrup && (
+                            <span className="px-1.5 py-0.2 bg-[#E0F2FE] text-[#0284C7] rounded">
+                              +{item.syrup!.name}
+                            </span>
+                          )}
+                          {item.note && <span className="italic">Note: {item.note}</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end shrink-0">
+                      <span className="font-mono font-bold text-sm text-[#172033]">
+                        {formatRupiah(unitPrice * item.quantity)}
+                      </span>
+                      <span className="text-[10px] text-[#64748B]">@{formatRupiah(unitPrice)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Freshness Note */}
+            <div className="p-3 rounded-xl bg-[#F0F7FF] border border-[#E0F2FE] flex items-center gap-2.5 text-xs text-[#0284C7]">
+              <Info className="w-4 h-4 shrink-0" />
+              <span>
+                Semua espresso diekstraksi freshly pulled menggunakan biji kopi pilihan sangrai Leton Dumai.
+              </span>
+            </div>
           </div>
         </div>
 
-        {formError && (
-          <div className="p-4 rounded-xl bg-rose-950/80 border border-rose-500/60 text-rose-200 text-xs font-mono flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span>{formError}</span>
-          </div>
-        )}
+        {/* ================= RIGHT COLUMN: PAYMENT GATEWAY & QRIS ================= */}
+        <div className="lg:col-span-5 flex flex-col gap-6">
+          {/* 1. Payment Breakdown Card */}
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-3.5">
+            <h2 className="font-display font-black text-base text-[#172033] uppercase">
+              Ringkasan Pembayaran
+            </h2>
 
-        {/* Place Order Action Section */}
-        <div className="pt-2 space-y-3">
-          {paymentMethod === 'QRIS' && !uploadedReceiptUrl && (
-            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2 font-mono">
-              <Info className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>
-                Tombol Place Order akan aktif setelah Anda mengunggah bukti pembayaran QRIS di atas.
+            <div className="space-y-2 text-xs text-[#64748B]">
+              <div className="flex items-center justify-between">
+                <span>Subtotal Pesanan ({totalItems} item)</span>
+                <span className="font-bold text-[#172033]">{formatRupiah(subtotal)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>PB1 / Pajak Restoran (10%)</span>
+                <span className="font-bold text-[#172033]">{formatRupiah(tax)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Biaya Layanan &amp; Packaging</span>
+                <span className="font-bold text-[#172033]">{formatRupiah(packagingFee)}</span>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[#E0F2FE] flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-[#64748B] block">Total Pembayaran</span>
+                <span className="font-mono font-black text-2xl text-[#0284C7]">
+                  {formatRupiah(grandTotal)}
+                </span>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-[#E0F2FE] text-[#0284C7] text-xs font-bold font-mono">
+                QRIS Dinamis
               </span>
             </div>
-          )}
+          </div>
 
-          <button
-            type="submit"
-            disabled={isPlaceOrderDisabled}
-            id="place-order-submit-btn"
-            className={`w-full py-4 px-6 rounded-2xl font-display font-black text-sm sm:text-base tracking-wider uppercase transition-all flex items-center justify-center gap-3 ${
-              isPlaceOrderDisabled
-                ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
-                : 'bg-gradient-to-r from-[#2563EB] via-[#1d4ed8] to-[#00E5FF] hover:from-[#1d4ed8] hover:to-[#38bdf8] text-white shadow-xl shadow-blue-500/25 hover:shadow-cyan-500/40 active:scale-[0.99] cursor-pointer'
-            }`}
-          >
-            {isSubmitting ? (
-              <>
-                <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>MEMPROSES PESANAN...</span>
-              </>
-            ) : isUploadingReceipt ? (
-              <>
-                <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span>MENGUNGGAH BUKTI TRANSFER...</span>
-              </>
+          {/* 2. QRIS Payment Card */}
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-4">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#0284C7] font-bold">
+                  Metode Pembayaran
+                </span>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>QRIS BI Aktif</span>
+                </div>
+              </div>
+              <h3 className="font-display font-black text-sm text-[#172033] uppercase">
+                QRIS Instant Pay (Semua Bank &amp; E-Wallet)
+              </h3>
+            </div>
+
+            {/* Bank Chips */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {['BCA', 'Mandiri', 'BRI', 'BNI', 'GoPay', 'OVO', 'DANA', 'ShopeePay'].map((b) => (
+                <span
+                  key={b}
+                  className="px-2 py-0.5 rounded-md bg-[#F0F7FF] text-[#0284C7] font-mono text-[10px] font-bold border border-[#E0F2FE]"
+                >
+                  {b}
+                </span>
+              ))}
+            </div>
+
+            {/* QRIS SVG Representation */}
+            <div className="bg-[#F8FBFF] rounded-2xl p-4 border border-[#E0F2FE] flex flex-col items-center justify-center text-center">
+              <div className="text-[11px] font-bold text-[#172033] mb-1">
+                LETON COFFEE {outlet.shortName?.toUpperCase() || 'SUDIRMAN'}
+              </div>
+              <div className="text-[10px] font-mono text-[#64748B] mb-3">
+                NMID: ID102003921829
+              </div>
+
+              {/* Crisp SVG QR Code */}
+              <div className="p-3 bg-white rounded-xl border border-[#E0F2FE] shadow-sm relative w-48 h-48 flex items-center justify-center">
+                <svg className="w-full h-full text-[#172033]" fill="none" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg">
+                  <rect fill="currentColor" height="35" rx="4" width="35" x="10" y="10" />
+                  <rect fill="#ffffff" height="25" rx="2" width="25" x="15" y="15" />
+                  <rect fill="currentColor" height="15" rx="1" width="15" x="20" y="20" />
+                  <rect fill="currentColor" height="35" rx="4" width="35" x="95" y="10" />
+                  <rect fill="#ffffff" height="25" rx="2" width="25" x="100" y="15" />
+                  <rect fill="currentColor" height="15" rx="1" width="15" x="105" y="20" />
+                  <rect fill="currentColor" height="35" rx="4" width="35" x="10" y="95" />
+                  <rect fill="#ffffff" height="25" rx="2" width="25" x="15" y="100" />
+                  <rect fill="currentColor" height="15" rx="1" width="15" x="20" y="105" />
+                  {/* Data Points */}
+                  <rect fill="currentColor" height="6" width="6" x="52" y="12" />
+                  <rect fill="currentColor" height="6" width="6" x="62" y="12" />
+                  <rect fill="currentColor" height="6" width="6" x="72" y="12" />
+                  <rect fill="currentColor" height="6" width="6" x="82" y="12" />
+                  <rect fill="currentColor" height="6" width="6" x="52" y="24" />
+                  <rect fill="currentColor" height="6" width="6" x="72" y="24" />
+                  <rect fill="currentColor" height="6" width="6" x="52" y="36" />
+                  <rect fill="currentColor" height="6" width="6" x="62" y="36" />
+                  <rect fill="currentColor" height="6" width="6" x="82" y="36" />
+                  <rect fill="currentColor" height="6" width="6" x="12" y="52" />
+                  <rect fill="currentColor" height="6" width="6" x="24" y="52" />
+                  <rect fill="currentColor" height="6" width="6" x="36" y="52" />
+                  <rect fill="currentColor" height="6" width="6" x="48" y="52" />
+                  <rect fill="currentColor" height="6" width="6" x="86" y="52" />
+                  <rect fill="currentColor" height="6" width="6" x="98" y="52" />
+                  <rect fill="currentColor" height="6" width="6" x="110" y="52" />
+                  <rect fill="currentColor" height="6" width="6" x="12" y="64" />
+                  <rect fill="currentColor" height="6" width="6" x="36" y="64" />
+                  <rect fill="currentColor" height="6" width="6" x="98" y="64" />
+                  <rect fill="currentColor" height="6" width="6" x="12" y="76" />
+                  <rect fill="currentColor" height="6" width="6" x="48" y="76" />
+                  <rect fill="currentColor" height="6" width="6" x="86" y="76" />
+                  <rect fill="currentColor" height="6" width="6" x="52" y="98" />
+                  <rect fill="currentColor" height="6" width="6" x="64" y="98" />
+                  <rect fill="currentColor" height="6" width="6" x="76" y="98" />
+                  <rect fill="currentColor" height="6" width="6" x="88" y="98" />
+                  <rect fill="currentColor" height="6" width="6" x="100" y="98" />
+                  <rect fill="currentColor" height="6" width="6" x="52" y="110" />
+                  <rect fill="currentColor" height="6" width="6" x="76" y="110" />
+                  <rect fill="currentColor" height="6" width="6" x="100" y="110" />
+                  <rect fill="currentColor" height="6" width="6" x="52" y="122" />
+                  <rect fill="currentColor" height="6" width="6" x="64" y="122" />
+                  <rect fill="currentColor" height="6" width="6" x="88" y="122" />
+                </svg>
+                {/* Central Brand Tag */}
+                <div className="absolute inset-0 m-auto w-10 h-10 rounded-lg bg-white border border-[#E0F2FE] shadow-md flex items-center justify-center font-display font-black text-xs text-[#0284C7]">
+                  LTC
+                </div>
+              </div>
+
+              <div className="mt-3 inline-flex items-center gap-1.5 bg-white px-3 py-1 rounded-full border border-[#E0F2FE] shadow-sm">
+                <span className="text-[10px] text-[#64748B]">Total Scan:</span>
+                <span className="text-xs font-mono font-extrabold text-[#0284C7]">
+                  {formatRupiah(grandTotal)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Bukti Pembayaran Upload Area (Mandatory for QRIS) */}
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-display font-bold text-xs sm:text-sm text-[#172033] uppercase">
+                Bukti Transfer / Screenshot
+              </span>
+              <span className="text-[10px] font-bold text-rose-600 font-mono">Wajib Diunggah</span>
+            </div>
+
+            {uploadedReceiptUrl ? (
+              <div className="p-3.5 rounded-xl bg-[#F0F7FF] border border-[#E0F2FE] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-white border border-[#E0F2FE] flex items-center justify-center text-[#0284C7]">
+                    <FileCheck className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-[#172033] truncate max-w-[180px]">
+                      {uploadedFileName || 'Bukti_Transfer.jpg'}
+                    </span>
+                    <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Berhasil Diunggah ({uploadedFileSize || 'Siap'})
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleClearReceipt}
+                  className="p-1.5 rounded-lg text-[#64748B] hover:text-rose-600 hover:bg-white transition-colors cursor-pointer"
+                  title="Hapus / Ganti File"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             ) : (
-              <>
-                <span>PLACE ORDER</span>
-                <span className="text-lg leading-none">→</span>
-              </>
+              <label className="p-5 rounded-xl bg-[#F8FBFF] border-2 border-dashed border-[#BAE6FD] hover:border-[#0284C7] flex flex-col items-center justify-center text-center cursor-pointer transition-colors">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleFileChange}
+                  disabled={isUploadingReceipt}
+                  className="hidden"
+                />
+                <UploadCloud className="w-7 h-7 text-[#0284C7] mb-1.5 animate-bounce" />
+                <span className="text-xs font-bold text-[#172033]">
+                  {isUploadingReceipt ? 'Mengunggah Bukti Pembayaran...' : 'Klik untuk Upload Bukti Transfer'}
+                </span>
+                <span className="text-[10px] text-[#64748B] mt-0.5">
+                  Format JPG, PNG, atau Screenshot m-Banking (Maks. 5 MB)
+                </span>
+              </label>
             )}
-          </button>
 
-          <p className="text-center text-[11px] text-slate-400 font-mono">
-            {paymentMethod === 'QRIS'
-              ? 'Pesanan akan masuk dengan status WAITING VERIFICATION untuk diverifikasi admin.'
-              : 'Pesanan akan masuk dengan status PAY AT STORE untuk diselesaikan di kasir.'}
-          </p>
+            {receiptUploadError && (
+              <p className="text-[11px] text-rose-600 font-medium">{receiptUploadError}</p>
+            )}
+          </div>
+
+          {/* 4. Final Submit Button */}
+          <div className="space-y-3">
+            <button
+              type="submit"
+              disabled={isPlaceOrderDisabled}
+              id="submit-order-btn"
+              className={`w-full py-4 px-6 rounded-xl font-display font-black text-sm tracking-wider uppercase shadow-md flex items-center justify-center gap-2 transition-all ${
+                isPlaceOrderDisabled
+                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                  : 'bg-[#0284C7] hover:bg-[#0369A1] text-white shadow-[0_4px_14px_rgba(2,132,199,0.25)] cursor-pointer'
+              }`}
+            >
+              <span>{isSubmitting ? 'MEMPROSES PESANAN...' : 'PLACE ORDER & VERIFIKASI SEKARANG'}</span>
+              <Bolt className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-[#F0F7FF] border border-[#E0F2FE] text-xs text-[#64748B]">
+              <ShieldCheck className="w-4 h-4 text-[#0284C7] shrink-0 mt-0.5" />
+              <span>
+                Pesanan Anda akan langsung diteruskan ke Kitchen Display Barista {outlet.name} secara real-time.
+              </span>
+            </div>
+          </div>
         </div>
       </form>
     </div>

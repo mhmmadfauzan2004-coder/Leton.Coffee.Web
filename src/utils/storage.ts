@@ -12,6 +12,13 @@ import {
 } from '../types';
 import { initialLetonData } from '../data/initialData';
 import { saveGlobalDataToIdb, loadGlobalDataFromIdb } from './idbStorage';
+import {
+  safeSetItem,
+  safeGetItem,
+  safeRemoveItem,
+  stripHeavyBase64Images,
+  pruneStorageCache,
+} from './safeStorage';
 
 // Primary Single LocalStorage Key for all global state & photos
 export const LETON_GLOBAL_DATA_KEY = 'leton_global_data';
@@ -20,7 +27,7 @@ export const LETON_LAST_SYNC_KEY = 'leton_cms_last_sync';
 export const LETON_DATA_VERSION_KEY = 'leton_data_version_build';
 export const CURRENT_DATA_VERSION = 'v2026.09.18_original_baseline_v1';
 
-// Granular Photo & Section Keys for direct persistence
+// Granular Photo & Section Keys (maintained for legacy compatibility)
 export const LETON_KEY_LOGO_URL = 'leton_logo_url';
 export const LETON_KEY_HERO_BG = 'leton_hero_bg_image';
 export const LETON_KEY_BARISTAS = 'leton_baristas_data';
@@ -206,13 +213,13 @@ export function sanitizeLoadedData(raw: any): LetonData {
 export function hasStoredContent(): boolean {
   if (typeof window === 'undefined') return false;
   return Boolean(
-    localStorage.getItem(LETON_GLOBAL_DATA_KEY) ||
-    localStorage.getItem(LETON_STORAGE_KEY) ||
-    localStorage.getItem(LETON_KEY_LOGO_URL) ||
-    localStorage.getItem(LETON_KEY_HERO_BG) ||
-    localStorage.getItem(LETON_KEY_BARISTAS) ||
-    localStorage.getItem(LETON_KEY_BRANCHES) ||
-    localStorage.getItem(LETON_KEY_MENU_ITEMS)
+    safeGetItem(LETON_GLOBAL_DATA_KEY) ||
+    safeGetItem(LETON_STORAGE_KEY) ||
+    safeGetItem(LETON_KEY_LOGO_URL) ||
+    safeGetItem(LETON_KEY_HERO_BG) ||
+    safeGetItem(LETON_KEY_BARISTAS) ||
+    safeGetItem(LETON_KEY_BRANCHES) ||
+    safeGetItem(LETON_KEY_MENU_ITEMS)
   );
 }
 
@@ -227,31 +234,31 @@ export function loadStoredContent(): LetonData {
   }
 
   try {
-    // 0. Version Migration: Ensure old placeholder caches are cleaned up across Chrome and Safari
-    const storedVersion = localStorage.getItem(LETON_DATA_VERSION_KEY);
+    // 0. Version Migration: Ensure old placeholder caches are cleaned up safely
+    const storedVersion = safeGetItem(LETON_DATA_VERSION_KEY);
     if (storedVersion !== CURRENT_DATA_VERSION) {
-      const existingDataStr = localStorage.getItem(LETON_GLOBAL_DATA_KEY) || localStorage.getItem(LETON_STORAGE_KEY);
+      const existingDataStr = safeGetItem(LETON_GLOBAL_DATA_KEY) || safeGetItem(LETON_STORAGE_KEY);
       if (existingDataStr) {
         try {
           const parsed = JSON.parse(existingDataStr);
           const cleaned = sanitizeLoadedData(parsed);
-          const serialized = JSON.stringify(cleaned);
-          localStorage.setItem(LETON_GLOBAL_DATA_KEY, serialized);
-          localStorage.setItem(LETON_STORAGE_KEY, serialized);
-          localStorage.setItem(LETON_DATA_VERSION_KEY, CURRENT_DATA_VERSION);
+          const lightweight = stripHeavyBase64Images(cleaned);
+          safeSetItem(LETON_GLOBAL_DATA_KEY, JSON.stringify(lightweight));
+          safeSetItem(LETON_DATA_VERSION_KEY, CURRENT_DATA_VERSION);
+          pruneStorageCache();
           return cleaned;
         } catch (e) {
           console.warn('[LocalStorage] Migration parse error, using initialLetonData:', e);
         }
       }
-      localStorage.setItem(LETON_DATA_VERSION_KEY, CURRENT_DATA_VERSION);
+      safeSetItem(LETON_DATA_VERSION_KEY, CURRENT_DATA_VERSION);
       return initialLetonData;
     }
 
     let resultData: LetonData | null = null;
 
     // 1. Check primary global data key
-    const globalDataStr = localStorage.getItem(LETON_GLOBAL_DATA_KEY);
+    const globalDataStr = safeGetItem(LETON_GLOBAL_DATA_KEY);
     if (globalDataStr) {
       try {
         const parsed = JSON.parse(globalDataStr);
@@ -264,7 +271,7 @@ export function loadStoredContent(): LetonData {
     }
 
     // 2. Check legacy storage key if primary was empty
-    const primary = localStorage.getItem(LETON_STORAGE_KEY);
+    const primary = safeGetItem(LETON_STORAGE_KEY);
     if (primary) {
       try {
         const parsed = JSON.parse(primary);
@@ -280,21 +287,21 @@ export function loadStoredContent(): LetonData {
     resultData = { ...initialLetonData };
 
     // 3. Granular check only if no global JSON existed
-    const specificLogo = localStorage.getItem(LETON_KEY_LOGO_URL);
+    const specificLogo = safeGetItem(LETON_KEY_LOGO_URL);
     if (specificLogo && !isPlaceholderOrUnsplash(specificLogo)) {
       resultData.siteSettings.logoUrl = specificLogo.trim();
     } else {
       resultData.siteSettings.logoUrl = initialLetonData.siteSettings.logoUrl;
     }
 
-    const specificHeroBg = localStorage.getItem(LETON_KEY_HERO_BG);
+    const specificHeroBg = safeGetItem(LETON_KEY_HERO_BG);
     if (specificHeroBg && !isPlaceholderOrUnsplash(specificHeroBg)) {
       resultData.siteSettings.heroBgImage = specificHeroBg.trim();
     } else {
       resultData.siteSettings.heroBgImage = initialLetonData.siteSettings.heroBgImage;
     }
 
-    const specificSiteSettings = localStorage.getItem(LETON_KEY_SITE_SETTINGS);
+    const specificSiteSettings = safeGetItem(LETON_KEY_SITE_SETTINGS);
     if (specificSiteSettings) {
       try {
         resultData.siteSettings = {
@@ -304,7 +311,7 @@ export function loadStoredContent(): LetonData {
       } catch {}
     }
 
-    const specificBaristas = localStorage.getItem(LETON_KEY_BARISTAS);
+    const specificBaristas = safeGetItem(LETON_KEY_BARISTAS);
     if (specificBaristas) {
       try {
         const parsed = JSON.parse(specificBaristas);
@@ -314,7 +321,7 @@ export function loadStoredContent(): LetonData {
       } catch {}
     }
 
-    const specificMenuItems = localStorage.getItem(LETON_KEY_MENU_ITEMS);
+    const specificMenuItems = safeGetItem(LETON_KEY_MENU_ITEMS);
     if (specificMenuItems) {
       try {
         const parsed = JSON.parse(specificMenuItems);
@@ -324,7 +331,7 @@ export function loadStoredContent(): LetonData {
       } catch {}
     }
 
-    const specificMenuCats = localStorage.getItem(LETON_KEY_MENU_CATEGORIES);
+    const specificMenuCats = safeGetItem(LETON_KEY_MENU_CATEGORIES);
     if (specificMenuCats) {
       try {
         const parsed = JSON.parse(specificMenuCats);
@@ -334,7 +341,7 @@ export function loadStoredContent(): LetonData {
       } catch {}
     }
 
-    const specificBranches = localStorage.getItem(LETON_KEY_BRANCHES);
+    const specificBranches = safeGetItem(LETON_KEY_BRANCHES);
     if (specificBranches) {
       try {
         const parsed = JSON.parse(specificBranches);
@@ -344,7 +351,7 @@ export function loadStoredContent(): LetonData {
       } catch {}
     }
 
-    const specificMobile = localStorage.getItem(LETON_KEY_MOBILE_SERVICE);
+    const specificMobile = safeGetItem(LETON_KEY_MOBILE_SERVICE);
     if (specificMobile) {
       try {
         resultData.mobileService = {
@@ -354,7 +361,7 @@ export function loadStoredContent(): LetonData {
       } catch {}
     }
 
-    const specificBaristasContent = localStorage.getItem(LETON_KEY_BARISTAS_CONTENT);
+    const specificBaristasContent = safeGetItem(LETON_KEY_BARISTAS_CONTENT);
     if (specificBaristasContent) {
       try {
         resultData.baristasContent = {
@@ -364,7 +371,7 @@ export function loadStoredContent(): LetonData {
       } catch {}
     }
 
-    const specificAbout = localStorage.getItem(LETON_KEY_ABOUT_CONTENT);
+    const specificAbout = safeGetItem(LETON_KEY_ABOUT_CONTENT);
     if (specificAbout) {
       try {
         resultData.aboutContent = {
@@ -374,7 +381,7 @@ export function loadStoredContent(): LetonData {
       } catch {}
     }
 
-    const specificContact = localStorage.getItem(LETON_KEY_CONTACT_SETTINGS);
+    const specificContact = safeGetItem(LETON_KEY_CONTACT_SETTINGS);
     if (specificContact) {
       try {
         resultData.contactSettings = {
@@ -393,61 +400,33 @@ export function loadStoredContent(): LetonData {
 
 /**
  * Save CMS content permanently to browser localStorage and IndexedDB.
- * Ensures all photos (Logo, Chapters, Baristas, Menu, Hero) are preserved across refreshes.
- * Handles storage quota limits gracefully.
+ * Ensures all photos (Logo, Chapters, Baristas, Menu, Hero) are preserved across refreshes in IndexedDB.
+ * Uses lightweight stripped representation for LocalStorage to prevent QuotaExceededError.
  */
 export function saveStoredContent(data: LetonData): boolean {
   if (typeof window === 'undefined') return false;
 
   try {
-    const serialized = JSON.stringify(data);
-    
-    // Save to primary global data key
-    try {
-      localStorage.setItem(LETON_GLOBAL_DATA_KEY, serialized);
-      localStorage.setItem(LETON_STORAGE_KEY, serialized);
-      localStorage.setItem(LETON_LAST_SYNC_KEY, Date.now().toString());
-      localStorage.setItem(LETON_DATA_VERSION_KEY, CURRENT_DATA_VERSION);
-    } catch (quotaErr) {
-      console.warn('[LocalStorage] Quota limit reached, saving granular entries and to IndexedDB:', quotaErr);
-    }
+    // 1. Asynchronously save FULL unabridged data to IndexedDB (unlimited storage for HD photos)
+    saveGlobalDataToIdb(data).catch((err) => {
+      console.warn('[IDB] Failed to save full content to IndexedDB:', err);
+    });
 
-    // Save individual keys for explicit access
-    try {
-      if (data.siteSettings?.logoUrl) {
-        localStorage.setItem(LETON_KEY_LOGO_URL, data.siteSettings.logoUrl);
-      }
-      if (data.siteSettings?.heroBgImage) {
-        localStorage.setItem(LETON_KEY_HERO_BG, data.siteSettings.heroBgImage);
-      }
-      if (data.siteSettings) {
-        localStorage.setItem(LETON_KEY_SITE_SETTINGS, JSON.stringify(data.siteSettings));
-      }
-      if (Array.isArray(data.baristas)) {
-        localStorage.setItem(LETON_KEY_BARISTAS, JSON.stringify(data.baristas));
-      }
-      if (Array.isArray(data.menuItems)) {
-        localStorage.setItem(LETON_KEY_MENU_ITEMS, JSON.stringify(data.menuItems));
-      }
-      if (Array.isArray(data.menuCategories)) {
-        localStorage.setItem(LETON_KEY_MENU_CATEGORIES, JSON.stringify(data.menuCategories));
-      }
-      if (Array.isArray(data.branches)) {
-        localStorage.setItem(LETON_KEY_BRANCHES, JSON.stringify(data.branches));
-      }
-      if (data.mobileService) {
-        localStorage.setItem(LETON_KEY_MOBILE_SERVICE, JSON.stringify(data.mobileService));
-      }
-    } catch (granularErr) {
-      console.warn('[LocalStorage] Granular storage notice:', granularErr);
-    }
+    // 2. Prepare lightweight data for localStorage (heavy base64 stripped out)
+    const lightweightData = stripHeavyBase64Images(data);
+    const serialized = JSON.stringify(lightweightData);
 
-    // Asynchronously save to IndexedDB as high-capacity safety vault
-    saveGlobalDataToIdb(data).catch(() => {});
+    // 3. Store safely in localStorage without triggering quota limits
+    safeSetItem(LETON_GLOBAL_DATA_KEY, serialized);
+    safeSetItem(LETON_LAST_SYNC_KEY, Date.now().toString());
+    safeSetItem(LETON_DATA_VERSION_KEY, CURRENT_DATA_VERSION);
+
+    // Clean up any legacy bloated duplicate keys
+    pruneStorageCache();
 
     return true;
   } catch (err) {
-    console.error('[LocalStorage] Failed to save content to localStorage:', err);
+    console.error('[LocalStorage] Failed to save content:', err);
     return false;
   }
 }
@@ -459,20 +438,21 @@ export function clearStoredContent(): void {
   if (typeof window === 'undefined') return;
 
   try {
-    localStorage.removeItem(LETON_GLOBAL_DATA_KEY);
-    localStorage.removeItem(LETON_STORAGE_KEY);
-    localStorage.removeItem(LETON_LAST_SYNC_KEY);
-    localStorage.removeItem(LETON_KEY_LOGO_URL);
-    localStorage.removeItem(LETON_KEY_HERO_BG);
-    localStorage.removeItem(LETON_KEY_SITE_SETTINGS);
-    localStorage.removeItem(LETON_KEY_BARISTAS);
-    localStorage.removeItem(LETON_KEY_MENU_ITEMS);
-    localStorage.removeItem(LETON_KEY_MENU_CATEGORIES);
-    localStorage.removeItem(LETON_KEY_BRANCHES);
-    localStorage.removeItem(LETON_KEY_MOBILE_SERVICE);
-    localStorage.removeItem(LETON_KEY_BARISTAS_CONTENT);
-    localStorage.removeItem(LETON_KEY_ABOUT_CONTENT);
-    localStorage.removeItem(LETON_KEY_CONTACT_SETTINGS);
+    safeRemoveItem(LETON_GLOBAL_DATA_KEY);
+    safeRemoveItem(LETON_STORAGE_KEY);
+    safeRemoveItem(LETON_LAST_SYNC_KEY);
+    safeRemoveItem(LETON_KEY_LOGO_URL);
+    safeRemoveItem(LETON_KEY_HERO_BG);
+    safeRemoveItem(LETON_KEY_SITE_SETTINGS);
+    safeRemoveItem(LETON_KEY_BARISTAS);
+    safeRemoveItem(LETON_KEY_MENU_ITEMS);
+    safeRemoveItem(LETON_KEY_MENU_CATEGORIES);
+    safeRemoveItem(LETON_KEY_BRANCHES);
+    safeRemoveItem(LETON_KEY_MOBILE_SERVICE);
+    safeRemoveItem(LETON_KEY_BARISTAS_CONTENT);
+    safeRemoveItem(LETON_KEY_ABOUT_CONTENT);
+    safeRemoveItem(LETON_KEY_CONTACT_SETTINGS);
+    pruneStorageCache();
   } catch (err) {
     console.warn('[LocalStorage] Failed to clear stored content:', err);
   }

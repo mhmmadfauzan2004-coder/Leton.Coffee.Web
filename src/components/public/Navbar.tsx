@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
-import { Menu, X, MessageCircle, Lock, ShoppingBag } from 'lucide-react';
+import { Menu, X, MessageCircle, Lock, ShoppingBag, Coffee, User } from 'lucide-react';
 
 interface NavbarProps {
   onOpenAdmin?: () => void;
@@ -18,7 +18,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
 
   useEffect(() => {
     const handleScroll = () => {
-      if (window.scrollY > 40) {
+      if (window.scrollY > 20) {
         setIsScrolled(true);
       } else {
         setIsScrolled(false);
@@ -39,7 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
         const el = document.getElementById(sectionId);
         if (el) {
           const rect = el.getBoundingClientRect();
-          if (rect.top <= 200 && rect.bottom >= 200) {
+          if (rect.top <= 220 && rect.bottom >= 220) {
             setActiveSection(sectionId);
             break;
           }
@@ -52,15 +52,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
   }, []);
 
   const navItems = [
-    { label: 'HOME', href: '#home', id: 'home' },
-    { label: 'CHAPTER 5', href: '#chapter-5', id: 'chapter-5' },
-    { label: 'CHAPTER 6', href: '#chapter-6', id: 'chapter-6' },
+    { label: 'Home', href: '#home', id: 'home' },
+    { label: 'Sudirman (Ch. 5)', href: '#chapter-5', id: 'chapter-5' },
+    { label: 'Kelakap 7 (Ch. 6)', href: '#chapter-6', id: 'chapter-6' },
     { label: "LET'GO", href: '#let-go', id: 'let-go' },
-    { label: 'LETON OPEN BOOTH', href: '#leton-open-booth', id: 'leton-open-booth' },
-    { label: 'MENU', href: '#menu', id: 'menu' },
-    { label: 'BARISTAS', href: '#baristas', id: 'baristas' },
-    { label: 'ABOUT', href: '#about', id: 'about' },
-    { label: 'CONTACT', href: '#contact', id: 'contact' },
+    { label: 'Open Booth', href: '#leton-open-booth', id: 'leton-open-booth' },
+    { label: 'Menu', href: '#menu', id: 'menu' },
+    { label: 'Baristas', href: '#baristas', id: 'baristas' },
+    { label: 'About', href: '#about', id: 'about' },
+    { label: 'Contact', href: '#contact', id: 'contact' },
   ];
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
@@ -81,54 +81,62 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
     <>
       <header
         id="main-navbar"
-        className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
-          isScrolled
-            ? 'bg-[#070b12]/92 backdrop-blur-md border-b border-[#00E5FF]/20 py-3 shadow-xl shadow-black/50'
-            : 'bg-gradient-to-b from-[#070b12]/85 to-transparent py-4 sm:py-5'
-        }`}
+        className="fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-b border-[#E0F2FE] shadow-[0_1px_8px_rgba(0,0,0,0.03)] transition-all duration-300"
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-          {/* Logo & Brand - Real Profile Image */}
-          <a
-            href="#home"
-            onClick={(e) => handleNavClick(e, '#home')}
-            className="flex items-center gap-3 group focus:outline-none"
-            id="navbar-brand-logo"
-          >
-            <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden border-2 border-[#00E5FF] shadow-md shadow-cyan-500/30 group-hover:border-[#38BDF8] transition-all bg-slate-900 shrink-0">
-              {/* Crisp built-in local vector SVG fallback */}
-              <div className="w-full h-full rounded-full bg-gradient-to-br from-[#0c1427] to-[#04070d] flex flex-col items-center justify-center p-1 select-none">
-                <svg viewBox="0 0 32 32" className="w-4 h-4 text-[#00E5FF]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
-                  <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" fill="rgba(0,229,255,0.15)" />
-                  <line x1="6" y1="1" x2="6" y2="4" stroke="#38BDF8" />
-                  <line x1="10" y1="1" x2="10" y2="4" stroke="#00E5FF" />
-                  <line x1="14" y1="1" x2="14" y2="4" stroke="#38BDF8" />
-                </svg>
+        {/* Top Notification Announcement Bar */}
+        <div className="w-full bg-[#F0F7FF] py-2 px-4 text-center border-b border-[#E0F2FE]">
+          <div className="max-w-7xl mx-auto flex items-center justify-center gap-2.5 text-xs text-[#64748B]">
+            <span className="w-2 h-2 rounded-full bg-[#0284C7] animate-ping" />
+            <p className="font-medium">
+              Cabang Sudirman &amp; Kelakap 7 buka normal hari ini: <span className="text-[#0284C7] font-bold">08:00 – 23:00 WIB</span> • Tersedia kurir antar instan se-Dumai Kota!
+            </p>
+          </div>
+        </div>
+
+        {/* Main Nav Container */}
+        <div className="h-16 sm:h-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+          {/* Logo & Brand Identity */}
+          <div className="flex items-center gap-3">
+            <a
+              href="#home"
+              onClick={(e) => handleNavClick(e, '#home')}
+              className="flex items-center gap-3 group focus:outline-none"
+              id="navbar-brand-logo"
+            >
+              <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-[#E0F2FE] shadow-sm bg-white shrink-0 flex items-center justify-center">
+                {siteSettings.logoUrl ? (
+                  <img
+                    src={resolveMediaUrl(siteSettings.logoUrl)}
+                    alt={siteSettings.brandName}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-[#F0F7FF] text-[#0284C7] flex items-center justify-center font-black">
+                    <Coffee className="w-5 h-5" />
+                  </div>
+                )}
               </div>
 
-              {/* Custom Supabase Logo if present */}
-              {siteSettings.logoUrl && (
-                <img
-                  src={resolveMediaUrl(siteSettings.logoUrl)}
-                  alt={siteSettings.brandName}
-                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-300 z-10"
-                  referrerPolicy="no-referrer"
-                />
-              )}
-            </div>
-            <div className="flex flex-col">
-              <span className="font-display font-black text-lg sm:text-xl tracking-wider text-white group-hover:text-[#00E5FF] transition-colors leading-none">
-                {siteSettings.brandName}
-              </span>
-              <span className="text-[10px] uppercase font-bold tracking-widest text-[#00E5FF] mt-1">
-                DUMAI SCENE
-              </span>
-            </div>
-          </a>
+              <div className="flex flex-col">
+                <span className="font-display font-extrabold text-base sm:text-lg tracking-tight text-[#172033] group-hover:text-[#0284C7] transition-colors leading-tight">
+                  {siteSettings.brandName || 'LETON COFFEE'}
+                </span>
+                <span className="text-[11px] text-[#64748B] font-semibold uppercase tracking-wider">
+                  Dumai Specialty Coffee
+                </span>
+              </div>
+            </a>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
+            {/* Location Status Pill */}
+            <div className="hidden xl:flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F0F7FF] text-[#0284C7] border border-[#E0F2FE] text-xs font-semibold ml-2">
+              <span className="w-2 h-2 rounded-full bg-[#38BDF8] animate-pulse" />
+              <span>Dumai, Riau • Open Daily 08:00 - 23:00</span>
+            </div>
+          </div>
+
+          {/* Desktop Navigation Pills */}
+          <nav className="hidden lg:flex items-center gap-1 bg-[#F0F7FF]/80 p-1.5 rounded-full border border-[#E0F2FE]">
             {navItems.map((item) => {
               const isActive = activeSection === item.id;
               return (
@@ -137,31 +145,28 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
                   href={item.href}
                   id={`nav-link-${item.id}`}
                   onClick={(e) => handleNavClick(e, item.href)}
-                  className={`px-3 py-1.5 text-xs xl:text-sm font-semibold tracking-wider transition-all rounded-md relative ${
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
                     isActive
-                      ? 'text-[#00E5FF] font-bold'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/40'
+                      ? 'bg-[#E0F2FE] text-[#0284C7] font-bold shadow-sm'
+                      : 'text-[#64748B] hover:text-[#172033] hover:bg-white'
                   }`}
                 >
                   {item.label}
-                  {isActive && (
-                    <span className="absolute bottom-0 left-3 right-3 h-0.5 bg-[#00E5FF] rounded-full shadow-[0_0_8px_rgba(0,229,255,0.8)]" />
-                  )}
                 </a>
               );
             })}
           </nav>
 
           {/* Action CTAs */}
-          <div className="hidden sm:flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {onOpenOrder && (
               <button
                 onClick={onOpenOrder}
                 id="navbar-order-now-cta"
-                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-black tracking-wider rounded-xl bg-gradient-to-r from-[#00E5FF] via-[#38BDF8] to-[#0284C7] hover:from-[#38BDF8] hover:to-[#0369A1] text-slate-950 shadow-lg shadow-cyan-500/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold text-xs sm:text-sm tracking-wide shadow-[0_4px_14px_rgba(2,132,199,0.25)] hover:shadow-none transition-all cursor-pointer"
               >
-                <ShoppingBag className="w-3.5 h-3.5 text-slate-950" />
-                <span>ORDER NOW</span>
+                <ShoppingBag className="w-4 h-4" />
+                <span>ORDER ONLINE</span>
               </button>
             )}
 
@@ -170,10 +175,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
               target="_blank"
               rel="noopener noreferrer"
               id="navbar-wa-cta"
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold tracking-wider rounded-xl bg-[#00E5FF]/15 hover:bg-[#00E5FF]/25 border border-[#00E5FF]/40 text-[#00E5FF] shadow-lg shadow-cyan-500/10 transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#0284C7] shadow-sm transition-all"
             >
               <MessageCircle className="w-3.5 h-3.5" />
-              <span>WHATSAPP</span>
+              <span>WA</span>
             </a>
 
             {onOpenAdmin && (
@@ -181,90 +186,61 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
                 onClick={onOpenAdmin}
                 id="navbar-admin-btn"
                 title="Buka Admin CMS"
-                className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/60 text-slate-400 hover:text-[#00E5FF] transition-all cursor-pointer"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#0284C7] text-white flex items-center justify-center shadow-sm hover:bg-[#0369A1] transition-colors cursor-pointer"
               >
-                <Lock className="w-4 h-4" />
+                <User className="w-4 h-4 text-white" />
               </button>
             )}
-          </div>
 
-          {/* Mobile menu trigger */}
-          <div className="flex items-center gap-2 lg:hidden">
-            {onOpenAdmin && (
-              <button
-                onClick={onOpenAdmin}
-                title="Buka Admin CMS"
-                className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-[#00E5FF]"
-              >
-                <Lock className="w-4 h-4" />
-              </button>
-            )}
+            {/* Mobile menu trigger */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               id="mobile-menu-toggle-btn"
-              className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-200 hover:text-[#00E5FF] focus:outline-none"
+              className="p-2 rounded-xl bg-[#F0F7FF] border border-[#E0F2FE] text-[#172033] hover:text-[#0284C7] lg:hidden focus:outline-none"
               aria-label="Toggle Navigation Menu"
             >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
       </header>
 
-      {/* Mobile Drawer */}
+      {/* Mobile Menu Drawer */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex flex-col bg-[#070b12]/98 backdrop-blur-xl animate-fadeIn">
-          <div className="flex items-center justify-between p-5 border-b border-slate-800">
+        <div className="fixed inset-0 z-50 lg:hidden flex flex-col bg-white/98 backdrop-blur-2xl animate-fadeIn">
+          <div className="flex items-center justify-between p-5 border-b border-[#E0F2FE]">
             <div className="flex items-center gap-2.5">
-              <div className="relative w-9 h-9 rounded-full overflow-hidden border-2 border-[#00E5FF] shrink-0 bg-slate-900">
-                <div className="w-full h-full rounded-full bg-gradient-to-br from-[#0c1427] to-[#04070d] flex items-center justify-center p-1 select-none">
-                  <svg viewBox="0 0 32 32" className="w-4 h-4 text-[#00E5FF]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
-                    <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" fill="rgba(0,229,255,0.15)" />
-                    <line x1="6" y1="1" x2="6" y2="4" stroke="#38BDF8" />
-                    <line x1="10" y1="1" x2="10" y2="4" stroke="#00E5FF" />
-                    <line x1="14" y1="1" x2="14" y2="4" stroke="#38BDF8" />
-                  </svg>
-                </div>
-                {siteSettings.logoUrl && (
-                  <img
-                    src={resolveMediaUrl(siteSettings.logoUrl)}
-                    alt={siteSettings.brandName}
-                    className="absolute inset-0 w-full h-full object-cover z-10"
-                    referrerPolicy="no-referrer"
-                  />
-                )}
+              <div className="w-9 h-9 rounded-xl overflow-hidden border border-[#E0F2FE] shrink-0 bg-[#F0F7FF] flex items-center justify-center">
+                <Coffee className="w-5 h-5 text-[#0284C7]" />
               </div>
-              <span className="font-display font-black text-lg tracking-wider text-white">
-                {siteSettings.brandName}
+              <span className="font-display font-black text-lg tracking-tight text-[#172033]">
+                {siteSettings.brandName || 'LETON COFFEE'}
               </span>
             </div>
             <button
               onClick={() => setMobileMenuOpen(false)}
-              className="p-2 text-slate-400 hover:text-white"
+              className="p-2 text-[#64748B] hover:text-[#172033]"
             >
               <X className="w-6 h-6" />
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 py-8 flex flex-col justify-between">
-            <nav className="flex flex-col gap-4">
+          <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col justify-between">
+            <nav className="flex flex-col gap-2">
               {navItems.map((item, idx) => (
                 <a
                   key={item.id}
                   href={item.href}
                   onClick={(e) => handleNavClick(e, item.href)}
-                  className="flex items-center justify-between py-3 text-xl font-display font-bold tracking-wider text-slate-200 hover:text-[#00E5FF] border-b border-slate-800/60"
+                  className="flex items-center justify-between py-3 px-3 rounded-xl text-base font-semibold text-[#172033] hover:bg-[#F0F7FF] hover:text-[#0284C7] transition-colors"
                 >
                   <span>{item.label}</span>
-                  <span className="text-xs font-mono text-[#00E5FF]/70 font-normal">
-                    0{idx + 1}
-                  </span>
+                  <span className="text-xs font-mono text-[#64748B]">0{idx + 1}</span>
                 </a>
               ))}
             </nav>
 
-            <div className="pt-8 flex flex-col gap-3">
+            <div className="pt-6 border-t border-[#E0F2FE] flex flex-col gap-3">
               {onOpenOrder && (
                 <button
                   onClick={() => {
@@ -272,10 +248,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
                     onOpenOrder();
                   }}
                   id="mobile-order-now-cta"
-                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#00E5FF] via-[#38BDF8] to-[#0284C7] text-slate-950 font-black text-center flex items-center justify-center gap-2 shadow-xl shadow-cyan-500/25 cursor-pointer"
+                  className="w-full py-3.5 px-4 rounded-xl bg-[#0284C7] text-white font-bold text-center flex items-center justify-center gap-2 shadow-md cursor-pointer"
                 >
-                  <ShoppingBag className="w-5 h-5 text-slate-950" />
-                  <span>ORDER NOW (PESAN ONLINE)</span>
+                  <ShoppingBag className="w-5 h-5" />
+                  <span>ORDER ONLINE (PESAN SEKARANG)</span>
                 </button>
               )}
 
@@ -284,9 +260,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setMobileMenuOpen(false)}
-                className="w-full py-3.5 px-4 rounded-xl bg-[#00E5FF]/20 border border-[#00E5FF]/40 text-[#00E5FF] font-bold text-center flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/10"
+                className="w-full py-3 px-4 rounded-xl bg-white border border-[#E0F2FE] text-[#0284C7] font-bold text-center flex items-center justify-center gap-2 shadow-sm"
               >
-                <MessageCircle className="w-5 h-5" />
+                <MessageCircle className="w-4 h-4" />
                 <span>ORDER VIA WHATSAPP</span>
               </a>
 
@@ -296,9 +272,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
                     setMobileMenuOpen(false);
                     onOpenAdmin();
                   }}
-                  className="w-full py-3 px-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-[#00E5FF] font-semibold text-sm flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 rounded-xl bg-[#F0F7FF] text-[#64748B] hover:text-[#0284C7] font-semibold text-xs flex items-center justify-center gap-2"
                 >
-                  <Lock className="w-4 h-4" />
+                  <Lock className="w-3.5 h-3.5" />
                   <span>MASUK ADMIN CMS</span>
                 </button>
               )}

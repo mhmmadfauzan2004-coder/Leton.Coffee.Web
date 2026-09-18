@@ -35,9 +35,11 @@ import {
   TrendingUp,
   Boxes,
   ShieldCheck,
-  ShieldAlert,
   Building2,
   Lock,
+  Search,
+  Calendar,
+  Coffee,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -52,24 +54,26 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
   const [activeTab, setActiveTab] = useState<string>(isOutletAdmin ? 'orders' : 'dashboard');
   const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
 
-  // Fallback to orders if outlet admin somehow lands on restricted tab
   useEffect(() => {
     if (isOutletAdmin && !['orders', 'stock', 'dashboard'].includes(activeTab)) {
       setActiveTab('orders');
     }
   }, [isOutletAdmin, activeTab]);
 
-  const superAdminNavItems = [
+  const mainSystemItems = [
     { id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard },
     { id: 'sales', label: 'LAPORAN SALES', icon: TrendingUp },
     { id: 'orders', label: 'AUDIT PESANAN', icon: ShoppingBag },
-    { id: 'home', label: 'HOME / HERO', icon: Home },
-    { id: 'chapter-5', label: 'CHAPTER 5', icon: MapPin },
-    { id: 'chapter-6', label: 'CHAPTER 6', icon: MapPin },
-    { id: 'let-go', label: "LET'GO", icon: Truck },
-    { id: 'open-booth', label: 'LETON OPEN BOOTH', icon: Store },
-    { id: 'menu', label: 'MENU & KATEGORI', icon: UtensilsCrossed },
     { id: 'stock', label: 'KONTROL STOK', icon: Boxes },
+    { id: 'menu', label: 'MENU & KATEGORI', icon: UtensilsCrossed },
+  ];
+
+  const contentItems = [
+    { id: 'home', label: 'HOME / HERO', icon: Home },
+    { id: 'chapter-5', label: 'CHAPTER 5 (SUDIRMAN)', icon: MapPin },
+    { id: 'chapter-6', label: 'CHAPTER 6 (KELAKAP)', icon: MapPin },
+    { id: 'let-go', label: "LET'GO MOBILE", icon: Truck },
+    { id: 'open-booth', label: 'LETON OPEN BOOTH', icon: Store },
     { id: 'baristas', label: 'TIM BARISTA', icon: Users },
     { id: 'about', label: 'ABOUT STORY', icon: Info },
     { id: 'story-slider', label: 'FOTO SLIDER STORY', icon: Images },
@@ -83,126 +87,192 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
     { id: 'dashboard', label: 'RINGKASAN OUTLET', icon: LayoutDashboard },
   ];
 
-  const navigationItems = isOutletAdmin ? outletAdminNavItems : superAdminNavItems;
-
   const handleSelectTab = (tabId: string) => {
     setActiveTab(tabId);
     setIsMobileNavOpen(false);
   };
 
   return (
-    <div className="min-h-screen bg-[#070b12] text-slate-100 flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-[#F8FBFF] text-[#172033] flex flex-col lg:flex-row">
       {/* ---------------------------------------------------- */}
       {/* SIDEBAR (Desktop)                                    */}
       {/* ---------------------------------------------------- */}
-      <aside className="hidden lg:flex w-72 flex-col justify-between bg-slate-950/90 border-r border-slate-800 p-6 shrink-0 h-screen sticky top-0">
+      <aside className="hidden lg:flex w-72 flex-col justify-between bg-white border-r border-[#E0F2FE] p-5 shrink-0 h-screen sticky top-0 shadow-[0_1px_12px_rgba(0,0,0,0.03)] z-30">
         <div className="space-y-6 overflow-y-auto pr-1">
           {/* Brand Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00E5FF] to-blue-600 flex items-center justify-center font-display font-black text-black text-xl shadow-lg shadow-cyan-500/20">
-                L
-              </div>
-              <div>
-                <h1 className="font-display font-black text-base tracking-wider text-white uppercase leading-none">
-                  {data.siteSettings.brandName}
-                </h1>
-                <span className="text-[10px] font-mono tracking-widest text-[#00E5FF] uppercase font-semibold block mt-1">
-                  ADMIN CMS v2.6
-                </span>
-              </div>
+          <div className="flex items-center gap-3 pb-4 border-b border-[#E0F2FE]">
+            <div className="w-10 h-10 rounded-xl bg-[#0284C7] text-white flex items-center justify-center font-display font-black text-xl shadow-sm">
+              L
+            </div>
+            <div>
+              <h1 className="font-display font-black text-base tracking-wider text-[#172033] uppercase leading-none">
+                {data.siteSettings.brandName || 'LETON COFFEE'}
+              </h1>
+              <span className="text-[10px] font-mono tracking-widest text-[#0284C7] uppercase font-bold block mt-1">
+                DUMAI SPECIALTY COFFEE
+              </span>
             </div>
           </div>
 
-          {/* Active Role & Outlet Context Card */}
-          <div
-            className={`p-3.5 rounded-2xl border ${
-              isOutletAdmin
-                ? 'bg-amber-950/20 border-amber-500/30 text-amber-200'
-                : 'bg-cyan-950/20 border-[#00E5FF]/30 text-cyan-200'
-            }`}
-          >
+          {/* Active Role & Context Card */}
+          <div className="p-3 rounded-xl bg-[#F0F7FF] border border-[#E0F2FE]">
             <div className="flex items-center justify-between">
-              <span
-                className={`px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
-                  isOutletAdmin
-                    ? 'bg-amber-500 text-slate-950'
-                    : 'bg-[#00E5FF] text-slate-950'
-                }`}
-              >
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-[#E0F2FE] text-[#0284C7]">
                 {isOutletAdmin ? 'OUTLET ADMIN' : 'SUPER ADMIN'}
               </span>
-              {isOutletAdmin ? (
-                <Lock className="w-3.5 h-3.5 text-amber-400" />
-              ) : (
-                <ShieldCheck className="w-3.5 h-3.5 text-[#00E5FF]" />
-              )}
+              <ShieldCheck className="w-4 h-4 text-[#0284C7]" />
             </div>
-            <p className="text-xs font-bold text-white mt-2 truncate flex items-center gap-1.5">
-              {isOutletAdmin ? <Building2 className="w-3.5 h-3.5 text-amber-400 shrink-0" /> : null}
+            <p className="text-xs font-bold text-[#172033] mt-2 truncate flex items-center gap-1.5">
+              {isOutletAdmin ? <Building2 className="w-3.5 h-3.5 text-[#0284C7] shrink-0" /> : null}
               <span>{assignedOutletName}</span>
             </p>
-            <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
-              User: <span className="text-slate-200">{auth.username}</span>
+            <p className="text-[10px] text-[#64748B] font-mono mt-0.5 truncate">
+              User: <strong className="text-[#172033]">{auth.username}</strong>
             </p>
           </div>
 
           {/* Real-time Status Badge */}
-          <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800/90 flex items-center gap-2.5">
+          <div className="p-2.5 rounded-xl bg-white border border-[#E0F2FE] flex items-center gap-2.5 shadow-sm">
             <Radio
-              className={`w-4 h-4 ${
-                isRealtimeConnected ? 'text-emerald-400 animate-pulse' : 'text-amber-400'
+              className={`w-3.5 h-3.5 ${
+                isRealtimeConnected ? 'text-emerald-600 animate-pulse' : 'text-amber-500'
               }`}
             />
             <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-mono font-bold text-white uppercase truncate">
+              <p className="text-[10px] font-mono font-bold text-[#172033] uppercase truncate">
                 {isRealtimeConnected ? 'REALTIME SYNC AKTIF' : 'SYNC POLLING'}
               </p>
-              <p className="text-[9px] text-slate-400 truncate">Perubahan langsung tayang</p>
+              <p className="text-[9px] text-[#64748B] truncate">Perubahan langsung tayang</p>
             </div>
           </div>
 
           {/* Navigation Links */}
-          <nav className="space-y-1">
-            {navigationItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleSelectTab(item.id)}
-                  id={`admin-nav-${item.id}`}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-display font-bold text-xs tracking-wider uppercase transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-[#00E5FF] text-slate-950 shadow-md shadow-[#00E5FF]/20 font-black'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
-                  }`}
-                >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
+          {isOutletAdmin ? (
+            <div className="space-y-1">
+              <span className="text-[10px] font-mono uppercase text-[#64748B] font-bold px-2 block mb-1">
+                MENU UTAMA OUTLET
+              </span>
+              {outletAdminNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleSelectTab(item.id)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold tracking-wide uppercase transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-[#0284C7] text-white shadow-sm'
+                        : 'text-[#64748B] hover:text-[#172033] hover:bg-[#F0F7FF]'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {/* Sistem Utama */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono uppercase text-[#64748B] font-bold px-2 block mb-1">
+                  SISTEM UTAMA
+                </span>
+                {mainSystemItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleSelectTab(item.id)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold tracking-wide uppercase transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-[#0284C7] text-white shadow-sm'
+                          : 'text-[#64748B] hover:text-[#172033] hover:bg-[#F0F7FF]'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Pengelolaan Konten */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono uppercase text-[#64748B] font-bold px-2 block mb-1">
+                  PENGELOLAAN KONTEN
+                </span>
+                {contentItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleSelectTab(item.id)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold tracking-wide uppercase transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-[#0284C7] text-white shadow-sm'
+                          : 'text-[#64748B] hover:text-[#172033] hover:bg-[#F0F7FF]'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Outlet Live Network Indicator */}
+          <div className="pt-2">
+            <span className="text-[10px] font-mono uppercase text-[#64748B] font-bold px-2 block mb-1.5">
+              OUTLET LIVE NETWORK
+            </span>
+            <div className="space-y-1.5 text-xs text-[#64748B]">
+              <div className="flex items-center justify-between p-2 rounded-lg bg-[#F8FBFF] border border-[#E0F2FE]">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="font-semibold text-[#172033]">Sudirman Hub</span>
+                </div>
+                <span className="text-[10px] text-emerald-600 font-mono font-bold">Online</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-[#F8FBFF] border border-[#E0F2FE]">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="font-semibold text-[#172033]">Kelakap 7</span>
+                </div>
+                <span className="text-[10px] text-emerald-600 font-mono font-bold">Online</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-[#F8FBFF] border border-[#E0F2FE]">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  <span className="font-semibold text-[#172033]">Let'GO Express</span>
+                </div>
+                <span className="text-[10px] text-amber-600 font-mono font-bold">Standby</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Footer Actions */}
-        <div className="pt-6 border-t border-slate-800/80 space-y-2">
+        <div className="pt-4 border-t border-[#E0F2FE] space-y-2">
           <button
             onClick={onBackToPublic}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold tracking-wider uppercase transition-colors cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#0284C7] text-xs font-bold tracking-wider uppercase transition-colors cursor-pointer shadow-sm"
           >
-            <ExternalLink className="w-3.5 h-3.5 text-[#00E5FF]" />
+            <ExternalLink className="w-3.5 h-3.5" />
             <span>Lihat Website Publik</span>
           </button>
 
-          <div className="flex items-center justify-between px-2 pt-2">
-            <span className="text-[11px] font-mono text-slate-400 truncate">
-              User: <span className="text-white font-bold">{auth.username}</span>
+          <div className="flex items-center justify-between px-2 pt-1">
+            <span className="text-xs text-[#64748B] truncate">
+              Masuk: <strong className="text-[#172033]">{auth.username}</strong>
             </span>
             <button
               onClick={logout}
-              className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-slate-900 transition-colors cursor-pointer"
+              className="text-rose-600 hover:text-rose-700 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
               title="Logout"
             >
               <LogOut className="w-4 h-4" />
@@ -214,101 +284,82 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
       {/* ---------------------------------------------------- */}
       {/* MOBILE HEADER                                        */}
       {/* ---------------------------------------------------- */}
-      <header className="lg:hidden bg-slate-950 border-b border-slate-800 p-4 sticky top-0 z-30 flex items-center justify-between">
+      <header className="lg:hidden bg-white border-b border-[#E0F2FE] p-4 sticky top-0 z-30 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[#00E5FF] flex items-center justify-center font-display font-black text-black text-base">
+          <div className="w-8 h-8 rounded-lg bg-[#0284C7] flex items-center justify-center font-display font-black text-white text-base">
             L
           </div>
           <div>
-            <span className="font-display font-bold text-sm text-white uppercase block leading-none">
-              {data.siteSettings.brandName} CMS
+            <h1 className="font-display font-black text-sm uppercase text-[#172033] leading-none">
+              {data.siteSettings.brandName || 'LETON'}
+            </h1>
+            <span className="text-[9px] font-mono text-[#0284C7] uppercase font-bold">
+              {isOutletAdmin ? 'OUTLET ADMIN' : 'SUPER ADMIN'}
             </span>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span
-                className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold ${
-                  isOutletAdmin
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                    : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                }`}
-              >
-                {isOutletAdmin ? assignedOutletName : 'SUPER ADMIN'}
-              </span>
-              <span className="text-[9px] font-mono text-[#00E5FF]">
-                {isRealtimeConnected ? '● LIVE' : '○ SYNC'}
-              </span>
-            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={onBackToPublic}
-            className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 text-[11px] font-semibold flex items-center gap-1.5"
+            className="px-2.5 py-1.5 rounded-lg bg-[#F0F7FF] border border-[#E0F2FE] text-[#0284C7] text-xs font-bold"
           >
-            <ExternalLink className="w-3 h-3 text-[#00E5FF]" />
-            <span>Website</span>
+            Web
           </button>
           <button
             onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
-            className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white"
+            className="p-2 rounded-lg bg-[#F0F7FF] text-[#172033] border border-[#E0F2FE]"
           >
             {isMobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </header>
 
-      {/* Mobile Nav Drawer */}
+      {/* Mobile Nav Overlay */}
       {isMobileNavOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-[#070b12]/98 backdrop-blur-xl pt-20 p-6 flex flex-col justify-between">
-          <div className="space-y-4">
-            <div
-              className={`p-3 rounded-xl border ${
-                isOutletAdmin
-                  ? 'bg-amber-950/30 border-amber-500/40 text-amber-200'
-                  : 'bg-cyan-950/30 border-[#00E5FF]/40 text-cyan-200'
-              }`}
+        <div className="lg:hidden fixed inset-0 z-40 bg-white/95 backdrop-blur-xl flex flex-col p-6 overflow-y-auto animate-fadeIn">
+          <div className="flex items-center justify-between pb-4 border-b border-[#E0F2FE]">
+            <span className="font-display font-black text-base uppercase text-[#172033]">
+              Menu Navigasi CMS
+            </span>
+            <button
+              onClick={() => setIsMobileNavOpen(false)}
+              className="p-2 text-[#64748B] hover:text-[#172033]"
             >
-              <span className="text-[10px] font-mono font-bold uppercase block">
-                {isOutletAdmin ? 'OUTLET ADMIN' : 'SUPER ADMIN'}
-              </span>
-              <p className="text-xs font-bold text-white mt-0.5">{assignedOutletName}</p>
-            </div>
+              <X className="w-6 h-6" />
+            </button>
+          </div>
 
-            <nav className="space-y-1">
-              {navigationItems.map((item) => {
+          <div className="py-4 space-y-1">
+            {(isOutletAdmin ? outletAdminNavItems : [...mainSystemItems, ...contentItems]).map(
+              (item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 return (
                   <button
                     key={item.id}
                     onClick={() => handleSelectTab(item.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-display font-bold text-sm tracking-wider uppercase ${
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold uppercase transition-all ${
                       isActive
-                        ? 'bg-[#00E5FF] text-slate-950 font-black'
-                        : 'text-slate-300 hover:text-white border-b border-slate-800/40'
+                        ? 'bg-[#0284C7] text-white shadow-sm'
+                        : 'text-[#64748B] hover:bg-[#F0F7FF] hover:text-[#172033]'
                     }`}
                   >
-                    <Icon className="w-4 h-4" />
+                    <Icon className="w-4 h-4 shrink-0" />
                     <span>{item.label}</span>
                   </button>
                 );
-              })}
-            </nav>
+              }
+            )}
           </div>
 
-          <div className="pt-6 border-t border-slate-800 flex items-center justify-between">
-            <button
-              onClick={onBackToPublic}
-              className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-xs font-semibold"
-            >
-              Ke Website Publik
-            </button>
+          <div className="pt-4 border-t border-[#E0F2FE] mt-auto">
             <button
               onClick={logout}
-              className="px-4 py-2 rounded-xl bg-rose-950/80 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-2"
+              className="w-full py-2.5 px-4 rounded-xl bg-rose-50 text-rose-600 font-bold text-xs flex items-center justify-center gap-2"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Logout</span>
+              <LogOut className="w-4 h-4" />
+              <span>LOGOUT DARI SISTEM</span>
             </button>
           </div>
         </div>
@@ -317,51 +368,67 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
       {/* ---------------------------------------------------- */}
       {/* MAIN CONTENT AREA                                    */}
       {/* ---------------------------------------------------- */}
-      <main className="flex-1 p-4 sm:p-8 lg:p-12 overflow-y-auto max-w-7xl">
-        {/* Guard for Outlet Admin attempting unauthorized tab */}
-        {isOutletAdmin && !['orders', 'stock', 'dashboard'].includes(activeTab) ? (
-          <div className="p-8 rounded-3xl bg-slate-900/90 border border-rose-500/40 text-center max-w-lg mx-auto my-12">
-            <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto mb-4">
-              <ShieldAlert className="w-7 h-7" />
+      <main className="flex-1 min-w-0 bg-[#F8FBFF] flex flex-col min-h-screen">
+        {/* Desktop Sticky Header */}
+        <header className="hidden lg:flex items-center justify-between px-8 py-4 bg-white/90 backdrop-blur-md border-b border-[#E0F2FE] sticky top-0 z-20 shadow-[0_1px_8px_rgba(0,0,0,0.02)]">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-xs text-[#64748B]">
+              <span>Leton HQ Dumai</span>
+              <span>/</span>
+              <span className="text-[#0284C7] font-bold">
+                {isOutletAdmin ? 'Outlet Console' : 'Executive Overview'}
+              </span>
             </div>
-            <h3 className="font-display font-black text-xl text-white uppercase">Akses Ditolak</h3>
-            <p className="text-slate-400 text-xs mt-2 leading-relaxed">
-              Role Outlet Admin ({assignedOutletName}) hanya diizinkan mengelola Pesanan Masuk, Kontrol Stok, dan Ringkasan Outlet. Pengaturan CMS global dikelola oleh Super Admin.
-            </p>
+
+            <div className="h-4 w-[1px] bg-[#E0F2FE] mx-2" />
+
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Sudirman Live</span>
+              </span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Kelakap 7 Live</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => setActiveTab('orders')}
-              className="mt-5 px-5 py-2.5 rounded-xl bg-[#00E5FF] text-slate-950 font-display font-bold text-xs uppercase tracking-wider hover:opacity-90 transition-opacity cursor-pointer"
+              onClick={onBackToPublic}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#0284C7] text-xs font-bold transition-all shadow-sm"
             >
-              Buka Pesanan Masuk
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Lihat Website</span>
             </button>
           </div>
-        ) : (
-          <>
-            {activeTab === 'dashboard' && <DashboardOverview onNavigateTab={handleSelectTab} />}
-            {activeTab === 'sales' && <SalesReportManager />}
-            {activeTab === 'orders' && <OrderManager />}
-            {activeTab === 'stock' && <StockManager />}
-            {!isOutletAdmin && (
-              <>
-                {activeTab === 'home' && <HomeEditor />}
-                {activeTab === 'chapter-5' && (
-                  <ChapterEditor branchId="chapter-5" title="CHAPTER 5 (DUMAI SUDIRMAN)" />
-                )}
-                {activeTab === 'chapter-6' && (
-                  <ChapterEditor branchId="chapter-6" title="CHAPTER 6 (DUMAI RATU SIMA)" />
-                )}
-                {activeTab === 'let-go' && <LetGoEditor />}
-                {activeTab === 'open-booth' && <OpenBoothEditor />}
-                {activeTab === 'menu' && <MenuManager />}
-                {activeTab === 'baristas' && <BaristaManager />}
-                {activeTab === 'about' && <AboutEditor />}
-                {activeTab === 'story-slider' && <StorySliderManager />}
-                {activeTab === 'contact' && <ContactEditor />}
-                {activeTab === 'settings' && <SettingsEditor />}
-              </>
-            )}
-          </>
-        )}
+        </header>
+
+        {/* View Component Render */}
+        <div className="p-4 sm:p-6 lg:p-8 flex-1">
+          {activeTab === 'dashboard' && (
+            <DashboardOverview onNavigateTab={(tab) => setActiveTab(tab)} />
+          )}
+          {activeTab === 'sales' && !isOutletAdmin && <SalesReportManager />}
+          {activeTab === 'orders' && <OrderManager />}
+          {activeTab === 'stock' && <StockManager />}
+          {activeTab === 'home' && !isOutletAdmin && <HomeEditor />}
+          {activeTab === 'chapter-5' && !isOutletAdmin && (
+            <ChapterEditor chapterId="chapter-5" />
+          )}
+          {activeTab === 'chapter-6' && !isOutletAdmin && (
+            <ChapterEditor chapterId="chapter-6" />
+          )}
+          {activeTab === 'let-go' && !isOutletAdmin && <LetGoEditor />}
+          {activeTab === 'open-booth' && !isOutletAdmin && <OpenBoothEditor />}
+          {activeTab === 'menu' && !isOutletAdmin && <MenuManager />}
+          {activeTab === 'baristas' && !isOutletAdmin && <BaristaManager />}
+          {activeTab === 'about' && !isOutletAdmin && <AboutEditor />}
+          {activeTab === 'story-slider' && !isOutletAdmin && <StorySliderManager />}
+          {activeTab === 'contact' && !isOutletAdmin && <ContactEditor />}
+          {activeTab === 'settings' && !isOutletAdmin && <SettingsEditor />}
+        </div>
       </main>
     </div>
   );

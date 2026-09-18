@@ -4,7 +4,7 @@ import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
-import { MapPin, Clock, MessageCircle, ExternalLink, Navigation } from 'lucide-react';
+import { MapPin, Clock, MessageCircle, ExternalLink, Navigation, Store } from 'lucide-react';
 
 interface ChapterSectionProps {
   branch: BranchItem;
@@ -21,140 +21,110 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
   );
 
   const resolvedBg = resolveMediaUrl(branch.bgImage);
-  const overlayPercent = typeof branch.bgOverlay === 'number' ? branch.bgOverlay : 45;
-  const overlayOpacity = Math.max(0, Math.min(100, overlayPercent)) / 100;
-
-  // Tailored responsive background positioning per branch to preserve natural subject composition (people, faces & focal points) on mobile & desktop
-  const getBranchBgPosition = () => {
-    if (branch.id === 'chapter-5') {
-      return 'bg-[position:50%_20%] sm:bg-[position:50%_28%] md:bg-center';
-    }
-    if (branch.id === 'chapter-6') {
-      return 'bg-[position:50%_25%] sm:bg-[position:50%_32%] md:bg-center';
-    }
-    return 'bg-[position:50%_25%] sm:bg-center';
-  };
 
   return (
     <section
       id={branch.id}
-      className="relative min-h-screen w-full flex items-center justify-center overflow-hidden py-28 sm:py-36 px-4 sm:px-6 lg:px-8 bg-[#070b12]"
+      className="relative w-full overflow-hidden py-20 sm:py-28 px-4 sm:px-6 lg:px-8 bg-[#F0F7FF] border-t border-[#E0F2FE]"
     >
-      {/* Background Image Layer (Original high quality photo with tailored positioning) */}
-      {resolvedBg && (
-        <div
-          className={`absolute inset-0 bg-cover bg-no-repeat ${getBranchBgPosition()} transition-all duration-300 pointer-events-none`}
-          style={{ backgroundImage: `url("${resolvedBg}")` }}
-        />
-      )}
-
-      {/* Dynamic CSS Dark Overlay Layer (Controlled per Chapter from Admin 0% - 100%) */}
-      <div
-        className="absolute inset-0 bg-black pointer-events-none transition-opacity duration-300"
-        style={{ opacity: overlayOpacity }}
-      />
-
-      {/* Main Content Layout - Center Aligned Minimalist Floating Over Wallpaper */}
-      <div className="relative z-10 max-w-4xl mx-auto w-full text-center flex flex-col items-center">
-        {/* Chapter Pill */}
-        <motion.div
-          initial={{ opacity: 0, y: -15 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#070b12]/90 backdrop-blur-md border border-[#00E5FF]/40 text-[#00E5FF] text-xs sm:text-sm font-mono tracking-widest uppercase mb-4 shadow-lg shadow-[0_0_15px_rgba(0,229,255,0.15)]"
-        >
-          <span className="font-bold">{branch.chapterNumber} — {branch.chapterName}</span>
-          {branch.badge && <span className="text-slate-400">/ {branch.badge}</span>}
-        </motion.div>
-
-        {/* Branch Headline */}
-        <motion.h2
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.1 }}
-          className="font-display font-black text-4xl sm:text-6xl md:text-7xl text-white tracking-tight uppercase leading-tight drop-shadow-lg"
-        >
-          {branch.branchName}
-        </motion.h2>
-
-        {/* Tagline */}
-        {branch.tagline && (
-          <motion.p
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="mt-3 text-sm sm:text-base md:text-lg font-semibold tracking-wider text-[#00E5FF] uppercase drop-shadow-md"
-          >
-            {branch.tagline}
-          </motion.p>
-        )}
-
-        {/* Description */}
-        <motion.p
-          initial={{ opacity: 0, y: 15 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.3 }}
-          className="mt-6 text-base sm:text-lg md:text-xl text-slate-100 leading-relaxed max-w-3xl drop-shadow-md font-normal"
-        >
-          {branch.description}
-        </motion.p>
-
-        {/* Clean Meta Information (Address & Hours) - No Card Container, Pure Clean Text */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10 text-center"
-        >
-          {/* Address */}
-          <div className="flex items-center justify-center gap-2.5 text-slate-100 drop-shadow-md">
-            <MapPin className="w-5 h-5 text-[#00E5FF] shrink-0" />
-            <span className="text-sm sm:text-base font-medium">{branch.address}</span>
+      <div className="max-w-7xl mx-auto w-full">
+        {/* Card Layout */}
+        <div className="bg-white rounded-3xl border border-[#E0F2FE] shadow-xl overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-0 items-stretch">
+          {/* Image Column (5 cols) */}
+          <div className="lg:col-span-5 relative min-h-[300px] sm:min-h-[400px] lg:min-h-full bg-[#E0F2FE]">
+            {resolvedBg ? (
+              <img
+                src={resolvedBg}
+                alt={branch.branchName}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-[#0284C7]">
+                <Store className="w-16 h-16 opacity-40" />
+              </div>
+            )}
+            <div className="absolute top-4 left-4">
+              <span className="px-3.5 py-1.5 rounded-full bg-white/90 backdrop-blur-md text-[#0284C7] text-xs font-bold font-mono uppercase tracking-wider shadow-sm flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                <span>Buka Sekarang</span>
+              </span>
+            </div>
           </div>
 
-          {/* Hours */}
-          <div className="flex items-center justify-center gap-2.5 text-slate-100 drop-shadow-md">
-            <Clock className="w-5 h-5 text-[#00E5FF] shrink-0" />
-            <span className="text-sm sm:text-base font-medium">{branch.openingHours}</span>
+          {/* Details Column (7 cols) */}
+          <div className="lg:col-span-7 p-6 sm:p-10 lg:p-12 flex flex-col justify-between">
+            <div>
+              {/* Badge */}
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#F0F7FF] text-[#0284C7] border border-[#E0F2FE] text-xs font-mono font-bold uppercase tracking-wider mb-4">
+                <span>{branch.chapterNumber} — {branch.chapterName}</span>
+                {branch.badge && <span className="text-[#64748B]">/ {branch.badge}</span>}
+              </div>
+
+              {/* Title */}
+              <h2 className="font-display font-black text-2xl sm:text-4xl lg:text-5xl text-[#172033] uppercase tracking-tight leading-tight">
+                {branch.branchName}
+              </h2>
+
+              {/* Tagline */}
+              {branch.tagline && (
+                <p className="mt-2 text-sm sm:text-base font-bold text-[#0284C7] uppercase tracking-wide">
+                  {branch.tagline}
+                </p>
+              )}
+
+              {/* Description */}
+              <p className="mt-4 text-sm sm:text-base text-[#64748B] leading-relaxed">
+                {branch.description}
+              </p>
+
+              {/* Info Badges (Address & Hours) */}
+              <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-[#E0F2FE]">
+                <div className="flex items-start gap-2.5 text-xs sm:text-sm text-[#172033]">
+                  <MapPin className="w-4 h-4 text-[#0284C7] shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-[11px] uppercase tracking-wider text-[#64748B]">Lokasi</span>
+                    <span>{branch.address}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2.5 text-xs sm:text-sm text-[#172033]">
+                  <Clock className="w-4 h-4 text-[#0284C7] shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-[11px] uppercase tracking-wider text-[#64748B]">Jam Operasional</span>
+                    <span>{branch.openingHours}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="mt-8 pt-6 border-t border-[#E0F2FE] flex flex-wrap items-center gap-3">
+              <a
+                href={branchWALink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-6 py-3 rounded-xl bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold text-xs sm:text-sm tracking-wide uppercase flex items-center gap-2 shadow-sm transition-all"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>CHAT WHATSAPP CABANG</span>
+              </a>
+
+              {branch.mapsUrl && (
+                <a
+                  href={branch.mapsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-5 py-3 rounded-xl bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#172033] font-bold text-xs sm:text-sm tracking-wide uppercase flex items-center gap-2 shadow-sm transition-all"
+                >
+                  <Navigation className="w-4 h-4 text-[#0284C7]" />
+                  <span>GOOGLE MAPS</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-[#64748B]" />
+                </a>
+              )}
+            </div>
           </div>
-        </motion.div>
-
-        {/* Action CTAs - Centered */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.5 }}
-          className="mt-10 flex flex-wrap items-center justify-center gap-4"
-        >
-          <a
-            href={branchWALink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-8 py-4 rounded-xl bg-[#00E5FF] hover:bg-[#38BDF8] text-slate-950 font-display font-black text-xs sm:text-sm tracking-wider uppercase flex items-center gap-2.5 shadow-xl shadow-cyan-500/30 hover:shadow-cyan-500/50 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
-          >
-            <MessageCircle className="w-4 h-4" />
-            <span>CHAT WHATSAPP CABANG</span>
-          </a>
-
-          {branch.mapsUrl && (
-            <a
-              href={branch.mapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-8 py-4 rounded-xl bg-black/60 hover:bg-black/80 border border-white/30 hover:border-[#00E5FF] text-white font-display font-bold text-xs sm:text-sm tracking-wider uppercase flex items-center gap-2.5 backdrop-blur-md transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer shadow-lg"
-            >
-              <Navigation className="w-4 h-4 text-[#00E5FF]" />
-              <span>PETUNJUK GOOGLE MAPS</span>
-              <ExternalLink className="w-3.5 h-3.5 text-slate-300" />
-            </a>
-          )}
-        </motion.div>
+        </div>
       </div>
     </section>
   );

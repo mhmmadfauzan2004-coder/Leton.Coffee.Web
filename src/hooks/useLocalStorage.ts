@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { safeSetItem, safeGetItem } from '../utils/safeStorage';
 
 /**
  * Custom hook for reactive persistent state connected to localStorage
@@ -9,7 +10,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       return initialValue;
     }
     try {
-      const item = window.localStorage.getItem(key);
+      const item = safeGetItem(key);
       return item ? JSON.parse(item) : initialValue;
     } catch (error) {
       console.warn(`Error reading localStorage key "${key}":`, error);
@@ -22,7 +23,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       const valueToStore = value instanceof Function ? value(storedValue) : value;
       setStoredValue(valueToStore);
       if (typeof window !== 'undefined') {
-        window.localStorage.setItem(key, JSON.stringify(valueToStore));
+        safeSetItem(key, JSON.stringify(valueToStore));
       }
     } catch (error) {
       console.warn(`Error setting localStorage key "${key}":`, error);

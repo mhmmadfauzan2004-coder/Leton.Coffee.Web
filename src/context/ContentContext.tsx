@@ -1,6 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { LetonData, AuthState, AdminRole } from '../types';
+import { LetonData, AuthState, AdminRole, MenuItem, MenuCategory, CustomizationOption } from '../types';
 import { initialLetonData } from '../data/initialData';
+import {
+  saveSingleMenuItemGranular,
+  deleteSingleMenuItemGranular,
+  saveSingleCategoryGranular,
+  deleteSingleCategoryGranular,
+  saveSingleCustomOptionGranular,
+  deleteSingleCustomOptionGranular,
+} from '../utils/supabaseGranular';
 import {
   loadStoredContent,
   saveStoredContent,
@@ -42,6 +50,12 @@ interface ContentContextType {
   dismissToast: (id: string) => void;
   saveData: (newData: LetonData) => Promise<boolean>;
   updateData: (partialOrFn: Partial<LetonData> | ((prev: LetonData) => LetonData)) => Promise<boolean>;
+  saveMenuItem: (item: MenuItem) => Promise<boolean>;
+  deleteMenuItem: (itemId: string) => Promise<boolean>;
+  saveCategory: (category: MenuCategory) => Promise<boolean>;
+  deleteCategory: (catId: string) => Promise<boolean>;
+  saveCustomOption: (type: 'topping' | 'syrup', option: CustomizationOption) => Promise<boolean>;
+  deleteCustomOption: (type: 'topping' | 'syrup', optionId: string) => Promise<boolean>;
   uploadImage: (file: File) => Promise<string | null>;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -376,6 +390,163 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  // Granular 1-record update for Menu Item (Product)
+  const saveMenuItem = async (item: MenuItem): Promise<boolean> => {
+    try {
+      const existingIdx = data.menuItems.findIndex((i) => i.id === item.id);
+      let nextItems = [...data.menuItems];
+      if (existingIdx >= 0) {
+        nextItems[existingIdx] = item;
+      } else {
+        nextItems.push(item);
+      }
+      const nextData = { ...data, menuItems: nextItems };
+      setData(nextData);
+      saveStoredContent(nextData);
+      setLastUpdated(Date.now());
+
+      if (isSupabaseConfigured()) {
+        const res = await saveSingleMenuItemGranular(item, nextData);
+        if (!res.success) {
+          showToast('Peringatan simpan cloud: ' + (res.error || 'Gagal sync'), 'error');
+        }
+      }
+      return true;
+    } catch (err: any) {
+      showToast('Gagal menyimpan item menu: ' + err.message, 'error');
+      return false;
+    }
+  };
+
+  const deleteMenuItem = async (itemId: string): Promise<boolean> => {
+    try {
+      const nextItems = data.menuItems.filter((i) => i.id !== itemId);
+      const nextData = { ...data, menuItems: nextItems };
+      setData(nextData);
+      saveStoredContent(nextData);
+      setLastUpdated(Date.now());
+
+      if (isSupabaseConfigured()) {
+        const res = await deleteSingleMenuItemGranular(itemId, nextData);
+        if (!res.success) {
+          showToast('Peringatan hapus cloud: ' + (res.error || 'Gagal sync'), 'error');
+        }
+      }
+      return true;
+    } catch (err: any) {
+      showToast('Gagal menghapus item menu: ' + err.message, 'error');
+      return false;
+    }
+  };
+
+  const saveCategory = async (category: MenuCategory): Promise<boolean> => {
+    try {
+      const existingIdx = data.menuCategories.findIndex((c) => c.id === category.id);
+      let nextCats = [...data.menuCategories];
+      if (existingIdx >= 0) {
+        nextCats[existingIdx] = category;
+      } else {
+        nextCats.push(category);
+      }
+      const nextData = { ...data, menuCategories: nextCats };
+      setData(nextData);
+      saveStoredContent(nextData);
+      setLastUpdated(Date.now());
+
+      if (isSupabaseConfigured()) {
+        const res = await saveSingleCategoryGranular(category, nextData);
+        if (!res.success) {
+          showToast('Peringatan simpan kategori cloud: ' + (res.error || 'Gagal sync'), 'error');
+        }
+      }
+      return true;
+    } catch (err: any) {
+      showToast('Gagal menyimpan kategori: ' + err.message, 'error');
+      return false;
+    }
+  };
+
+  const deleteCategory = async (catId: string): Promise<boolean> => {
+    try {
+      const nextCats = data.menuCategories.filter((c) => c.id !== catId);
+      const fallbackCat = nextCats[0]?.id || 'general';
+      const nextItems = data.menuItems.map((item) =>
+        item.categoryId === catId ? { ...item, categoryId: fallbackCat } : item
+      );
+      const nextData = { ...data, menuCategories: nextCats, menuItems: nextItems };
+      setData(nextData);
+      saveStoredContent(nextData);
+      setLastUpdated(Date.now());
+
+      if (isSupabaseConfigured()) {
+        const res = await deleteSingleCategoryGranular(catId, nextData);
+        if (!res.success) {
+          showToast('Peringatan hapus kategori cloud: ' + (res.error || 'Gagal sync'), 'error');
+        }
+      }
+      return true;
+    } catch (err: any) {
+      showToast('Gagal menghapus kategori: ' + err.message, 'error');
+      return false;
+    }
+  };
+
+  const saveCustomOption = async (type: 'topping' | 'syrup', option: CustomizationOption): Promise<boolean> => {
+    try {
+      const isTopping = type === 'topping';
+      const targetList = isTopping ? data.masterToppings : data.masterSyrups;
+      const existingIdx = targetList.findIndex((o) => o.id === option.id);
+      let nextList = [...targetList];
+      if (existingIdx >= 0) {
+        nextList[existingIdx] = option;
+      } else {
+        nextList.push(option);
+      }
+      const nextData = isTopping
+        ? { ...data, masterToppings: nextList }
+        : { ...data, masterSyrups: nextList };
+      setData(nextData);
+      saveStoredContent(nextData);
+      setLastUpdated(Date.now());
+
+      if (isSupabaseConfigured()) {
+        const res = await saveSingleCustomOptionGranular(type, option, nextData);
+        if (!res.success) {
+          showToast(`Peringatan simpan ${type} cloud: ` + (res.error || 'Gagal sync'), 'error');
+        }
+      }
+      return true;
+    } catch (err: any) {
+      showToast(`Gagal menyimpan ${type}: ` + err.message, 'error');
+      return false;
+    }
+  };
+
+  const deleteCustomOption = async (type: 'topping' | 'syrup', optionId: string): Promise<boolean> => {
+    try {
+      const isTopping = type === 'topping';
+      const targetList = isTopping ? data.masterToppings : data.masterSyrups;
+      const nextList = targetList.filter((o) => o.id !== optionId);
+      const nextData = isTopping
+        ? { ...data, masterToppings: nextList }
+        : { ...data, masterSyrups: nextList };
+      setData(nextData);
+      saveStoredContent(nextData);
+      setLastUpdated(Date.now());
+
+      if (isSupabaseConfigured()) {
+        const res = await deleteSingleCustomOptionGranular(type, optionId, nextData);
+        if (!res.success) {
+          showToast(`Peringatan hapus ${type} cloud: ` + (res.error || 'Gagal sync'), 'error');
+        }
+      }
+      return true;
+    } catch (err: any) {
+      showToast(`Gagal menghapus ${type}: ` + err.message, 'error');
+      return false;
+    }
+  };
+
   // Upload image to Supabase Storage Bucket ('leton-images') with fallback to server
   const uploadImage = async (file: File): Promise<string | null> => {
     try {
@@ -646,6 +817,12 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         dismissToast,
         saveData,
         updateData,
+        saveMenuItem,
+        deleteMenuItem,
+        saveCategory,
+        deleteCategory,
+        saveCustomOption,
+        deleteCustomOption,
         uploadImage,
         login,
         logout,

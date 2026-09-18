@@ -163,6 +163,7 @@ export async function saveContentToSupabase(contentData: LetonData): Promise<{ s
     while (pendingSaveData) {
       const currentData = pendingSaveData;
       pendingSaveData = null;
+      const startTime = Date.now();
 
       try {
         const client = getSupabase();
@@ -180,6 +181,20 @@ export async function saveContentToSupabase(contentData: LetonData): Promise<{ s
           .from(SUPABASE_TABLE_NAME)
           .upsert(payload, { onConflict: 'id' });
 
+        const endTime = Date.now();
+        const duration = endTime - startTime;
+
+        console.table({
+          'operation': 'UPSERT_FULL_CMS_CONTENT',
+          'table': SUPABASE_TABLE_NAME,
+          'record ID': SUPABASE_ROW_ID,
+          'request start': new Date(startTime).toISOString(),
+          'request end': new Date(endTime).toISOString(),
+          'duration': `${duration}ms`,
+          'Supabase error code': error?.code || 'NONE',
+          'Supabase error message': error?.message || 'NONE',
+        });
+
         if (error) {
           console.error('[Supabase Database Upsert Error]:', {
             message: error.message,
@@ -187,12 +202,25 @@ export async function saveContentToSupabase(contentData: LetonData): Promise<{ s
             details: error.details,
             hint: error.hint,
             table: SUPABASE_TABLE_NAME,
+            durationMs: duration,
           });
           lastResult = { success: false, error: `${error.message}${error.hint ? ` (${error.hint})` : ''}` };
         } else {
           lastResult = { success: true };
         }
       } catch (err: any) {
+        const endTime = Date.now();
+        const duration = endTime - startTime;
+        console.table({
+          'operation': 'UPSERT_FULL_CMS_CONTENT_EXCEPTION',
+          'table': SUPABASE_TABLE_NAME,
+          'record ID': SUPABASE_ROW_ID,
+          'request start': new Date(startTime).toISOString(),
+          'request end': new Date(endTime).toISOString(),
+          'duration': `${duration}ms`,
+          'Supabase error code': err?.code || 'EXCEPTION',
+          'Supabase error message': err?.message || 'Gagal menyimpan data ke Supabase.',
+        });
         console.error('[saveContentToSupabase Exception]:', err);
         lastResult = { success: false, error: err?.message || 'Gagal menyimpan data ke Supabase.' };
       }

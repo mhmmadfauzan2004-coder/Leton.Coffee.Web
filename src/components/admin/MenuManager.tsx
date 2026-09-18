@@ -23,7 +23,16 @@ import {
 } from 'lucide-react';
 
 export const MenuManager: React.FC = () => {
-  const { data, saveData } = useContent();
+  const {
+    data,
+    saveData,
+    saveMenuItem,
+    deleteMenuItem,
+    saveCategory,
+    deleteCategory,
+    saveCustomOption,
+    deleteCustomOption,
+  } = useContent();
   const { menuCategories, menuItems } = data;
   const masterToppings = data.masterToppings || DEFAULT_MASTER_TOPPINGS;
   const masterSyrups = data.masterSyrups || DEFAULT_MASTER_SYRUPS;
@@ -105,28 +114,15 @@ export const MenuManager: React.FC = () => {
     e.preventDefault();
     if (!itemForm.name.trim()) return;
 
-    let updatedItems = [...menuItems];
-    if (editingItem) {
-      updatedItems = updatedItems.map((item) => (item.id === editingItem.id ? itemForm : item));
-    } else {
-      updatedItems.push(itemForm);
-    }
-
-    await saveData({
-      ...data,
-      menuItems: updatedItems,
-    });
+    await saveMenuItem(itemForm);
     setIsItemModalOpen(false);
   };
 
   const handleToggleAvailability = async (itemId: string) => {
-    const updatedItems = menuItems.map((item) =>
-      item.id === itemId ? { ...item, isAvailable: !item.isAvailable } : item
-    );
-    await saveData({
-      ...data,
-      menuItems: updatedItems,
-    });
+    const target = menuItems.find((item) => item.id === itemId);
+    if (target) {
+      await saveMenuItem({ ...target, isAvailable: !target.isAvailable });
+    }
   };
 
   const handleMoveItem = async (index: number, direction: 'up' | 'down') => {
@@ -172,18 +168,12 @@ export const MenuManager: React.FC = () => {
     e.preventDefault();
     if (!catForm.name.trim()) return;
 
-    let updatedCats = [...menuCategories];
-    if (editingCat) {
-      updatedCats = updatedCats.map((cat) => (cat.id === editingCat.id ? catForm : cat));
-    } else {
-      const generatedId = catForm.id || catForm.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-      updatedCats.push({ ...catForm, id: generatedId });
-    }
+    const targetCat = {
+      ...catForm,
+      id: catForm.id || catForm.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+    };
 
-    await saveData({
-      ...data,
-      menuCategories: updatedCats,
-    });
+    await saveCategory(targetCat);
     setIsCatModalOpen(false);
   };
 
@@ -191,19 +181,17 @@ export const MenuManager: React.FC = () => {
   // Customization (Topping / Syrup) Actions
   // ----------------------------------------
   const handleToggleTopping = async (id: string) => {
-    const updated = masterToppings.map((t) => (t.id === id ? { ...t, isActive: !t.isActive } : t));
-    await saveData({
-      ...data,
-      masterToppings: updated,
-    });
+    const target = masterToppings.find((t) => t.id === id);
+    if (target) {
+      await saveCustomOption('topping', { ...target, isActive: !target.isActive });
+    }
   };
 
   const handleToggleSyrup = async (id: string) => {
-    const updated = masterSyrups.map((s) => (s.id === id ? { ...s, isActive: !s.isActive } : s));
-    await saveData({
-      ...data,
-      masterSyrups: updated,
-    });
+    const target = masterSyrups.find((s) => s.id === id);
+    if (target) {
+      await saveCustomOption('syrup', { ...target, isActive: !target.isActive });
+    }
   };
 
   const handleOpenAddCustomOption = (type: 'topping' | 'syrup') => {
@@ -231,29 +219,7 @@ export const MenuManager: React.FC = () => {
     e.preventDefault();
     if (!customOptionForm.name.trim()) return;
 
-    if (customOptionType === 'topping') {
-      let updated = [...masterToppings];
-      if (editingCustomOption) {
-        updated = updated.map((o) => (o.id === editingCustomOption.id ? customOptionForm : o));
-      } else {
-        updated.push(customOptionForm);
-      }
-      await saveData({
-        ...data,
-        masterToppings: updated,
-      });
-    } else {
-      let updated = [...masterSyrups];
-      if (editingCustomOption) {
-        updated = updated.map((o) => (o.id === editingCustomOption.id ? customOptionForm : o));
-      } else {
-        updated.push(customOptionForm);
-      }
-      await saveData({
-        ...data,
-        masterSyrups: updated,
-      });
-    }
+    await saveCustomOption(customOptionType, customOptionForm);
     setIsCustomOptionModalOpen(false);
   };
 
@@ -264,35 +230,15 @@ export const MenuManager: React.FC = () => {
     if (!deleteConfirm) return;
 
     if (deleteConfirm.type === 'item') {
-      const updatedItems = menuItems.filter((i) => i.id !== deleteConfirm.id);
-      await saveData({
-        ...data,
-        menuItems: updatedItems,
-      });
+      await deleteMenuItem(deleteConfirm.id);
     } else if (deleteConfirm.type === 'category') {
-      const updatedCats = menuCategories.filter((c) => c.id !== deleteConfirm.id);
-      const fallbackCat = updatedCats[0]?.id || 'general';
-      const updatedItems = menuItems.map((item) =>
-        item.categoryId === deleteConfirm.id ? { ...item, categoryId: fallbackCat } : item
-      );
-      await saveData({
-        ...data,
-        menuCategories: updatedCats,
-        menuItems: updatedItems,
-      });
+      await deleteCategory(deleteConfirm.id);
     } else if (deleteConfirm.type === 'topping') {
-      const updated = masterToppings.filter((t) => t.id !== deleteConfirm.id);
-      await saveData({
-        ...data,
-        masterToppings: updated,
-      });
+      await deleteCustomOption('topping', deleteConfirm.id);
     } else if (deleteConfirm.type === 'syrup') {
-      const updated = masterSyrups.filter((s) => s.id !== deleteConfirm.id);
-      await saveData({
-        ...data,
-        masterSyrups: updated,
-      });
+      await deleteCustomOption('syrup', deleteConfirm.id);
     }
+
     setDeleteConfirm(null);
   };
 

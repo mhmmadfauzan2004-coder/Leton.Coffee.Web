@@ -39,6 +39,49 @@ export const OrderConfirmation: React.FC<OrderConfirmationProps> = ({
   const [currentOrder, setCurrentOrder] = useState<CustomerOrder>(initialOrder);
   const [copied, setCopied] = useState(false);
 
+  // Instantly scroll to the absolute top upon rendering the Confirmation / Bill page
+  useEffect(() => {
+    const scrollToTop = () => {
+      // Reset window scroll
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      }
+      // Reset document root
+      if (document.documentElement) {
+        document.documentElement.scrollTop = 0;
+      }
+      if (document.body) {
+        document.body.scrollTop = 0;
+      }
+      // Reset all scrollable modal containers and wrappers
+      const scrollableElements = document.querySelectorAll(
+        '.overflow-y-auto, .overflow-auto, [data-scroll-container="true"]'
+      );
+      scrollableElements.forEach((el) => {
+        el.scrollTop = 0;
+        if (typeof el.scrollTo === 'function') {
+          el.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+        }
+      });
+    };
+
+    // Immediate execution
+    scrollToTop();
+
+    // Prevent race conditions with animation frames and microtask timeouts
+    const rafId = requestAnimationFrame(() => {
+      scrollToTop();
+    });
+    const t1 = setTimeout(scrollToTop, 20);
+    const t2 = setTimeout(scrollToTop, 100);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, []);
+
   // Keep live sync with database / admin updates
   useEffect(() => {
     setCurrentOrder(initialOrder);
@@ -112,7 +155,7 @@ Halo Barista ${currentOrder.outletName}, saya ingin menanyakan status pesanan no
         </div>
         <div>
           <p className="font-display font-black text-sm sm:text-base text-[#0C4A6E] leading-snug">
-            “Terima kasih sudah order online, ditunggu di outlet ya untuk mengambil pesanannya.”
+            “Terima kasih sudah online, ditunggu di outlet ya untuk mengambil pesanannya.”
           </p>
           <span className="text-xs text-[#0284C7] font-medium block mt-0.5">
             Leton Coffee • {currentOrder.outletName}

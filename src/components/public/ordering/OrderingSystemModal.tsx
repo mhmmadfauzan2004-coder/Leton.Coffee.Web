@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   OrderOutlet,
   CartItem,
@@ -65,6 +65,42 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
   const [completedOrder, setCompletedOrder] = useState<CustomerOrder | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [pendingCustomizeItem, setPendingCustomizeItem] = useState<MenuItem | null>(null);
+  const modalContainerRef = useRef<HTMLDivElement>(null);
+
+  // Scroll reset helper for modal and window
+  const scrollToTop = () => {
+    if (modalContainerRef.current) {
+      modalContainerRef.current.scrollTop = 0;
+      if (typeof modalContainerRef.current.scrollTo === 'function') {
+        modalContainerRef.current.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+    if (document.documentElement) {
+      document.documentElement.scrollTop = 0;
+    }
+    if (document.body) {
+      document.body.scrollTop = 0;
+    }
+  };
+
+  // Automatically reset scroll whenever step changes, especially upon entering confirmation
+  useEffect(() => {
+    scrollToTop();
+    const rafId = requestAnimationFrame(() => {
+      scrollToTop();
+    });
+    const t1 = setTimeout(scrollToTop, 20);
+    const t2 = setTimeout(scrollToTop, 100);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [currentStep]);
 
   // Sync cart to localStorage
   useEffect(() => {
@@ -272,6 +308,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
         setCompletedOrder(newOrder);
         setCart([]); // Clear cart
         localStorage.removeItem('leton_ordering_cart');
+        scrollToTop();
         setCurrentStep('confirmation');
       }
     } catch (err) {
@@ -283,11 +320,16 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
 
   const handleOrderAgain = () => {
     setCompletedOrder(null);
+    scrollToTop();
     setCurrentStep('menu');
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#070b12] text-slate-100 flex flex-col font-sans animate-fadeIn">
+    <div
+      ref={modalContainerRef}
+      data-scroll-container="true"
+      className="fixed inset-0 z-50 overflow-y-auto bg-[#070b12] text-slate-100 flex flex-col font-sans animate-fadeIn"
+    >
       {/* Universal Ordering Header */}
       <header className="sticky top-0 z-30 bg-[#070b12]/95 border-b border-slate-800 backdrop-blur-md px-4 sm:px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">

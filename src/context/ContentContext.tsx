@@ -209,9 +209,15 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const unsubscribeSupabase = subscribeToSupabaseRealtime(
       (liveData) => {
         setIsRealtimeConnected(true);
-        setData(liveData);
-        saveStoredContent(liveData);
-        setLastUpdated(Date.now());
+        setData((prevData) => {
+          // Compare JSON stringified representations to prevent unnecessary re-renders
+          if (JSON.stringify(prevData) === JSON.stringify(liveData)) {
+            return prevData;
+          }
+          saveStoredContent(liveData);
+          setLastUpdated(Date.now());
+          return liveData;
+        });
       },
       (status) => {
         if (status === 'SUBSCRIBED') {
@@ -316,46 +322,33 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       saveStoredContent(sanitized);
       setLastUpdated(Date.now());
 
-      // 2. Non-blocking Background Sync to Supabase & Backend API in parallel
-      (async () => {
-        try {
-          const syncTasks: Promise<any>[] = [];
-
-          if (isSupabaseConfigured()) {
-            syncTasks.push(saveContentToSupabase(sanitized));
-          }
-
-          syncTasks.push(
-            fetch(getApiUrl('/api/content'), {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${auth.token || 'leton_local_token'}`,
-              },
-              body: JSON.stringify(sanitized),
-            }).then((r) => r.ok).catch(() => false)
-          );
-
-          const results = await Promise.allSettled(syncTasks);
-          const sbResult = isSupabaseConfigured() && results[0]?.status === 'fulfilled' ? results[0].value : null;
-
-          if (isSupabaseConfigured() && sbResult && !sbResult.success) {
-            throw new Error(sbResult.error || 'Gagal menyimpan data ke Supabase.');
-          }
-
-          // Preload updated logo in background if changed
-          if (sanitized.siteSettings?.logoUrl && sanitized.siteSettings.logoUrl !== previousData.siteSettings?.logoUrl) {
-            preloadImage(sanitized.siteSettings.logoUrl).catch(() => {});
-          }
-        } catch (err: any) {
-          console.error('[Background Sync Failed - Rolling Back UI]:', err);
-          // Rollback to previous state on failure
+      // 2. Direct Cloud Synchronization to Supabase
+      if (isSupabaseConfigured()) {
+        const sbResult = await saveContentToSupabase(sanitized);
+        if (!sbResult.success) {
+          console.error('[Supabase Sync Error - Rolling back UI]:', sbResult.error);
           setData(previousData);
           saveStoredContent(previousData);
           setLastUpdated(Date.now());
-          showToast('Gagal sinkronisasi data ke cloud: ' + (err?.message || 'Koneksi terputus') + '. Perubahan dibatalkan.', 'error');
+          showToast('Gagal menyimpan data ke cloud: ' + (sbResult.error || 'Gagal koneksi ke database') + '. Perubahan dibatalkan.', 'error');
+          return false;
         }
-      })();
+      }
+
+      // 3. Secondary local backend API sync (fire and forget without blocking)
+      fetch(getApiUrl('/api/content'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${auth.token || 'leton_local_token'}`,
+        },
+        body: JSON.stringify(sanitized),
+      }).catch(() => {});
+
+      // Preload updated logo in background if changed
+      if (sanitized.siteSettings?.logoUrl && sanitized.siteSettings.logoUrl !== previousData.siteSettings?.logoUrl) {
+        preloadImage(sanitized.siteSettings.logoUrl).catch(() => {});
+      }
 
       return true;
     } catch (err: any) {

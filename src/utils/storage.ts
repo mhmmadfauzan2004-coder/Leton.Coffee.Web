@@ -154,7 +154,7 @@ export function sanitizeLoadedData(raw: any): LetonData {
     menuItems:
       Array.isArray(raw.menuItems) && raw.menuItems.length > 0
         ? raw.menuItems.map((m: any, idx: number) => {
-            const fallbackItem = initialLetonData.menuItems[idx];
+            const fallbackItem = initialLetonData.menuItems.find((f: any) => f.id === m?.id) || initialLetonData.menuItems[idx];
             return {
               ...fallbackItem,
               ...m,

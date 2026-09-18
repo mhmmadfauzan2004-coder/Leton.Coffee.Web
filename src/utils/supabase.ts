@@ -167,13 +167,12 @@ export async function saveContentToSupabase(contentData: LetonData): Promise<{ s
 
       try {
         const client = getSupabase();
-        // 1. Sanitize & Strip heavy base64 images to keep DB payload extremely small (<30KB)
+        // 1. Sanitize data to ensure schema validity
         const cleanData = sanitizeLoadedData(currentData);
-        const lightweightData = stripHeavyBase64Images(cleanData);
 
         const payload = {
           id: SUPABASE_ROW_ID,
-          content: lightweightData,
+          content: cleanData,
           updated_at: new Date().toISOString(),
         };
 
@@ -240,18 +239,20 @@ export async function saveContentToSupabase(contentData: LetonData): Promise<{ s
  */
 export async function uploadImageToSupabase(
   file: File,
-  folder: string = 'uploads'
+  folder: string = 'menu',
+  fileNamePrefix: string = 'product'
 ): Promise<{ success: boolean; url?: string; error?: string }> {
   try {
     const client = getSupabase();
 
-    // Clean filename and generate unique timestamped path
-    const fileExt = file.name.split('.').pop() || 'jpg';
-    const cleanFileName = file.name
-      .replace(/\.[^/.]+$/, '')
+    // Clean filename and generate unique timestamped path: e.g. menu/matcha_leton-1789756842432-1789757246.jpg
+    const fileExt = file.name ? (file.name.split('.').pop() || 'jpg').toLowerCase() : 'jpg';
+    const cleanPrefix = fileNamePrefix
       .replace(/[^a-zA-Z0-9_-]/g, '_')
-      .slice(0, 30);
-    const uniquePath = `${folder}/${Date.now()}_${cleanFileName}.${fileExt}`;
+      .slice(0, 30) || 'item';
+    const timestamp = Date.now();
+    const random = Math.round(Math.random() * 1e4);
+    const uniquePath = `${folder}/${cleanPrefix}-${timestamp}-${random}.${fileExt}`;
 
     // Upload to 'leton-images' bucket
     const { error: uploadError } = await client.storage

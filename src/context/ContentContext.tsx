@@ -57,7 +57,7 @@ interface ContentContextType {
   saveCustomOption: (type: 'topping' | 'syrup', option: CustomizationOption) => Promise<boolean>;
   deleteCustomOption: (type: 'topping' | 'syrup', optionId: string) => Promise<boolean>;
   saveMasterSizes: (sizes: ProductSizeOption[]) => Promise<boolean>;
-  uploadImage: (file: File) => Promise<string | null>;
+  uploadImage: (file: File, fileNamePrefix?: string) => Promise<string | null>;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   changeCredentials: (currentPassword: string, newUsername?: string, newPassword?: string) => Promise<{ success: boolean; error?: string }>;
@@ -499,7 +499,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   // Upload image to Supabase Storage Bucket ('leton-images') with fallback to server
-  const uploadImage = async (file: File): Promise<string | null> => {
+  const uploadImage = async (file: File, fileNamePrefix: string = 'menu'): Promise<string | null> => {
     try {
       if (!auth.isAuthenticated) {
         showToast('Sesi tidak valid untuk upload gambar. Silakan login terlebih dahulu.', 'error');
@@ -508,7 +508,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       // 1. Try uploading to Supabase Storage ('leton-images' bucket)
       if (isSupabaseConfigured()) {
-        const supabaseUpload = await uploadImageToSupabase(file);
+        const supabaseUpload = await uploadImageToSupabase(file, 'menu', fileNamePrefix);
         if (supabaseUpload.success && supabaseUpload.url) {
           showToast('Foto berhasil diupload ke Supabase Storage!', 'success');
           return supabaseUpload.url;
@@ -519,6 +519,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       try {
         const formData = new FormData();
         formData.append('image', file);
+        formData.append('prefix', fileNamePrefix);
 
         const res = await fetch(getApiUrl('/api/upload-image'), {
           method: 'POST',
@@ -536,13 +537,12 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
           }
         }
       } catch (backendErr) {
-        // Silent fallback to local Base64 processing
+        console.warn('Backend image upload error:', backendErr);
       }
 
-      // Return null so ImageUploadField converts to high-quality compressed Base64
       return null;
     } catch (err: any) {
-      console.warn('Upload fallback to Base64:', err);
+      console.warn('Upload image error:', err);
       return null;
     }
   };

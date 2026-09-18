@@ -69,10 +69,12 @@ const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, UPLOAD_DIR);
   },
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+  filename: (req, file, cb) => {
+    const rawPrefix = (req.body && req.body.prefix) ? String(req.body.prefix) : 'menu';
+    const cleanPrefix = rawPrefix.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30) || 'menu';
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e6);
     const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
-    cb(null, `leton-${uniqueSuffix}${ext}`);
+    cb(null, `${cleanPrefix}-${uniqueSuffix}${ext}`);
   },
 });
 
@@ -402,6 +404,34 @@ app.post('/api/auth/logout', (req, res) => {
 const handleImageUpload = (req: express.Request, res: express.Response) => {
   if (!verifyAuthHeader(req)) {
     return res.status(401).json({ error: 'Unauthorized: Silakan login terlebih dahulu' });
+  }
+
+  // Handle base64 JSON upload if contentType is application/json
+  if (req.body && typeof req.body.base64Image === 'string' && req.body.base64Image.startsWith('data:image/')) {
+    try {
+      const base64Str = req.body.base64Image;
+      const matches = base64Str.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
+      if (!matches || matches.length < 3) {
+        return res.status(400).json({ error: 'Format Base64 gambar tidak valid' });
+      }
+      const ext = matches[1].toLowerCase() === 'jpeg' ? 'jpg' : matches[1].toLowerCase();
+      const buffer = Buffer.from(matches[2], 'base64');
+      const prefix = req.body.prefix ? String(req.body.prefix).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30) : 'menu';
+      const filename = `${prefix}-${Date.now()}-${Math.round(Math.random() * 1e6)}.${ext}`;
+      const filepath = path.join(UPLOAD_DIR, filename);
+
+      fs.writeFileSync(filepath, buffer);
+      const publicUrl = `/uploads/${filename}`;
+      return res.json({
+        success: true,
+        url: publicUrl,
+        filename,
+        size: buffer.length,
+      });
+    } catch (b64Err: any) {
+      console.error('Base64 upload error:', b64Err);
+      return res.status(500).json({ error: 'Gagal memproses gambar Base64: ' + b64Err.message });
+    }
   }
 
   upload.single('image')(req, res, (err) => {

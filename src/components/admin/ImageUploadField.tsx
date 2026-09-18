@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { optimizeImageFile } from '../../utils/storage';
-import { resolveMediaUrl } from '../../utils/api';
+import { resolveMediaUrl, getApiUrl } from '../../utils/api';
 import { ImageCropperModal } from './ImageCropperModal';
 import {
   Upload,
@@ -43,17 +43,40 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   const processAndUploadFile = async (fileToUpload: File, fallbackDataUrl?: string) => {
     setIsUploading(true);
     try {
-      // 1. Direct upload to server storage / Supabase
-      const serverUrl = await uploadImage(fileToUpload);
+      const prefix = label ? label.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30) : 'image';
+      // 1. Direct upload to server storage / Supabase with unique prefix
+      const serverUrl = await uploadImage(fileToUpload, prefix);
       if (serverUrl) {
         onChange(serverUrl);
         setUrlInput(serverUrl);
         setTempPreview(null);
         showToast('Foto berhasil diunggah & disesuaikan!', 'success');
       } else {
-        // Fallback: If cloud storage is not yet configured, compress into high-quality local Base64
+        // Fallback: Upload optimized base64 image to server endpoint
         const fallbackData = fallbackDataUrl || (await optimizeImageFile(fileToUpload, 1200, 0.75));
         if (fallbackData) {
+          try {
+            const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
+            const res = await fetch(getApiUrl('/api/upload-image'), {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ base64Image: fallbackData, prefix }),
+            });
+            const json = await res.json().catch(() => null);
+            if (json && json.success && json.url) {
+              onChange(json.url);
+              setUrlInput(json.url);
+              setTempPreview(null);
+              showToast('Foto berhasil diunggah ke server!', 'success');
+              return;
+            }
+          } catch (serverErr) {
+            console.warn('Base64 upload endpoint failed:', serverErr);
+          }
+
           onChange(fallbackData);
           setUrlInput(fallbackData);
           setTempPreview(null);

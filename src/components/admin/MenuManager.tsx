@@ -168,6 +168,8 @@ export const MenuManager: React.FC = () => {
       if (success) {
         showToast(`Menu "${targetItem.name}" berhasil disimpan.`, 'success');
         setIsItemModalOpen(false);
+      } else {
+        showToast(`Gagal menyimpan menu "${targetItem.name}". Silakan coba lagi.`, 'error');
       }
     } catch (err: any) {
       showToast('Gagal menyimpan menu: ' + (err.message || 'Error tidak diketahui'), 'error');

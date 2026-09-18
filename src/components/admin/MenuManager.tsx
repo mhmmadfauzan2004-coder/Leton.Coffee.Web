@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { MenuItem, MenuCategory } from '../../types';
+import { initialLetonData } from '../../data/initialData';
 import { ImageUploadField } from './ImageUploadField';
 import { formatRupiah } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
@@ -71,8 +72,7 @@ export const MenuManager: React.FC = () => {
       categoryId: menuCategories[0]?.id || 'coffee',
       price: 20000,
       description: '',
-      image:
-        'https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&w=800&q=80',
+      image: initialLetonData.menuItems[0]?.image || '',
       isAvailable: true,
       badge: '',
       order: menuItems.length + 1,

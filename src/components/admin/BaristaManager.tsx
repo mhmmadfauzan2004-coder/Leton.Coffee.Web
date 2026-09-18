@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { BaristaItem, BaristasSectionContent } from '../../types';
+import { initialLetonData } from '../../data/initialData';
 import { ImageUploadField } from './ImageUploadField';
 import { resolveMediaUrl } from '../../utils/api';
 import {
@@ -90,7 +91,7 @@ export const BaristaManager: React.FC = () => {
       role: 'Barista',
       favoriteCoffee: 'Leton Aren Signature',
       description: '',
-      image: 'https://images.unsplash.com/photo-1577219491135-ce391730fb2c?auto=format&fit=crop&w=800&q=80',
+      image: initialLetonData.baristas[0]?.image || '',
       instagram: 'https://instagram.com',
       order: baristasList.length + 1,
     });

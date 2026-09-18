@@ -17,6 +17,8 @@ import { saveGlobalDataToIdb, loadGlobalDataFromIdb } from './idbStorage';
 export const LETON_GLOBAL_DATA_KEY = 'leton_global_data';
 export const LETON_STORAGE_KEY = 'leton_cms_content_v1';
 export const LETON_LAST_SYNC_KEY = 'leton_cms_last_sync';
+export const LETON_DATA_VERSION_KEY = 'leton_data_version_build';
+export const CURRENT_DATA_VERSION = 'v2026.09.18_original_baseline_v1';
 
 // Granular Photo & Section Keys for direct persistence
 export const LETON_KEY_LOGO_URL = 'leton_logo_url';
@@ -32,42 +34,86 @@ export const LETON_KEY_ABOUT_CONTENT = 'leton_about_content';
 export const LETON_KEY_CONTACT_SETTINGS = 'leton_contact_settings';
 
 /**
- * Deep merge raw data with initial default data to ensure all fields exist safely.
+ * Checks if a given image URL is a temporary placeholder, stock, or unsplash URL.
+ */
+export function isPlaceholderOrUnsplash(url?: string | null): boolean {
+  if (!url || typeof url !== 'string' || !url.trim()) return true;
+  const lower = url.toLowerCase();
+  return (
+    lower.includes('images.unsplash.com') ||
+    lower.includes('placeholder') ||
+    lower.includes('picsum.photos')
+  );
+}
+
+/**
+ * Resolves a valid non-placeholder image, falling back to the original authentic asset.
+ */
+export function resolveCleanImage(customUrl?: string | null, fallbackUrl?: string | null): string {
+  if (customUrl && !isPlaceholderOrUnsplash(customUrl)) {
+    return customUrl.trim();
+  }
+  return fallbackUrl || '';
+}
+
+/**
+ * Deep merge raw data with initial default data to ensure all fields exist safely and authentic photos are preserved.
  */
 export function sanitizeLoadedData(raw: any): LetonData {
   if (!raw || typeof raw !== 'object') {
     return initialLetonData;
   }
 
-  const cleanedLogo =
-    raw.siteSettings?.logoUrl && !raw.siteSettings.logoUrl.includes('images.unsplash.com/photo-1514432324607')
-      ? raw.siteSettings.logoUrl
-      : '';
+  const cleanedLogo = resolveCleanImage(
+    raw.siteSettings?.logoUrl,
+    initialLetonData.siteSettings.logoUrl
+  );
+
+  const cleanedHeroBg = resolveCleanImage(
+    raw.siteSettings?.heroBgImage,
+    initialLetonData.siteSettings.heroBgImage
+  );
 
   return {
     siteSettings: {
       ...initialLetonData.siteSettings,
       ...(raw.siteSettings || {}),
       logoUrl: cleanedLogo,
+      heroBgImage: cleanedHeroBg,
     },
     branches:
       Array.isArray(raw.branches) && raw.branches.length > 0
         ? raw.branches.map((b: any, idx: number) => {
             const fallbackBranch = initialLetonData.branches[idx] || initialLetonData.branches[0];
+            const cleanBg = resolveCleanImage(b?.bgImage, fallbackBranch?.bgImage);
+            const rawGallery = Array.isArray(b?.galleryImages) ? b.galleryImages : [];
+            const cleanGallery = rawGallery
+              .map((img: string, gIdx: number) =>
+                resolveCleanImage(img, fallbackBranch?.galleryImages?.[gIdx])
+              )
+              .filter((img: string) => img && !isPlaceholderOrUnsplash(img));
+
             return {
               ...fallbackBranch,
               ...b,
+              bgImage: cleanBg,
               bgOverlay: typeof b?.bgOverlay === 'number' ? b.bgOverlay : 45,
-              galleryImages:
-                Array.isArray(b?.galleryImages) && b.galleryImages.length > 0
-                  ? b.galleryImages
-                  : (fallbackBranch?.galleryImages || []),
+              galleryImages: cleanGallery.length > 0 ? cleanGallery : (fallbackBranch?.galleryImages || []),
             };
           })
         : initialLetonData.branches,
     mobileService: {
       ...initialLetonData.mobileService,
       ...(raw.mobileService || {}),
+      bgImage: resolveCleanImage(raw.mobileService?.bgImage, initialLetonData.mobileService.bgImage),
+      openBoothBgImage: resolveCleanImage(
+        raw.mobileService?.openBoothBgImage,
+        initialLetonData.mobileService.openBoothBgImage || initialLetonData.mobileService.bgImage
+      ),
+      truckImage: resolveCleanImage(
+        raw.mobileService?.truckImage,
+        initialLetonData.mobileService.truckImage || initialLetonData.mobileService.bgImage
+      ),
       locations:
         Array.isArray(raw.mobileService?.locations) && raw.mobileService.locations.length > 0
           ? raw.mobileService.locations
@@ -78,7 +124,19 @@ export function sanitizeLoadedData(raw: any): LetonData {
       galleryImages:
         Array.isArray(raw.mobileService?.galleryImages) && raw.mobileService.galleryImages.length > 0
           ? raw.mobileService.galleryImages
+              .map((img: string, idx: number) =>
+                resolveCleanImage(img, initialLetonData.mobileService?.galleryImages?.[idx])
+              )
+              .filter((img: string) => img && !isPlaceholderOrUnsplash(img))
           : initialLetonData.mobileService.galleryImages,
+      letGoGalleryImages:
+        Array.isArray(raw.mobileService?.letGoGalleryImages) && raw.mobileService.letGoGalleryImages.length > 0
+          ? raw.mobileService.letGoGalleryImages
+              .map((img: string, idx: number) =>
+                resolveCleanImage(img, initialLetonData.mobileService?.letGoGalleryImages?.[idx])
+              )
+              .filter((img: string) => img && !isPlaceholderOrUnsplash(img))
+          : initialLetonData.mobileService.letGoGalleryImages,
     },
     menuCategories:
       Array.isArray(raw.menuCategories) && raw.menuCategories.length > 0
@@ -86,11 +144,25 @@ export function sanitizeLoadedData(raw: any): LetonData {
         : initialLetonData.menuCategories,
     menuItems:
       Array.isArray(raw.menuItems) && raw.menuItems.length > 0
-        ? raw.menuItems
+        ? raw.menuItems.map((m: any, idx: number) => {
+            const fallbackItem = initialLetonData.menuItems[idx];
+            return {
+              ...fallbackItem,
+              ...m,
+              image: resolveCleanImage(m?.image, fallbackItem?.image),
+            };
+          })
         : initialLetonData.menuItems,
     baristas:
       Array.isArray(raw.baristas) && raw.baristas.length > 0
-        ? raw.baristas
+        ? raw.baristas.map((b: any, idx: number) => {
+            const fallbackBarista = initialLetonData.baristas[idx];
+            return {
+              ...fallbackBarista,
+              ...b,
+              image: resolveCleanImage(b?.image, fallbackBarista?.image),
+            };
+          })
         : initialLetonData.baristas,
     baristasContent: {
       ...initialLetonData.baristasContent,
@@ -99,12 +171,15 @@ export function sanitizeLoadedData(raw: any): LetonData {
     aboutContent: {
       ...initialLetonData.aboutContent,
       ...(raw.aboutContent || {}),
+      mainImage: resolveCleanImage(raw.aboutContent?.mainImage, initialLetonData.aboutContent.mainImage),
       sliderImages:
         Array.isArray(raw.aboutContent?.sliderImages) && raw.aboutContent.sliderImages.length > 0
-          ? raw.aboutContent.sliderImages.filter((img: any) => typeof img === 'string' && img.trim())
-          : Array.isArray(initialLetonData.aboutContent.sliderImages) && initialLetonData.aboutContent.sliderImages.length > 0
-          ? initialLetonData.aboutContent.sliderImages
-          : [raw.aboutContent?.mainImage || initialLetonData.aboutContent.mainImage],
+          ? raw.aboutContent.sliderImages
+              .map((img: string, idx: number) =>
+                resolveCleanImage(img, initialLetonData.aboutContent?.sliderImages?.[idx])
+              )
+              .filter((img: string) => img && !isPlaceholderOrUnsplash(img))
+          : initialLetonData.aboutContent.sliderImages,
       facts:
         Array.isArray(raw.aboutContent?.facts) && raw.aboutContent.facts.length > 0
           ? raw.aboutContent.facts.map((f: any) => {
@@ -152,6 +227,27 @@ export function loadStoredContent(): LetonData {
   }
 
   try {
+    // 0. Version Migration: Ensure old placeholder caches are cleaned up across Chrome and Safari
+    const storedVersion = localStorage.getItem(LETON_DATA_VERSION_KEY);
+    if (storedVersion !== CURRENT_DATA_VERSION) {
+      const existingDataStr = localStorage.getItem(LETON_GLOBAL_DATA_KEY) || localStorage.getItem(LETON_STORAGE_KEY);
+      if (existingDataStr) {
+        try {
+          const parsed = JSON.parse(existingDataStr);
+          const cleaned = sanitizeLoadedData(parsed);
+          const serialized = JSON.stringify(cleaned);
+          localStorage.setItem(LETON_GLOBAL_DATA_KEY, serialized);
+          localStorage.setItem(LETON_STORAGE_KEY, serialized);
+          localStorage.setItem(LETON_DATA_VERSION_KEY, CURRENT_DATA_VERSION);
+          return cleaned;
+        } catch (e) {
+          console.warn('[LocalStorage] Migration parse error, using initialLetonData:', e);
+        }
+      }
+      localStorage.setItem(LETON_DATA_VERSION_KEY, CURRENT_DATA_VERSION);
+      return initialLetonData;
+    }
+
     let resultData: LetonData | null = null;
 
     // 1. Check primary global data key
@@ -185,15 +281,17 @@ export function loadStoredContent(): LetonData {
 
     // 3. Granular check only if no global JSON existed
     const specificLogo = localStorage.getItem(LETON_KEY_LOGO_URL);
-    if (specificLogo && specificLogo.trim() && !specificLogo.includes('images.unsplash.com/photo-1514432324607')) {
-      resultData.siteSettings.logoUrl = specificLogo;
+    if (specificLogo && !isPlaceholderOrUnsplash(specificLogo)) {
+      resultData.siteSettings.logoUrl = specificLogo.trim();
     } else {
-      resultData.siteSettings.logoUrl = '';
+      resultData.siteSettings.logoUrl = initialLetonData.siteSettings.logoUrl;
     }
 
     const specificHeroBg = localStorage.getItem(LETON_KEY_HERO_BG);
-    if (specificHeroBg && specificHeroBg.trim()) {
-      resultData.siteSettings.heroBgImage = specificHeroBg;
+    if (specificHeroBg && !isPlaceholderOrUnsplash(specificHeroBg)) {
+      resultData.siteSettings.heroBgImage = specificHeroBg.trim();
+    } else {
+      resultData.siteSettings.heroBgImage = initialLetonData.siteSettings.heroBgImage;
     }
 
     const specificSiteSettings = localStorage.getItem(LETON_KEY_SITE_SETTINGS);
@@ -309,6 +407,7 @@ export function saveStoredContent(data: LetonData): boolean {
       localStorage.setItem(LETON_GLOBAL_DATA_KEY, serialized);
       localStorage.setItem(LETON_STORAGE_KEY, serialized);
       localStorage.setItem(LETON_LAST_SYNC_KEY, Date.now().toString());
+      localStorage.setItem(LETON_DATA_VERSION_KEY, CURRENT_DATA_VERSION);
     } catch (quotaErr) {
       console.warn('[LocalStorage] Quota limit reached, saving granular entries and to IndexedDB:', quotaErr);
     }

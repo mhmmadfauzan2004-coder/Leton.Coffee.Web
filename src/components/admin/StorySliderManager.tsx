@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { resolveMediaUrl } from '../../utils/api';
 import { optimizeImageFile } from '../../utils/storage';
+import { initialLetonData } from '../../data/initialData';
 import { StoryImageSlider } from '../public/StoryImageSlider';
 import { ImageCropperModal } from './ImageCropperModal';
 import {
@@ -35,7 +36,7 @@ export const StorySliderManager: React.FC = () => {
   const initialList =
     Array.isArray(aboutContent.sliderImages) && aboutContent.sliderImages.length > 0
       ? aboutContent.sliderImages
-      : [aboutContent.mainImage || 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80'];
+      : [aboutContent.mainImage || initialLetonData.aboutContent.mainImage];
 
   const [images, setImages] = useState<string[]>(initialList);
   const [isSaving, setIsSaving] = useState(false);
@@ -65,7 +66,7 @@ export const StorySliderManager: React.FC = () => {
     setIsSaving(true);
     try {
       const validImages = newList.filter((img) => typeof img === 'string' && img.trim().length > 0);
-      const fallbackMain = validImages[0] || aboutContent.mainImage || 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80';
+      const fallbackMain = validImages[0] || aboutContent.mainImage || initialLetonData.aboutContent.mainImage;
 
       const updatedAbout = {
         ...aboutContent,
@@ -232,8 +233,7 @@ export const StorySliderManager: React.FC = () => {
   // Reset to default
   const handleResetToDefault = async () => {
     if (confirm('Kembalikan foto slider ke pengaturan awal?')) {
-      const defaultImg = 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1200&q=80';
-      const defaultList = [defaultImg];
+      const defaultList = initialLetonData.aboutContent.sliderImages || [initialLetonData.aboutContent.mainImage];
       setImages(defaultList);
       await persistSliderImages(defaultList, true);
       showToast('Daftar foto dikembalikan ke default.', 'info');

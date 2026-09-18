@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { resolveMediaUrl } from '../../utils/api';
+import { initialLetonData } from '../../data/initialData';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
 
@@ -8,12 +9,8 @@ interface LetGoCardsGalleryProps {
   sectionLabel?: string;
 }
 
-const DEFAULT_LET_GO_IMAGES = [
-  'https://images.unsplash.com/photo-1521017432531-fbd92d768814?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1442512595331-e89e73853f31?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1497636577773-f1231844b336?auto=format&fit=crop&w=1200&q=80',
-];
+const DEFAULT_LET_GO_IMAGES: string[] =
+  initialLetonData.mobileService?.letGoGalleryImages || [];
 
 export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
   images = [],

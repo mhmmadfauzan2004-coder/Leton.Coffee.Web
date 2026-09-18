@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CustomerOrder, OrderOutlet } from '../../../types';
 import { formatRupiah, createWhatsAppLink } from '../../../utils/formatters';
+import { subscribeToSingleOrder } from '../../../utils/supabaseOrders';
 import {
   CheckCircle2,
-  Store,
   Clock,
   Utensils,
   Package,
@@ -13,11 +13,15 @@ import {
   Check,
   Coffee,
   Sparkles,
-  Flame,
-  ShieldCheck,
-  Bell,
   RefreshCw,
+  QrCode,
+  Banknote,
+  Receipt,
+  Store,
+  MapPin,
+  CheckCircle,
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface OrderConfirmationProps {
   order: CustomerOrder;
@@ -27,354 +31,494 @@ interface OrderConfirmationProps {
 }
 
 export const OrderConfirmation: React.FC<OrderConfirmationProps> = ({
-  order,
+  order: initialOrder,
   outlet,
   onOrderAgain,
   onBackToHome,
 }) => {
+  const [currentOrder, setCurrentOrder] = useState<CustomerOrder>(initialOrder);
   const [copied, setCopied] = useState(false);
 
+  // Keep live sync with database / admin updates
+  useEffect(() => {
+    setCurrentOrder(initialOrder);
+  }, [initialOrder]);
+
+  useEffect(() => {
+    if (!initialOrder?.id && !initialOrder?.orderNumber) return;
+    const unsubscribe = subscribeToSingleOrder(
+      initialOrder.id || initialOrder.orderNumber,
+      (updatedOrder) => {
+        if (updatedOrder) {
+          setCurrentOrder(updatedOrder);
+        }
+      }
+    );
+    return () => {
+      unsubscribe();
+    };
+  }, [initialOrder?.id, initialOrder?.orderNumber]);
+
   const handleCopyOrderNumber = () => {
-    navigator.clipboard.writeText(order.orderNumber);
+    navigator.clipboard.writeText(currentOrder.orderNumber);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 2500);
   };
 
-  // WhatsApp formatted receipt text
-  const waItemsText = order.items
-    .map((it) => `• ${it.quantity}x ${it.name} (${formatRupiah(it.price * it.quantity)})${it.note ? ` [Note: ${it.note}]` : ''}`)
+  // Status mapping: HANYA 2 STATUS CUSTOMER
+  // Status 1: "Sebentar ya, lagi disiapin"
+  // Status 2: "Pesanan sudah siap"
+  const isOrderReady =
+    currentOrder.orderStatus === 'READY' || currentOrder.orderStatus === 'COMPLETED';
+
+  // WhatsApp helper text
+  const waItemsText = currentOrder.items
+    .map((it) => {
+      const topName = it.topping && it.topping.name !== 'No Topping' ? ` + ${it.topping.name}` : '';
+      const syrName = it.syrup && it.syrup.name !== 'No Syrup' ? ` + ${it.syrup.name}` : '';
+      const sizeName = it.size?.name ? ` [${it.size.name}]` : '';
+      return `• ${it.quantity}x ${it.name}${sizeName}${topName}${syrName} (${formatRupiah((it.unitPrice || it.price) * it.quantity)})`;
+    })
     .join('\n');
 
-  const waMessage = `*PESANAN BARU LETON COFFEE* ☕
+  const waMessage = `*PESANAN ONLINE LETON COFFEE* ☕
 ---------------------------------
-*No. Order:* ${order.orderNumber}
-*Outlet:* ${order.outletName}
-*Customer:* ${order.customerName}
-*Tipe:* ${order.orderType}${order.orderType === 'DINE IN' ? ` (Meja: ${order.tableNumber})` : ''}
-*Metode Bayar:* ${order.paymentMethod}
+*No. Order:* ${currentOrder.orderNumber}
+*Outlet:* ${currentOrder.outletName}
+*Customer:* ${currentOrder.customerName}
+*Tipe:* ${currentOrder.orderType}${currentOrder.orderType === 'DINE IN' ? ` (Meja: ${currentOrder.tableNumber || '-'})` : ''}
+*Metode Bayar:* ${currentOrder.paymentMethod}
+*Status Pembayaran:* ${currentOrder.paymentStatus === 'PAID' ? 'LUNAS / PAID' : currentOrder.paymentStatus}
 
 *Rincian Menu:*
 ${waItemsText}
 
-*TOTAL:* ${formatRupiah(order.totalAmount)}
-*Status:* ${order.paymentStatus}
+*TOTAL:* ${formatRupiah(currentOrder.totalAmount)}
 ---------------------------------
-Halo Barista Leton Coffee, mohon konfirmasi pesanan saya. Terima kasih!`;
+Halo Barista ${currentOrder.outletName}, saya ingin menanyakan status pesanan nomor *${currentOrder.orderNumber}*. Terima kasih!`;
 
   const waLink = createWhatsAppLink(outlet.whatsapp || '6281234567890', waMessage);
 
-  // Status tracker helper
-  const stages = [
-    { key: 'WAITING PAYMENT', label: '1. Menunggu Bayar' },
-    { key: 'WAITING VERIFICATION', label: '2. Verifikasi' },
-    { key: 'PAID', label: '3. Lunas' },
-    { key: 'ACCEPTED', label: '4. Diterima' },
-    { key: 'PREPARING', label: '5. Sedang Diseduh' },
-    { key: 'READY', label: '6. Siap Diantar' },
-    { key: 'COMPLETED', label: '7. Selesai' },
-  ];
-
-  const getCurrentStepIndex = () => {
-    if (order.paymentStatus === 'COMPLETED') return 6;
-    if (order.paymentStatus === 'READY') return 5;
-    if (order.paymentStatus === 'PREPARING' || order.orderStatus === 'PROCESSING') return 4;
-    if (order.paymentStatus === 'PAID') return 2;
-    if (order.paymentStatus === 'WAITING VERIFICATION') return 1;
-    return 1;
-  };
-
-  const currentStep = getCurrentStepIndex();
-
   return (
-    <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12 bg-[#F8FBFF]">
-      {/* 1. TOP LIVE ORDER BANNER */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#E0F2FE] shadow-sm mb-8 relative overflow-hidden">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
-          <div className="flex flex-col gap-2">
+    <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-10 bg-[#F8FBFF] min-h-full font-sans">
+      {/* 1. TOP WELCOME GREETING MESSAGE (AS REQUESTED) */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-6 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#E0F2FE] via-[#F0F9FF] to-white border border-[#BAE6FD] text-[#0369A1] shadow-sm flex items-center gap-3.5"
+      >
+        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-white border border-[#BAE6FD] text-[#0284C7] flex items-center justify-center shrink-0 shadow-sm">
+          <Sparkles className="w-5 h-5 text-[#0284C7]" />
+        </div>
+        <div>
+          <p className="font-display font-black text-sm sm:text-base text-[#0C4A6E] leading-snug">
+            “Terima kasih sudah order online, ditunggu di outlet ya untuk mengambil pesanannya.”
+          </p>
+          <span className="text-xs text-[#0284C7] font-medium block mt-0.5">
+            Leton Coffee • {currentOrder.outletName}
+          </span>
+        </div>
+      </motion.div>
+
+      {/* 2. LIVE KITCHEN STATUS: 2 STATUSES ONLY */}
+      <motion.div
+        layout
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+        className={`rounded-3xl p-6 sm:p-8 border shadow-sm mb-8 transition-all overflow-hidden relative ${
+          isOrderReady
+            ? 'bg-gradient-to-br from-[#F0FDF4] via-white to-[#ECFDF5] border-[#86EFAC]'
+            : 'bg-gradient-to-br from-[#F0F9FF] via-white to-[#E0F2FE] border-[#7DD3FC]'
+        }`}
+      >
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+          <div className="space-y-3">
+            {/* Header Badge */}
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E0F2FE] text-[#0284C7] text-xs font-bold font-mono uppercase tracking-wider">
-                <span className="w-2 h-2 rounded-full bg-[#0284C7] animate-ping" />
-                <span>Live Kitchen Status</span>
-              </span>
-              <span className="text-xs text-[#64748B] font-mono">
-                {order.outletName}
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 mt-1">
-              <h1 className="font-mono font-black text-2xl sm:text-4xl text-[#172033] tracking-tight">
-                {order.orderNumber}
-              </h1>
-              <button
-                onClick={handleCopyOrderNumber}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F0F7FF] hover:bg-[#E0F2FE] text-[#0284C7] text-xs font-bold transition-all cursor-pointer border border-[#E0F2FE]"
+              <span
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-mono uppercase tracking-wider ${
+                  isOrderReady
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-[#E0F2FE] text-[#0284C7]'
+                }`}
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? 'Tersalin' : 'Salin No. Order'}</span>
-              </button>
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isOrderReady ? 'bg-emerald-600' : 'bg-[#0284C7] animate-ping'
+                  }`}
+                />
+                <span>LIVE KITCHEN STATUS</span>
+              </span>
+
+              <span className="text-xs text-[#64748B] font-mono flex items-center gap-1">
+                <Store className="w-3.5 h-3.5 text-[#0284C7]" />
+                {currentOrder.outletName}
+              </span>
             </div>
 
-            <p className="text-xs sm:text-sm text-[#64748B]">
-              Atas nama <strong className="text-[#172033]">{order.customerName}</strong> •{' '}
-              {order.orderType === 'DINE IN' ? `Dine In di Meja ${order.tableNumber || '-'}` : 'Take Away (Bawa Pulang)'}
-            </p>
+            {/* STATUS TITLE & MESSAGE */}
+            <AnimatePresence mode="wait">
+              {isOrderReady ? (
+                <motion.div
+                  key="status-ready"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className="space-y-1.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-600 shrink-0" />
+                    <h2 className="font-display font-black text-2xl sm:text-3xl text-emerald-900 tracking-tight">
+                      Pesanan sudah siap
+                    </h2>
+                  </div>
+                  <p className="text-sm sm:text-base font-bold text-emerald-800 pl-9 sm:pl-10">
+                    Silakan datang ke outlet untuk mengambil pesanan.
+                  </p>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="status-preparing"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className="space-y-1.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <Coffee className="w-7 h-7 sm:w-8 sm:h-8 text-[#0284C7] shrink-0 animate-bounce" />
+                    <h2 className="font-display font-black text-2xl sm:text-3xl text-[#0C4A6E] tracking-tight">
+                      Sebentar ya, lagi disiapin
+                    </h2>
+                  </div>
+                  <p className="text-sm sm:text-base text-[#0369A1] pl-9 sm:pl-10 font-medium">
+                    Barista sedang meracik pesanan kopimu dengan bahan pilihan terbaik.
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          {/* Time Estimate Badge */}
-          <div className="flex items-center gap-3 p-4 rounded-2xl bg-[#F8FBFF] border border-[#E0F2FE]">
-            <div className="w-10 h-10 rounded-xl bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center">
-              <Clock className="w-5 h-5" />
+          {/* Quick Order Number & Copy Box */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E0F2FE] shadow-sm flex flex-col items-center justify-center shrink-0 min-w-[220px]">
+            <span className="text-[10px] uppercase font-mono tracking-widest text-[#64748B] font-bold">
+              NOMOR ORDER
+            </span>
+            <span className="font-mono font-black text-2xl sm:text-3xl text-[#0284C7] tracking-wider my-1">
+              {currentOrder.orderNumber}
+            </span>
+            <button
+              type="button"
+              onClick={handleCopyOrderNumber}
+              className="mt-1 w-full py-1.5 px-3 rounded-xl bg-[#F0F7FF] hover:bg-[#E0F2FE] border border-[#BAE6FD] text-[#0284C7] text-xs font-bold font-mono inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-emerald-700">Tersalin!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>SALIN NOMOR ORDER</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* 3. BILL / STRUK DIGITAL ONLINE (AS DETAILED IN SPECIFICATION) */}
+      <div className="bg-white rounded-3xl border border-[#E0F2FE] shadow-md p-6 sm:p-8 space-y-6 relative overflow-hidden">
+        {/* Decorative receipt top edge accent */}
+        <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-[#0284C7] via-[#38BDF8] to-[#0284C7]" />
+
+        {/* Bill Header */}
+        <div className="text-center pt-2 pb-4 border-b border-dashed border-slate-300 space-y-1">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-[#F0F7FF] border border-[#BAE6FD] text-[#0284C7] font-black text-xl mb-1 shadow-xs">
+            L
+          </div>
+          <h2 className="font-display font-black text-2xl text-[#172033] tracking-wider uppercase">
+            LETON COFFEE
+          </h2>
+          <p className="text-xs font-mono text-[#64748B] uppercase tracking-widest">
+            OFFICIAL DIGITAL ORDER BILL
+          </p>
+        </div>
+
+        {/* Meta Grid: Order Number, Outlet, Customer Name, Order Type */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2 text-xs">
+          <div className="space-y-1">
+            <span className="font-mono text-[11px] text-[#64748B] uppercase block">Nomor Order:</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-black text-lg text-[#0284C7]">
+                {currentOrder.orderNumber}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyOrderNumber}
+                className="px-2 py-0.5 rounded-md bg-[#F0F7FF] hover:bg-[#E0F2FE] text-[#0284C7] text-[11px] font-mono font-bold border border-[#BAE6FD] cursor-pointer transition-colors"
+                title="Salin nomor order"
+              >
+                {copied ? 'Tersalin' : 'Salin'}
+              </button>
             </div>
-            <div>
-              <span className="text-[10px] text-[#64748B] font-mono uppercase block font-bold">
-                Estimasi Penyajian
+          </div>
+
+          <div className="space-y-1">
+            <span className="font-mono text-[11px] text-[#64748B] uppercase block">Outlet:</span>
+            <span className="font-display font-bold text-sm text-[#172033] block">
+              {currentOrder.outletName}
+            </span>
+          </div>
+
+          <div className="space-y-1">
+            <span className="font-mono text-[11px] text-[#64748B] uppercase block">Nama Customer:</span>
+            <span className="font-display font-bold text-sm text-[#172033] block">
+              {currentOrder.customerName}
+            </span>
+            {currentOrder.customerPhone && (
+              <span className="font-mono text-[11px] text-[#64748B] block">
+                {currentOrder.customerPhone}
               </span>
-              <span className="font-display font-black text-base text-[#172033]">
-                ~5 - 8 Menit
-              </span>
-              <span className="text-[11px] text-emerald-600 font-semibold block">
-                Sedang Diseduh Barista
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <span className="font-mono text-[11px] text-[#64748B] uppercase block">Order Type:</span>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm text-[#172033]">
+                {currentOrder.orderType === 'DINE IN' ? 'Dine In (Makan di Tempat)' : 'Take Away (Bawa Pulang)'}
               </span>
             </div>
+            {currentOrder.orderType === 'DINE IN' && (
+              <span className="font-mono font-bold text-xs text-[#0284C7] block">
+                Nomor Meja: {currentOrder.tableNumber || '-'}
+              </span>
+            )}
           </div>
         </div>
 
-        {/* 7-STAGE PROGRESS TRACKER */}
-        <div className="mt-8 pt-6 border-t border-[#E0F2FE]">
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-            {stages.map((stg, idx) => {
-              const isPassed = idx < currentStep;
-              const isCurrent = idx === currentStep;
+        {/* ----------------- DETAIL PESANAN ----------------- */}
+        <div className="pt-4 border-t border-dashed border-slate-300 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display font-black text-sm uppercase tracking-wider text-[#172033]">
+              DETAIL PESANAN
+            </h3>
+            <span className="text-xs font-mono text-[#64748B]">
+              {currentOrder.items.reduce((acc, it) => acc + it.quantity, 0)} Total Item
+            </span>
+          </div>
+
+          <div className="space-y-4">
+            {currentOrder.items.map((item, idx) => {
+              const basePrice = item.price;
+              const sizePrice = item.size?.price || 0;
+              const toppingPrice = item.topping?.price || 0;
+              const syrupPrice = item.syrup?.price || 0;
+              const customizationAddonPrice = sizePrice + toppingPrice + syrupPrice;
+              const unitPrice = item.unitPrice || (basePrice + customizationAddonPrice);
+              const itemSubtotal = unitPrice * item.quantity;
+
+              const hasSize = item.size && item.size.name;
+              const hasTopping = item.topping && item.topping.name !== 'No Topping';
+              const hasSyrup = item.syrup && item.syrup.name !== 'No Syrup';
+
               return (
                 <div
-                  key={stg.key}
-                  className={`p-2.5 rounded-xl border text-center flex flex-col items-center justify-center transition-all ${
-                    isCurrent
-                      ? 'bg-[#E0F2FE] border-[#38BDF8] text-[#0284C7] font-bold shadow-sm'
-                      : isPassed
-                      ? 'bg-white border-[#E0F2FE] text-emerald-700 font-semibold'
-                      : 'bg-[#F8FBFF] border-[#E0F2FE] text-[#94A3B8]'
-                  }`}
+                  key={idx}
+                  className="p-4 rounded-2xl bg-[#F8FBFF] border border-[#E0F2FE] space-y-2.5 text-xs"
                 >
-                  <div className="flex items-center gap-1 mb-1">
-                    {isPassed ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    ) : isCurrent ? (
-                      <span className="w-2 h-2 rounded-full bg-[#0284C7] animate-ping" />
-                    ) : (
-                      <span className="w-2 h-2 rounded-full bg-slate-300" />
+                  {/* Item Main Line */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <span className="w-6 h-6 rounded-md bg-[#E0F2FE] text-[#0284C7] font-mono font-black flex items-center justify-center text-xs shrink-0">
+                        {item.quantity}x
+                      </span>
+                      <div>
+                        <h4 className="font-display font-bold text-sm text-[#172033]">
+                          {item.name}
+                        </h4>
+                      </div>
+                    </div>
+
+                    <span className="font-mono font-black text-sm text-[#172033]">
+                      {formatRupiah(itemSubtotal)}
+                    </span>
+                  </div>
+
+                  {/* Customization Details List */}
+                  <div className="pl-8.5 space-y-1 text-[#475569] font-mono text-[11px]">
+                    {hasSize && (
+                      <div className="flex items-center justify-between">
+                        <span>• Size: {item.size!.name}</span>
+                        <span>{sizePrice > 0 ? `+${formatRupiah(sizePrice)}` : '+Rp0'}</span>
+                      </div>
+                    )}
+                    {hasTopping && (
+                      <div className="flex items-center justify-between">
+                        <span>• Topping: {item.topping!.name}</span>
+                        <span>+{formatRupiah(toppingPrice)}</span>
+                      </div>
+                    )}
+                    {hasSyrup && (
+                      <div className="flex items-center justify-between">
+                        <span>• Syrup: {item.syrup!.name}</span>
+                        <span>+{formatRupiah(syrupPrice)}</span>
+                      </div>
+                    )}
+
+                    {/* Price Breakdown Calculation */}
+                    <div className="pt-2 mt-2 border-t border-[#E0F2FE] text-[#64748B] flex flex-col gap-0.5 text-[11px]">
+                      <div className="flex items-center justify-between">
+                        <span>Harga dasar:</span>
+                        <span>{formatRupiah(basePrice)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Tambahan customization:</span>
+                        <span>{formatRupiah(customizationAddonPrice)}</span>
+                      </div>
+                      <div className="flex items-center justify-between font-bold text-[#172033] pt-0.5">
+                        <span>Subtotal ({item.quantity}x @{formatRupiah(unitPrice)}):</span>
+                        <span className="text-[#0284C7]">{formatRupiah(itemSubtotal)}</span>
+                      </div>
+                    </div>
+
+                    {item.note && (
+                      <div className="mt-1.5 p-2 rounded-lg bg-white border border-[#E0F2FE] text-slate-600 italic text-[11px]">
+                        Catatan: "{item.note}"
+                      </div>
                     )}
                   </div>
-                  <span className="text-[11px] uppercase tracking-tight">{stg.label}</span>
                 </div>
               );
             })}
           </div>
         </div>
-      </div>
 
-      {/* 2-COLUMN MAIN CONTENT */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* ================= LEFT COLUMN: LIVE KITCHEN & ITEMS ================= */}
-        <div className="lg:col-span-7 flex flex-col gap-6">
-          {/* Live Kitchen Spotlight Card */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Coffee className="w-5 h-5 text-[#0284C7]" />
-                <h2 className="font-display font-black text-base text-[#172033] uppercase">
-                  Live Barista Station
-                </h2>
-              </div>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold">
-                Online &amp; Brewing
+        {/* ----------------- TOTAL & PAYMENT ----------------- */}
+        <div className="pt-4 border-t border-dashed border-slate-300 space-y-3">
+          <div className="flex items-baseline justify-between">
+            <span className="font-display font-black text-base text-[#172033] uppercase">
+              TOTAL:
+            </span>
+            <span className="font-mono font-black text-2xl sm:text-3xl text-[#0284C7]">
+              {formatRupiah(currentOrder.totalAmount)}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs py-2">
+            <div className="flex items-center justify-between sm:justify-start sm:gap-3 p-2.5 rounded-xl bg-[#F8FBFF] border border-[#E0F2FE]">
+              <span className="text-[#64748B] font-mono">Payment:</span>
+              <span className="font-bold text-[#172033] font-mono uppercase">
+                {currentOrder.paymentMethod}
               </span>
             </div>
 
-            {/* Barista & Roasting Note */}
-            <div className="p-4 rounded-xl bg-[#F8FBFF] border border-[#E0F2FE] flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-xl bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center font-bold text-lg shrink-0">
-                <Sparkles className="w-6 h-6 text-[#0284C7]" />
-              </div>
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-[#64748B] font-bold">
-                  Barista Bertugas
-                </span>
-                <h3 className="text-sm font-bold text-[#172033]">
-                  Tim Barista {outlet.shortName || 'Leton'}
-                </h3>
-                <p className="text-xs text-[#64748B]">
-                  Biji kopi artisan freshly pulled &amp; steamed dengan suhu presisi 62°C.
-                </p>
-              </div>
+            <div className="flex items-center justify-between sm:justify-start sm:gap-3 p-2.5 rounded-xl bg-[#F8FBFF] border border-[#E0F2FE]">
+              <span className="text-[#64748B] font-mono">Payment Status:</span>
+              <span
+                className={`font-bold font-mono uppercase text-xs ${
+                  currentOrder.paymentStatus === 'PAID'
+                    ? 'text-emerald-700 font-black'
+                    : currentOrder.paymentStatus === 'WAITING VERIFICATION'
+                    ? 'text-amber-700'
+                    : 'text-[#0284C7]'
+                }`}
+              >
+                {currentOrder.paymentStatus === 'PAID'
+                  ? 'LUNAS / PAID'
+                  : currentOrder.paymentStatus === 'WAITING VERIFICATION'
+                  ? 'VERIFIKASI PEMBAYARAN'
+                  : currentOrder.paymentStatus}
+              </span>
             </div>
+          </div>
 
-            {/* Quick Help Actions */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+          {/* Receipt image attachment preview if present */}
+          {currentOrder.paymentReceiptUrl && (
+            <div className="p-3 rounded-2xl bg-[#F8FBFF] border border-[#E0F2FE] flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <QrCode className="w-4 h-4 text-[#0284C7]" />
+                <span className="text-[#64748B]">Bukti Transfer QRIS Terlampir:</span>
+              </div>
               <a
-                href={waLink}
+                href={currentOrder.paymentReceiptUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="py-3 px-4 rounded-xl bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#0284C7] font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+                className="text-[#0284C7] font-bold hover:underline font-mono"
               >
-                <MessageCircle className="w-4 h-4 text-emerald-600" />
-                <span>Chat Kasir / Barista di WhatsApp</span>
+                Lihat Bukti Foto ↗
               </a>
-
-              <button
-                type="button"
-                onClick={() => alert(`Pelayan telah diberitahu untuk menuju ke ${order.orderType === 'DINE IN' ? `Meja ${order.tableNumber}` : 'kasir'}.`)}
-                className="py-3 px-4 rounded-xl bg-[#F0F7FF] hover:bg-[#E0F2FE] text-[#0284C7] font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer border border-[#E0F2FE]"
-              >
-                <Bell className="w-4 h-4" />
-                <span>Panggil Pelayan ke Meja</span>
-              </button>
             </div>
+          )}
+
+          {/* Special Instruction Notice */}
+          <div className="p-4 rounded-2xl bg-[#F0F7FF] border border-[#BAE6FD] text-center space-y-1">
+            <p className="font-bold text-xs sm:text-sm text-[#0369A1]">
+              “Silakan tunjukkan nomor order ini saat mengambil pesanan di outlet.”
+            </p>
+            <p className="text-[11px] text-[#64748B] font-mono">
+              Waktu Transaksi: {new Date(currentOrder.createdAt).toLocaleDateString('id-ID', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })} WIB
+            </p>
           </div>
 
-          {/* Rincian Menu Pesanan */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display font-black text-base text-[#172033] uppercase">
-                Daftar Menu Pesanan
-              </h2>
-              <span className="text-xs text-[#64748B]">{order.items.length} Macam Menu</span>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              {order.items.map((item, idx) => {
-                const hasSize = item.size && item.size.name;
-                const hasTopping = item.topping && item.topping.name !== 'No Topping';
-                const hasSyrup = item.syrup && item.syrup.name !== 'No Syrup';
-                const unitPrice =
-                  item.unitPrice ||
-                  item.price +
-                    (item.size?.price || 0) +
-                    (item.topping?.price || 0) +
-                    (item.syrup?.price || 0);
-
-                return (
-                  <div
-                    key={idx}
-                    className="p-3.5 rounded-xl bg-[#F8FBFF] border border-[#E0F2FE] flex items-start justify-between gap-3"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-white border border-[#E0F2FE] flex items-center justify-center font-bold text-[#0284C7] shrink-0 font-mono text-xs">
-                        {item.quantity}x
-                      </div>
-                      <div>
-                        <h3 className="font-display font-bold text-sm text-[#172033]">{item.name}</h3>
-                        <div className="text-xs text-[#64748B] mt-0.5 flex flex-wrap gap-1">
-                          {hasSize && (
-                            <span className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono text-[10px] font-bold">
-                              Size: {item.size!.name}{item.size!.price > 0 ? ` (+${formatRupiah(item.size!.price)})` : ''}
-                            </span>
-                          )}
-                          {hasTopping && (
-                            <span className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono text-[10px] font-bold">
-                              Top: {item.topping!.name} (+{formatRupiah(item.topping!.price)})
-                            </span>
-                          )}
-                          {hasSyrup && (
-                            <span className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono text-[10px] font-bold">
-                              Syr: {item.syrup!.name} (+{formatRupiah(item.syrup!.price)})
-                            </span>
-                          )}
-                        </div>
-                        {item.note && <span className="italic block text-[11px] text-slate-500 mt-1">Catatan: {item.note}</span>}
-                      </div>
-                    </div>
-
-                    <div className="text-right font-mono shrink-0">
-                      <span className="font-bold text-sm text-[#172033] block">
-                        {formatRupiah(unitPrice * item.quantity)}
-                      </span>
-                      <span className="text-[10px] text-[#64748B]">
-                        @{formatRupiah(unitPrice)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* ================= RIGHT COLUMN: PAYMENT & ACTIONS ================= */}
-        <div className="lg:col-span-5 flex flex-col gap-6">
-          {/* Ringkasan Pembayaran */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-4">
-            <h2 className="font-display font-black text-base text-[#172033] uppercase">
-              Rincian Pembayaran
-            </h2>
-
-            <div className="space-y-2 text-xs text-[#64748B]">
-              <div className="flex items-center justify-between">
-                <span>Metode Bayar</span>
-                <span className="font-bold text-[#172033]">{order.paymentMethod}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Status Pembayaran</span>
-                <span className="font-bold text-emerald-600">{order.paymentStatus}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Waktu Transaksi</span>
-                <span className="font-bold text-[#172033]">
-                  {new Date(order.createdAt).toLocaleTimeString('id-ID', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })} WIB
-                </span>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-[#E0F2FE] flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-mono uppercase text-[#64748B] block">Total Transaksi</span>
-                <span className="font-mono font-black text-2xl text-[#0284C7]">
-                  {formatRupiah(order.totalAmount)}
-                </span>
-              </div>
-              <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold font-mono">
-                Terverifikasi
-              </span>
-            </div>
-
-            {/* Receipt image preview if uploaded */}
-            {order.paymentReceiptUrl && (
-              <div className="pt-3 border-t border-[#E0F2FE]">
-                <span className="text-xs text-[#64748B] block mb-2 font-bold">Bukti Transfer QRIS:</span>
-                <div className="h-36 rounded-xl overflow-hidden border border-[#E0F2FE] bg-[#F8FBFF]">
-                  <img
-                    src={order.paymentReceiptUrl}
-                    alt="Bukti Transfer"
-                    className="w-full h-full object-contain"
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-              </div>
+          {/* Primary Action: SALIN NOMOR ORDER Button */}
+          <button
+            type="button"
+            onClick={handleCopyOrderNumber}
+            className="w-full py-3.5 px-6 rounded-2xl bg-[#0284C7] hover:bg-[#0369A1] text-white font-display font-black text-sm tracking-wider uppercase shadow-[0_4px_14px_rgba(2,132,199,0.25)] flex items-center justify-center gap-2 transition-all cursor-pointer"
+          >
+            {copied ? (
+              <>
+                <Check className="w-4 h-4 text-emerald-300" />
+                <span>NOMOR ORDER BERHASIL DISALIN!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4" />
+                <span>SALIN NOMOR ORDER</span>
+              </>
             )}
-          </div>
-
-          {/* Action CTAs */}
-          <div className="space-y-3">
-            <button
-              onClick={onOrderAgain}
-              className="w-full py-3.5 px-6 rounded-xl bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold text-sm tracking-wide uppercase shadow-[0_4px_14px_rgba(2,132,199,0.25)] flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>PESAN MENU TAMBAHAN LAGI</span>
-            </button>
-
-            <button
-              onClick={onBackToHome}
-              className="w-full py-3 px-6 rounded-xl bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#172033] font-bold text-sm tracking-wide uppercase flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
-            >
-              <Home className="w-4 h-4 text-[#0284C7]" />
-              <span>Kembali ke Halaman Utama</span>
-            </button>
-          </div>
+          </button>
         </div>
+      </div>
+
+      {/* 4. FOOTER ACTIONS */}
+      <div className="mt-8 flex flex-col sm:flex-row gap-3">
+        <a
+          href={waLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-1 py-3 px-4 rounded-2xl bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#0284C7] font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all"
+        >
+          <MessageCircle className="w-4 h-4 text-emerald-600" />
+          <span>Chat Barista di WhatsApp</span>
+        </a>
+
+        <button
+          type="button"
+          onClick={onOrderAgain}
+          className="flex-1 py-3 px-4 rounded-2xl bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#172033] font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+        >
+          <RefreshCw className="w-4 h-4 text-[#0284C7]" />
+          <span>Pesan Menu Tambahan</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onBackToHome}
+          className="flex-1 py-3 px-4 rounded-2xl bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#172033] font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+        >
+          <Home className="w-4 h-4 text-[#0284C7]" />
+          <span>Kembali ke Beranda</span>
+        </button>
       </div>
     </div>
   );

@@ -913,36 +913,65 @@ export const OrderManager: React.FC = () => {
                   )}
                 </div>
 
-                {/* Quick Status Modifiers */}
+                {/* Operational Action Bar: Prominent PESANAN SUDAH SIAP Button */}
                 <div className="pt-4 mt-4 border-t border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  {/* Order Status Stepper Buttons */}
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[11px] font-mono uppercase text-slate-400 mr-1">
-                      Ubah Status Pesanan:
-                    </span>
-                    {(['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'] as OrderStatus[]).map(
-                      (st) => {
-                        const isCurrent = order.orderStatus === st;
-                        return (
-                          <button
-                            key={st}
-                            disabled={isUpdating}
-                            onClick={() => handleUpdateStatus(order.id, st)}
-                            className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all cursor-pointer ${
-                              isCurrent
-                                ? 'bg-[#00E5FF] text-slate-950 font-black shadow-md shadow-cyan-500/30'
-                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                            }`}
-                          >
-                            {st}
-                          </button>
-                        );
-                      }
-                    )}
+                  <div className="flex flex-wrap items-center gap-3">
+                    {order.orderStatus !== 'READY' && order.orderStatus !== 'COMPLETED' && order.orderStatus !== 'CANCELLED' ? (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={() => handleUpdateStatus(order.id, 'READY')}
+                        className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-display font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-white" />
+                        <span>PESANAN SUDAH SIAP</span>
+                      </button>
+                    ) : order.orderStatus === 'READY' ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-3 py-2 rounded-xl bg-emerald-950 border border-emerald-500/60 text-emerald-300 font-mono font-bold text-xs flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>Pesanan Sudah Siap (Menunggu Customer Ambil)</span>
+                        </span>
+                        <button
+                          type="button"
+                          disabled={isUpdating}
+                          onClick={() => handleUpdateStatus(order.id, 'COMPLETED')}
+                          className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs uppercase font-bold transition-all cursor-pointer border border-slate-700"
+                        >
+                          Tandai Selesai
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {/* Order Status Stepper Buttons */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-mono uppercase text-slate-500 mr-1">
+                        Status Manual:
+                      </span>
+                      {(['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'] as OrderStatus[]).map(
+                        (st) => {
+                          const isCurrent = order.orderStatus === st;
+                          return (
+                            <button
+                              key={st}
+                              disabled={isUpdating}
+                              onClick={() => handleUpdateStatus(order.id, st)}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all cursor-pointer ${
+                                isCurrent
+                                  ? 'bg-[#00E5FF] text-slate-950 font-black shadow-md shadow-cyan-500/30'
+                                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                              }`}
+                            >
+                              {st}
+                            </button>
+                          );
+                        }
+                      )}
+                    </div>
                   </div>
 
                   {/* Payment Status Dropdown for Full Control */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <span className="text-[11px] font-mono uppercase text-slate-400">Bayar:</span>
                     <select
                       disabled={isUpdating}
@@ -954,7 +983,7 @@ export const OrderManager: React.FC = () => {
                           e.target.value as PaymentStatus
                         )
                       }
-                      className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-700 text-xs font-mono text-slate-200 focus:outline-none focus:border-[#00E5FF] cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-xs font-mono text-slate-200 focus:outline-none focus:border-[#00E5FF] cursor-pointer"
                     >
                       <option value="WAITING VERIFICATION">WAITING VERIFICATION</option>
                       <option value="PAY AT STORE">PAY AT STORE</option>

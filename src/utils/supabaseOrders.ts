@@ -965,3 +965,203 @@ export function subscribeToOrdersRealtime(
     }
   };
 }
+
+/**
+ * Fetch a single order by ID or Order Number
+ */
+export async function fetchSingleOrder(orderIdOrNumber: string): Promise<CustomerOrder | null> {
+  if (!orderIdOrNumber) return null;
+
+  // 1. Try Supabase 'orders' table
+  try {
+    const client = getSupabase();
+    const { data, error } = await client
+      .from('orders')
+      .select('*')
+      .or(`id.eq.${orderIdOrNumber},order_number.eq.${orderIdOrNumber}`)
+      .maybeSingle();
+
+    if (!error && data) {
+      return {
+        id: data.id,
+        orderNumber: data.order_number || data.orderNumber || 'LTN-????',
+        outletId: data.outlet_id || data.outletId || '',
+        outletName: data.outlet_name || data.outletName || '',
+        customerName: data.customer_name || data.customerName || '',
+        customerPhone: data.customer_phone || data.customerPhone || '',
+        orderType: data.order_type || data.orderType || 'DINE IN',
+        tableNumber: data.table_number || data.tableNumber || '',
+        items: Array.isArray(data.items) ? data.items : [],
+        totalAmount: Number(data.total_amount || data.totalAmount || 0),
+        paymentMethod: data.payment_method || data.paymentMethod || 'QRIS',
+        paymentStatus: data.payment_status || data.paymentStatus || 'WAITING PAYMENT',
+        paymentProofPath: data.payment_proof_path || data.payment_receipt_path || data.paymentReceiptPath,
+        paymentReceiptUrl: data.payment_receipt_url || data.paymentReceiptUrl,
+        paymentReceiptPath: data.payment_receipt_path || data.payment_proof_path || data.paymentReceiptPath,
+        rejectionReason: data.rejection_reason || data.rejectionReason,
+        orderStatus: data.order_status || data.orderStatus || 'NEW',
+        customerNote: data.customer_note || data.customerNote || '',
+        createdAt: data.created_at || data.createdAt || new Date().toISOString(),
+        updatedAt: data.updated_at || data.updatedAt,
+      };
+    }
+  } catch (err) {
+    console.warn('[Fetch Single Supabase Order Error]:', err);
+  }
+
+  // 2. Try 'leton_content' orders_registry
+  try {
+    const client = getSupabase();
+    const { data: regRow } = await client
+      .from('leton_content')
+      .select('*')
+      .eq('id', 'orders_registry')
+      .maybeSingle();
+
+    if (regRow?.content?.orders && Array.isArray(regRow.content.orders)) {
+      const match = regRow.content.orders.find(
+        (o: CustomerOrder) => o.id === orderIdOrNumber || o.orderNumber === orderIdOrNumber
+      );
+      if (match) return match;
+    }
+  } catch (regErr) {
+    // ignore
+  }
+
+  // 3. Try Backend API
+  try {
+    const res = await fetch(getApiUrl(`/api/orders/${orderIdOrNumber}`));
+    if (res.ok) {
+      const found = await res.json();
+      if (found && found.id) return found;
+    }
+  } catch {
+    // ignore
+  }
+
+  // 4. Try Local Storage Cache
+  try {
+    const local = safeGetItem(ORDERS_STORAGE_KEY) || safeGetItem(ADMIN_ORDERS_CACHE_KEY);
+    if (local) {
+      const parsed: CustomerOrder[] = JSON.parse(local);
+      if (Array.isArray(parsed)) {
+        const found = parsed.find(
+          (o) => o.id === orderIdOrNumber || o.orderNumber === orderIdOrNumber
+        );
+        if (found) return found;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
+/**
+ * Realtime Subscription for a Single Customer Order
+ * Ensures instant UI updates on the customer's Order Confirmation / Bill screen
+ */
+export function subscribeToSingleOrder(
+  orderIdOrNumber: string,
+  onUpdate: (order: CustomerOrder) => void
+): () => void {
+  let isSubscribed = true;
+  let clientChannel: any = null;
+  let sseSource: EventSource | null = null;
+
+  const checkOrder = async () => {
+    if (!isSubscribed) return;
+    const latest = await fetchSingleOrder(orderIdOrNumber);
+    if (latest && isSubscribed) {
+      onUpdate(latest);
+    }
+  };
+
+  // 1. Initial fetch
+  checkOrder();
+
+  // 2. Supabase Postgres Realtime Channel
+  try {
+    const client = getSupabase();
+    clientChannel = client
+      .channel(`order_live_${orderIdOrNumber}_${Math.random().toString(36).slice(2)}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+        },
+        (payload: any) => {
+          if (
+            payload.new &&
+            (payload.new.id === orderIdOrNumber || payload.new.order_number === orderIdOrNumber)
+          ) {
+            checkOrder();
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'leton_content',
+          filter: 'id=eq.orders_registry',
+        },
+        () => {
+          checkOrder();
+        }
+      )
+      .subscribe();
+  } catch (err) {
+    console.warn('[Single Order Realtime Error]:', err);
+  }
+
+  // 3. SSE Listener
+  try {
+    sseSource = new EventSource(getApiUrl('/api/events'));
+    sseSource.onmessage = (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        if (
+          payload &&
+          (payload.type === 'ORDER_UPDATED' || payload.type === 'ORDER_CREATED')
+        ) {
+          if (
+            payload.order?.id === orderIdOrNumber ||
+            payload.order?.orderNumber === orderIdOrNumber
+          ) {
+            checkOrder();
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+  } catch {
+    // ignore
+  }
+
+  // 4. Polling fallback every 2.5 seconds
+  const pollInterval = setInterval(() => {
+    if (isSubscribed) {
+      checkOrder();
+    }
+  }, 2500);
+
+  return () => {
+    isSubscribed = false;
+    clearInterval(pollInterval);
+    if (sseSource) sseSource.close();
+    if (clientChannel) {
+      try {
+        const client = getSupabase();
+        client.removeChannel(clientChannel);
+      } catch {
+        // ignore
+      }
+    }
+  };
+}

@@ -33,14 +33,14 @@ export function pruneStorageCache(): void {
 }
 
 /**
- * Strips bulky base64 data URIs (>1KB) from object trees before putting them into localStorage.
- * Full images remain safely persisted in IndexedDB and Supabase.
+ * Strips bulky base64 data URIs (>500 chars) from object trees before putting them into storage/database.
+ * Real uploaded image URLs (e.g. /uploads/... or https://...) are short strings and remain intact.
  */
 export function stripHeavyBase64Images<T>(val: T): T {
   if (val === null || val === undefined) return val;
 
   if (typeof val === 'string') {
-    if (val.startsWith('data:') || val.length > 1024) {
+    if (val.startsWith('data:') && val.length > 500) {
       return '' as unknown as T;
     }
     return val as unknown as T;

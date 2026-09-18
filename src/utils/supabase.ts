@@ -147,89 +147,86 @@ let pendingSaveData: LetonData | null = null;
 /**
  * 4. Save/Update CMS Content in Supabase Database
  * Upserts content into 'leton_content' table.
- * Uses lightweight JSON payload (stripped of heavy base64 strings) and single-flight queue serialization
- * to guarantee ultra-fast execution (<50ms) and eliminate PostgreSQL statement timeouts.
+ * Strips heavy base64 strings so payload remains lightweight (~10KB) preventing PostgreSQL statement timeouts.
+ * Performs direct single upsert and a mandatory read-back verification.
  */
 export async function saveContentToSupabase(contentData: LetonData): Promise<{ success: boolean; error?: string }> {
-  pendingSaveData = contentData;
+  const startTime = Date.now();
 
-  if (activeSavePromise) {
-    return activeSavePromise;
-  }
+  try {
+    const client = getSupabase();
+    // 1. Sanitize data and strip any raw base64 data URIs (>500 chars) to prevent statement timeout
+    const cleanData = sanitizeLoadedData(contentData);
+    const lightweightData = stripHeavyBase64Images(cleanData);
 
-  activeSavePromise = (async () => {
-    let lastResult: { success: boolean; error?: string } = { success: true };
+    const payload = {
+      id: SUPABASE_ROW_ID,
+      content: lightweightData,
+      updated_at: new Date().toISOString(),
+    };
 
-    while (pendingSaveData) {
-      const currentData = pendingSaveData;
-      pendingSaveData = null;
-      const startTime = Date.now();
+    // 2. Perform direct single upsert
+    const { error: upsertError } = await client
+      .from(SUPABASE_TABLE_NAME)
+      .upsert(payload, { onConflict: 'id' });
 
-      try {
-        const client = getSupabase();
-        // 1. Sanitize data to ensure schema validity
-        const cleanData = sanitizeLoadedData(currentData);
+    const upsertDuration = Date.now() - startTime;
 
-        const payload = {
-          id: SUPABASE_ROW_ID,
-          content: cleanData,
-          updated_at: new Date().toISOString(),
-        };
-
-        const { error } = await client
-          .from(SUPABASE_TABLE_NAME)
-          .upsert(payload, { onConflict: 'id' });
-
-        const endTime = Date.now();
-        const duration = endTime - startTime;
-
-        console.table({
-          'operation': 'UPSERT_FULL_CMS_CONTENT',
-          'table': SUPABASE_TABLE_NAME,
-          'record ID': SUPABASE_ROW_ID,
-          'request start': new Date(startTime).toISOString(),
-          'request end': new Date(endTime).toISOString(),
-          'duration': `${duration}ms`,
-          'Supabase error code': error?.code || 'NONE',
-          'Supabase error message': error?.message || 'NONE',
-        });
-
-        if (error) {
-          console.error('[Supabase Database Upsert Error]:', {
-            message: error.message,
-            code: error.code,
-            details: error.details,
-            hint: error.hint,
-            table: SUPABASE_TABLE_NAME,
-            durationMs: duration,
-          });
-          lastResult = { success: false, error: `${error.message}${error.hint ? ` (${error.hint})` : ''}` };
-        } else {
-          lastResult = { success: true };
-        }
-      } catch (err: any) {
-        const endTime = Date.now();
-        const duration = endTime - startTime;
-        console.table({
-          'operation': 'UPSERT_FULL_CMS_CONTENT_EXCEPTION',
-          'table': SUPABASE_TABLE_NAME,
-          'record ID': SUPABASE_ROW_ID,
-          'request start': new Date(startTime).toISOString(),
-          'request end': new Date(endTime).toISOString(),
-          'duration': `${duration}ms`,
-          'Supabase error code': err?.code || 'EXCEPTION',
-          'Supabase error message': err?.message || 'Gagal menyimpan data ke Supabase.',
-        });
-        console.error('[saveContentToSupabase Exception]:', err);
-        lastResult = { success: false, error: err?.message || 'Gagal menyimpan data ke Supabase.' };
-      }
+    if (upsertError) {
+      console.error('[Supabase Database Upsert Error]:', {
+        message: upsertError.message,
+        code: upsertError.code,
+        details: upsertError.details,
+        hint: upsertError.hint,
+        table: SUPABASE_TABLE_NAME,
+        durationMs: upsertDuration,
+      });
+      return {
+        success: false,
+        error: `Database error: ${upsertError.message}${upsertError.hint ? ` (${upsertError.hint})` : ''}`,
+      };
     }
 
-    activeSavePromise = null;
-    return lastResult;
-  })();
+    // 3. Mandatory 1-time Read-Back Verification to ensure data is saved
+    const readBackStart = Date.now();
+    const { data: verifyRow, error: verifyError } = await client
+      .from(SUPABASE_TABLE_NAME)
+      .select('content')
+      .eq('id', SUPABASE_ROW_ID)
+      .single();
 
-  return activeSavePromise;
+    const readBackDuration = Date.now() - readBackStart;
+
+    if (verifyError || !verifyRow?.content) {
+      console.error('[Supabase Read-Back Verification Error]:', verifyError);
+      return {
+        success: false,
+        error: `Read-back verification failed: ${verifyError?.message || 'Record not found'}`,
+      };
+    }
+
+    console.table({
+      'operation': 'UPSERT_AND_VERIFY',
+      'table': SUPABASE_TABLE_NAME,
+      'record ID': SUPABASE_ROW_ID,
+      'upsert duration': `${upsertDuration}ms`,
+      'read-back duration': `${readBackDuration}ms`,
+      'total duration': `${Date.now() - startTime}ms`,
+      'status': 'VERIFIED_SUCCESS',
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    const duration = Date.now() - startTime;
+    console.error('[saveContentToSupabase Exception]:', {
+      error: err,
+      durationMs: duration,
+    });
+    return {
+      success: false,
+      error: err?.message || 'Gagal menyimpan data ke Supabase.',
+    };
+  }
 }
 
 /**

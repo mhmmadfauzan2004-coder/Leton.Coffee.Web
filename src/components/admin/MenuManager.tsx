@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useContent } from '../../context/ContentContext';
-import { MenuItem, MenuCategory, CustomizationOption } from '../../types';
+import { MenuItem, MenuCategory, CustomizationOption, ProductSizeOption } from '../../types';
 import { initialLetonData } from '../../data/initialData';
-import { DEFAULT_MASTER_TOPPINGS, DEFAULT_MASTER_SYRUPS } from '../../data/addOnsData';
+import { DEFAULT_SIZES, DEFAULT_MASTER_TOPPINGS, DEFAULT_MASTER_SYRUPS } from '../../data/addOnsData';
 import { ImageUploadField } from './ImageUploadField';
 import { formatRupiah } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
@@ -20,6 +20,8 @@ import {
   UtensilsCrossed,
   Sparkles,
   Droplet,
+  Layers,
+  Loader2,
 } from 'lucide-react';
 
 export const MenuManager: React.FC = () => {
@@ -32,15 +34,27 @@ export const MenuManager: React.FC = () => {
     deleteCategory,
     saveCustomOption,
     deleteCustomOption,
+    saveMasterSizes,
+    showToast,
   } = useContent();
   const { menuCategories, menuItems } = data;
   const masterToppings = data.masterToppings || DEFAULT_MASTER_TOPPINGS;
   const masterSyrups = data.masterSyrups || DEFAULT_MASTER_SYRUPS;
+  const masterSizes = data.masterSizes || DEFAULT_SIZES;
 
-  // Active tab: "items" | "categories" | "toppings" | "syrups"
-  const [activeSubTab, setActiveSubTab] = useState<'items' | 'categories' | 'toppings' | 'syrups'>('items');
+  // Active tab: "items" | "categories" | "toppings" | "syrups" | "sizes"
+  const [activeSubTab, setActiveSubTab] = useState<'items' | 'categories' | 'toppings' | 'syrups' | 'sizes'>('items');
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedCatFilter, setSelectedCatFilter] = useState('all');
+
+  // Loading states
+  const [isSavingItem, setIsSavingItem] = useState(false);
+  const [isSavingCat, setIsSavingCat] = useState(false);
+  const [isSavingCustom, setIsSavingCustom] = useState(false);
+  const [isSavingSizes, setIsSavingSizes] = useState(false);
+
+  // Master sizes form
+  const [sizeForm, setSizeForm] = useState<ProductSizeOption[]>(() => [...masterSizes]);
 
   // Menu item modal state
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
@@ -100,28 +114,76 @@ export const MenuManager: React.FC = () => {
       isAvailable: true,
       badge: '',
       order: menuItems.length + 1,
+      hasSize: true,
+      sizes: [...masterSizes],
+      hasTopping: true,
+      availableToppingIds: masterToppings.filter((t) => t.isActive).map((t) => t.id),
+      hasSyrup: true,
+      availableSyrupIds: masterSyrups.filter((s) => s.isActive).map((s) => s.id),
     });
     setIsItemModalOpen(true);
   };
 
   const handleOpenEditItem = (item: MenuItem) => {
     setEditingItem(item);
-    setItemForm({ ...item });
+    setItemForm({
+      ...item,
+      hasSize: item.hasSize !== false,
+      sizes: item.sizes && item.sizes.length > 0 ? item.sizes : [...masterSizes],
+      hasTopping: item.hasTopping !== false,
+      availableToppingIds: item.availableToppingIds || masterToppings.filter((t) => t.isActive).map((t) => t.id),
+      hasSyrup: item.hasSyrup !== false,
+      availableSyrupIds: item.availableSyrupIds || masterSyrups.filter((s) => s.isActive).map((s) => s.id),
+    });
     setIsItemModalOpen(true);
   };
 
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!itemForm.name.trim()) return;
+    if (!itemForm.name.trim()) {
+      showToast('Nama menu wajib diisi.', 'error');
+      return;
+    }
+    if (!itemForm.categoryId) {
+      showToast('Kategori menu wajib dipilih.', 'error');
+      return;
+    }
+    if (isNaN(itemForm.price) || itemForm.price < 0) {
+      showToast('Harga menu tidak valid.', 'error');
+      return;
+    }
 
-    await saveMenuItem(itemForm);
-    setIsItemModalOpen(false);
+    setIsSavingItem(true);
+    try {
+      const targetItem: MenuItem = {
+        ...itemForm,
+        id: itemForm.id || `menu-${Date.now()}`,
+        name: itemForm.name.trim(),
+        hasSize: itemForm.hasSize !== false,
+        hasTopping: itemForm.hasTopping !== false,
+        hasSyrup: itemForm.hasSyrup !== false,
+      };
+
+      const success = await saveMenuItem(targetItem);
+      if (success) {
+        showToast(`Menu "${targetItem.name}" berhasil disimpan.`, 'success');
+        setIsItemModalOpen(false);
+      }
+    } catch (err: any) {
+      showToast('Gagal menyimpan menu: ' + (err.message || 'Error tidak diketahui'), 'error');
+    } finally {
+      setIsSavingItem(false);
+    }
   };
 
   const handleToggleAvailability = async (itemId: string) => {
     const target = menuItems.find((item) => item.id === itemId);
     if (target) {
-      await saveMenuItem({ ...target, isAvailable: !target.isAvailable });
+      const nextAvailable = !target.isAvailable;
+      const success = await saveMenuItem({ ...target, isAvailable: nextAvailable });
+      if (success) {
+        showToast(`Status "${target.name}" diubah ke ${nextAvailable ? 'Tersedia' : 'Habis'}.`, 'info');
+      }
     }
   };
 
@@ -166,19 +228,33 @@ export const MenuManager: React.FC = () => {
 
   const handleSaveCat = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!catForm.name.trim()) return;
+    if (!catForm.name.trim()) {
+      showToast('Nama kategori wajib diisi.', 'error');
+      return;
+    }
 
-    const targetCat = {
-      ...catForm,
-      id: catForm.id || catForm.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-    };
+    setIsSavingCat(true);
+    try {
+      const targetCat: MenuCategory = {
+        ...catForm,
+        name: catForm.name.trim().toUpperCase(),
+        id: catForm.id || catForm.name.trim().toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      };
 
-    await saveCategory(targetCat);
-    setIsCatModalOpen(false);
+      const success = await saveCategory(targetCat);
+      if (success) {
+        showToast(`Kategori "${targetCat.name}" berhasil disimpan.`, 'success');
+        setIsCatModalOpen(false);
+      }
+    } catch (err: any) {
+      showToast('Gagal menyimpan kategori: ' + (err.message || 'Error tidak diketahui'), 'error');
+    } finally {
+      setIsSavingCat(false);
+    }
   };
 
   // ----------------------------------------
-  // Customization (Topping / Syrup) Actions
+  // Customization (Topping / Syrup / Size) Actions
   // ----------------------------------------
   const handleToggleTopping = async (id: string) => {
     const target = masterToppings.find((t) => t.id === id);
@@ -217,10 +293,44 @@ export const MenuManager: React.FC = () => {
 
   const handleSaveCustomOption = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customOptionForm.name.trim()) return;
+    if (!customOptionForm.name.trim()) {
+      showToast(`Nama ${customOptionType} wajib diisi.`, 'error');
+      return;
+    }
 
-    await saveCustomOption(customOptionType, customOptionForm);
-    setIsCustomOptionModalOpen(false);
+    setIsSavingCustom(true);
+    try {
+      const targetOption: CustomizationOption = {
+        ...customOptionForm,
+        name: customOptionForm.name.trim(),
+        id: customOptionForm.id || `${customOptionType}-${Date.now()}`,
+      };
+
+      const success = await saveCustomOption(customOptionType, targetOption);
+      if (success) {
+        showToast(`${customOptionType === 'topping' ? 'Topping' : 'Syrup'} "${targetOption.name}" berhasil disimpan.`, 'success');
+        setIsCustomOptionModalOpen(false);
+      }
+    } catch (err: any) {
+      showToast(`Gagal menyimpan ${customOptionType}: ` + (err.message || 'Error tidak diketahui'), 'error');
+    } finally {
+      setIsSavingCustom(false);
+    }
+  };
+
+  const handleSaveMasterSizes = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingSizes(true);
+    try {
+      const success = await saveMasterSizes(sizeForm);
+      if (success) {
+        showToast('Pengaturan Opsi Ukuran Master Cup berhasil disimpan.', 'success');
+      }
+    } catch (err: any) {
+      showToast('Gagal menyimpan ukuran master cup: ' + (err.message || 'Error tidak diketahui'), 'error');
+    } finally {
+      setIsSavingSizes(false);
+    }
   };
 
   // ----------------------------------------
@@ -311,6 +421,18 @@ export const MenuManager: React.FC = () => {
           >
             <Droplet className="w-3.5 h-3.5" />
             <span>Syrup ({masterSyrups.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('sizes')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-colors cursor-pointer flex items-center gap-1.5 ${
+              activeSubTab === 'sizes'
+                ? 'bg-[#00E5FF] text-black shadow-md'
+                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Size Cup ({masterSizes.length})</span>
           </button>
         </div>
       </div>
@@ -696,6 +818,81 @@ export const MenuManager: React.FC = () => {
         </div>
       )}
 
+      {/* SUBTAB 5: MASTER SIZES */}
+      {activeSubTab === 'sizes' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-display font-bold text-lg text-white uppercase">
+                PENGATURAN HARGA MASTER SIZE CUP
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Atur selisih harga tambahan untuk ukuran Regular dan Large secara terpusat.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveMasterSizes} className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-6 max-w-xl">
+            <div className="space-y-4">
+              {sizeForm.map((sizeOpt, idx) => (
+                <div key={sizeOpt.name} className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-4">
+                  <div>
+                    <span className="text-[10px] font-mono tracking-widest text-[#00E5FF] uppercase">
+                      UKURAN CUP
+                    </span>
+                    <h4 className="font-display font-bold text-base text-white mt-0.5">
+                      {sizeOpt.name}
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      {sizeOpt.name === 'Regular' ? 'Ukuran standar (Default +Rp0)' : 'Ukuran lebih besar (+Tambahan)'}
+                    </p>
+                  </div>
+
+                  <div className="w-40">
+                    <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">
+                      Tambahan (IDR)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1000}
+                      value={sizeOpt.price}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 0;
+                        const next = [...sizeForm];
+                        next[idx] = { ...next[idx], price: val };
+                        setSizeForm(next);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-xs font-bold focus:outline-none focus:border-[#00E5FF]"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="submit"
+                disabled={isSavingSizes}
+                className="px-6 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] disabled:opacity-50 text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer shadow-lg shadow-[#00E5FF]/20"
+              >
+                {isSavingSizes ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Simpan Master Size</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* ------------------------------------------- */}
       {/* MODAL: ADD / EDIT MENU ITEM                 */}
       {/* ------------------------------------------- */}
@@ -804,6 +1001,60 @@ export const MenuManager: React.FC = () => {
                 />
               </div>
 
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase">
+                  Pilihan Customization Menu
+                </label>
+
+                {/* Size Cup */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="item-has-size"
+                      checked={itemForm.hasSize !== false}
+                      onChange={(e) => setItemForm({ ...itemForm, hasSize: e.target.checked })}
+                      className="w-4 h-4 rounded text-cyan-400 bg-slate-950 border-slate-800 focus:ring-0"
+                    />
+                    <label htmlFor="item-has-size" className="text-xs text-white font-semibold cursor-pointer">
+                      Produk Menggunakan Size Cup (Regular / Large)
+                    </label>
+                  </div>
+                </div>
+
+                {/* Topping */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="item-has-topping"
+                      checked={itemForm.hasTopping !== false}
+                      onChange={(e) => setItemForm({ ...itemForm, hasTopping: e.target.checked })}
+                      className="w-4 h-4 rounded text-cyan-400 bg-slate-950 border-slate-800 focus:ring-0"
+                    />
+                    <label htmlFor="item-has-topping" className="text-xs text-white font-semibold cursor-pointer">
+                      Produk Menggunakan Topping
+                    </label>
+                  </div>
+                </div>
+
+                {/* Syrup */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="item-has-syrup"
+                      checked={itemForm.hasSyrup !== false}
+                      onChange={(e) => setItemForm({ ...itemForm, hasSyrup: e.target.checked })}
+                      className="w-4 h-4 rounded text-cyan-400 bg-slate-950 border-slate-800 focus:ring-0"
+                    />
+                    <label htmlFor="item-has-syrup" className="text-xs text-white font-semibold cursor-pointer">
+                      Produk Menggunakan Additional Syrup
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-center gap-3 pt-2">
                 <input
                   type="checkbox"
@@ -830,10 +1081,20 @@ export const MenuManager: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer shadow-lg shadow-[#00E5FF]/20"
+                  disabled={isSavingItem}
+                  className="px-6 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] disabled:opacity-50 text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer shadow-lg shadow-[#00E5FF]/20"
                 >
-                  <Save className="w-4 h-4" />
-                  <span>Simpan Menu</span>
+                  {isSavingItem ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Simpan Menu</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -885,10 +1146,20 @@ export const MenuManager: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer shadow-lg shadow-[#00E5FF]/20"
+                  disabled={isSavingCat}
+                  className="px-6 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] disabled:opacity-50 text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer shadow-lg shadow-[#00E5FF]/20"
                 >
-                  <Save className="w-4 h-4" />
-                  <span>Simpan Kategori</span>
+                  {isSavingCat ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Simpan Kategori</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -975,10 +1246,20 @@ export const MenuManager: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer shadow-lg shadow-[#00E5FF]/20"
+                  disabled={isSavingCustom}
+                  className="px-6 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] disabled:opacity-50 text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer shadow-lg shadow-[#00E5FF]/20"
                 >
-                  <Save className="w-4 h-4" />
-                  <span>Simpan {customOptionType === 'topping' ? 'Topping' : 'Syrup'}</span>
+                  {isSavingCustom ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Simpan {customOptionType === 'topping' ? 'Topping' : 'Syrup'}</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

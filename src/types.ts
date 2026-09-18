@@ -149,6 +149,7 @@ export interface LetonData {
   menuItems: MenuItem[];
   masterToppings?: CustomizationOption[];
   masterSyrups?: CustomizationOption[];
+  masterSizes?: ProductSizeOption[];
   baristasContent?: BaristasSectionContent;
   baristas: BaristaItem[];
   aboutContent: AboutContent;

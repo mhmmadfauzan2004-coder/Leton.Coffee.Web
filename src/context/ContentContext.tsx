@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { LetonData, AuthState, AdminRole, MenuItem, MenuCategory, CustomizationOption } from '../types';
+import { LetonData, AuthState, AdminRole, MenuItem, MenuCategory, CustomizationOption, ProductSizeOption } from '../types';
 import { initialLetonData } from '../data/initialData';
 import {
   saveSingleMenuItemGranular,
@@ -56,6 +56,7 @@ interface ContentContextType {
   deleteCategory: (catId: string) => Promise<boolean>;
   saveCustomOption: (type: 'topping' | 'syrup', option: CustomizationOption) => Promise<boolean>;
   deleteCustomOption: (type: 'topping' | 'syrup', optionId: string) => Promise<boolean>;
+  saveMasterSizes: (sizes: ProductSizeOption[]) => Promise<boolean>;
   uploadImage: (file: File) => Promise<string | null>;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -547,6 +548,26 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const saveMasterSizes = async (sizes: ProductSizeOption[]): Promise<boolean> => {
+    try {
+      const nextData = { ...data, masterSizes: sizes };
+      setData(nextData);
+      saveStoredContent(nextData);
+      setLastUpdated(Date.now());
+
+      if (isSupabaseConfigured()) {
+        const res = await saveContentToSupabase(nextData);
+        if (!res.success) {
+          showToast('Peringatan simpan size cloud: ' + (res.error || 'Gagal sync'), 'error');
+        }
+      }
+      return true;
+    } catch (err: any) {
+      showToast('Gagal menyimpan opsi ukuran: ' + err.message, 'error');
+      return false;
+    }
+  };
+
   // Upload image to Supabase Storage Bucket ('leton-images') with fallback to server
   const uploadImage = async (file: File): Promise<string | null> => {
     try {
@@ -823,6 +844,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         deleteCategory,
         saveCustomOption,
         deleteCustomOption,
+        saveMasterSizes,
         uploadImage,
         login,
         logout,

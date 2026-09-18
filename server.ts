@@ -502,24 +502,48 @@ function broadcastOrderEvent(type: 'ORDER_CREATED' | 'ORDER_UPDATED', order: any
 // 11. Orders API
 // Helper to test if an order belongs to an outlet
 function orderMatchesOutlet(orderOutlet: string | undefined, targetOutlet: string): boolean {
-  if (!targetOutlet || targetOutlet === 'ALL') return true;
+  if (!targetOutlet || targetOutlet === 'ALL' || targetOutlet === 'all') return true;
   if (!orderOutlet) return false;
-  const o = orderOutlet.toLowerCase();
-  const t = targetOutlet.toLowerCase();
-  if (o === t || o.includes(t) || t.includes(o)) return true;
-  if (t.includes('ratusima') && o.includes('kelakap')) return true;
-  if (t.includes('kelakap') && o.includes('ratusima')) return true;
-  if (t.includes('letgo') && (o.includes('letgo') || o.includes('mpp'))) return true;
-  return false;
+  const o = orderOutlet.toLowerCase().trim();
+  const t = targetOutlet.toLowerCase().trim();
+  if (o === t) return true;
+
+  // Sudirman check
+  if (
+    (t === 'sudirman' || t.includes('sudirman')) &&
+    (o === 'sudirman' || o.includes('sudirman'))
+  ) {
+    return true;
+  }
+
+  // Ratusima / Kelakap 7 check
+  if (
+    (t === 'kelakap_7' || t === 'kelakap' || t === 'ratusima' || t.includes('kelakap') || t.includes('ratusima')) &&
+    (o === 'kelakap_7' || o === 'kelakap' || o === 'ratusima' || o.includes('kelakap') || o.includes('ratusima'))
+  ) {
+    return true;
+  }
+
+  // LetGo check
+  if (
+    (t === 'letgo' || t === 'letgo-mpp' || t.includes('letgo') || t.includes('mpp')) &&
+    (o === 'letgo' || o === 'letgo-mpp' || o.includes('letgo') || o.includes('mpp'))
+  ) {
+    return true;
+  }
+
+  return o.includes(t) || t.includes(o);
 }
 
 // Get all orders (with RBAC outlet filtering)
 app.get('/api/orders', (req, res) => {
   let orders = getOrders();
-  const role = req.headers['x-admin-role'] as string | undefined;
-  const outletId = (req.headers['x-outlet-id'] as string | undefined)?.toLowerCase();
+  const role = (req.headers['x-admin-role'] as string | undefined)?.toLowerCase();
+  const outletId = ((req.query.outletId || req.headers['x-outlet-id']) as string | undefined)?.toLowerCase();
 
   if (role === 'outlet_admin' && outletId && outletId !== 'all') {
+    orders = orders.filter((o: any) => orderMatchesOutlet(o.outletId || o.outlet_id, outletId));
+  } else if (outletId && outletId !== 'all') {
     orders = orders.filter((o: any) => orderMatchesOutlet(o.outletId || o.outlet_id, outletId));
   }
 

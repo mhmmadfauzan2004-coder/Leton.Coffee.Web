@@ -23,11 +23,11 @@ export const OutletSelector: React.FC<OutletSelectorProps> = ({ onSelectOutlet }
       dynamicImage = data.branches[0].bgImage || outlet.image;
       dynamicAddress = data.branches[0].address || outlet.address;
       dynamicHours = data.branches[0].openingHours || outlet.hours;
-    } else if (outlet.id === 'ratusima' && data.branches[1]) {
+    } else if ((outlet.id === 'kelakap_7' || outlet.id === 'ratusima') && data.branches[1]) {
       dynamicImage = data.branches[1].bgImage || outlet.image;
       dynamicAddress = data.branches[1].address || outlet.address;
       dynamicHours = data.branches[1].openingHours || outlet.hours;
-    } else if (outlet.id === 'letgo-mpp' && data.mobileService) {
+    } else if ((outlet.id === 'letgo-mpp' || outlet.id === 'letgo') && data.mobileService) {
       dynamicImage = data.mobileService.bgImage || data.mobileService.truckImage || outlet.image;
     }
 

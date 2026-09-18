@@ -24,7 +24,7 @@ export const setCustomSupabaseCredentials = (anonKey: string, url?: string) => {
   if (typeof window !== 'undefined') {
     if (anonKey) localStorage.setItem('leton_custom_supabase_anon_key', anonKey.trim());
     if (url) localStorage.setItem('leton_custom_supabase_url', url.trim());
-    supabaseInstance = null; // reset client instance
+    resetSupabaseClient(); // reset client instance cache
   }
 };
 
@@ -47,42 +47,48 @@ export function isSupabaseConfigured(): boolean {
 }
 
 // 2. Initialize Supabase Client with Role & Outlet Context for Database RLS
-let supabaseInstance: SupabaseClient | null = null;
+const clientCache = new Map<string, SupabaseClient>();
+let defaultSupabaseInstance: SupabaseClient | null = null;
 
 export function resetSupabaseClient(): void {
-  supabaseInstance = null;
+  clientCache.clear();
+  defaultSupabaseInstance = null;
 }
 
 export function getSupabase(overrideRole?: string, overrideOutletId?: string): SupabaseClient {
-  const role = overrideRole || (typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '');
-  const outletId = overrideOutletId || (typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '');
+  const role = overrideRole !== undefined ? overrideRole : (typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '');
+  const outletId = overrideOutletId !== undefined ? overrideOutletId : (typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '');
   const token = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_token') || '' : '';
+
+  const cacheKey = `${role}_${outletId}_${token}`;
+  if (clientCache.has(cacheKey)) {
+    return clientCache.get(cacheKey)!;
+  }
 
   const headers: Record<string, string> = {};
   if (role) headers['x-admin-role'] = role;
   if (outletId) headers['x-outlet-id'] = outletId;
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  // If instance exists, return it (unless explicitly forced by resetSupabaseClient)
-  if (!supabaseInstance) {
-    const url = getSupabaseUrl();
-    const key = getSupabaseAnonKey();
-    supabaseInstance = createClient(url, key, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
+  const client = createClient(url, key, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+    global: {
+      headers,
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10,
       },
-      global: {
-        headers,
-      },
-      realtime: {
-        params: {
-          eventsPerSecond: 10,
-        },
-      },
-    });
-  }
-  return supabaseInstance;
+    },
+  });
+
+  clientCache.set(cacheKey, client);
+  return client;
 }
 
 export const supabase = getSupabase();

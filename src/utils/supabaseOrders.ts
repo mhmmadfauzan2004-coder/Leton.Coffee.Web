@@ -598,75 +598,69 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
   const activeOutlet = targetOutletId || (typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '');
   const filterId = activeOutlet && activeOutlet !== 'ALL' ? activeOutlet : undefined;
 
+  const ordersMap = new Map<string, CustomerOrder>();
+
   // 1. Try Supabase Database 'orders' table
   try {
     const client = getSupabase(activeRole, filterId);
-    let query = client
+    const { data, error } = await client
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(300);
 
-    if (filterId) {
-      query = query.or(`outlet_id.eq.${filterId},outlet_id.ilike.%${filterId}%`);
-    }
-
-    const { data, error } = await query;
-
     if (!error && Array.isArray(data) && data.length > 0) {
-      let mapped: CustomerOrder[] = data.map((row: any) => ({
-        id: row.id,
-        orderNumber: row.order_number || row.orderNumber || 'LTN-????',
-        outletId: row.outlet_id || row.outletId || '',
-        outletName: row.outlet_name || row.outletName || '',
-        customerName: row.customer_name || row.customerName || '',
-        customerPhone: row.customer_phone || row.customerPhone || '',
-        orderType: row.order_type || row.orderType || 'DINE IN',
-        tableNumber: row.table_number || row.tableNumber || '',
-        items: Array.isArray(row.items) ? row.items : [],
-        totalAmount: Number(row.total_amount || row.totalAmount || 0),
-        paymentMethod: row.payment_method || row.paymentMethod || 'QRIS',
-        paymentStatus: row.payment_status || row.paymentStatus || 'WAITING PAYMENT',
-        paymentProofPath: row.payment_proof_path || row.payment_receipt_path || row.paymentReceiptPath,
-        paymentReceiptUrl: row.payment_receipt_url || row.paymentReceiptUrl,
-        paymentReceiptPath: row.payment_receipt_path || row.payment_proof_path || row.paymentReceiptPath,
-        rejectionReason: row.rejection_reason || row.rejectionReason,
-        orderStatus: row.order_status || row.orderStatus || 'NEW',
-        customerNote: row.customer_note || row.customerNote || '',
-        createdAt: row.created_at || row.createdAt || new Date().toISOString(),
-        updatedAt: row.updated_at || row.updatedAt,
-      }));
-
-      if (filterId) {
-        mapped = mapped.filter((o) => matchesOutlet(o.outletId, filterId));
-      }
-
-      safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(mapped).slice(0, 50)));
-      return mapped;
-    }
-
-    // 1b. If 'orders' table returned error (e.g. table not created yet), check 'orders_registry' in leton_content
-    if (error) {
-      const { data: regRow } = await client
-        .from('leton_content')
-        .select('*')
-        .eq('id', 'orders_registry')
-        .maybeSingle();
-
-      if (regRow?.content?.orders && Array.isArray(regRow.content.orders)) {
-        let registryOrders: CustomerOrder[] = regRow.content.orders;
-        if (filterId) {
-          registryOrders = registryOrders.filter((o) => matchesOutlet(o.outletId, filterId));
-        }
-        safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(registryOrders).slice(0, 50)));
-        return registryOrders;
-      }
+      data.forEach((row: any) => {
+        const order: CustomerOrder = {
+          id: row.id,
+          orderNumber: row.order_number || row.orderNumber || 'LTN-????',
+          outletId: row.outlet_id || row.outletId || '',
+          outletName: row.outlet_name || row.outletName || '',
+          customerName: row.customer_name || row.customerName || '',
+          customerPhone: row.customer_phone || row.customerPhone || '',
+          orderType: row.order_type || row.orderType || 'DINE IN',
+          tableNumber: row.table_number || row.tableNumber || '',
+          items: Array.isArray(row.items) ? row.items : [],
+          totalAmount: Number(row.total_amount || row.totalAmount || 0),
+          paymentMethod: row.payment_method || row.paymentMethod || 'QRIS',
+          paymentStatus: row.payment_status || row.paymentStatus || 'WAITING PAYMENT',
+          paymentProofPath: row.payment_proof_path || row.payment_receipt_path || row.paymentReceiptPath,
+          paymentReceiptUrl: row.payment_receipt_url || row.paymentReceiptUrl,
+          paymentReceiptPath: row.payment_receipt_path || row.payment_proof_path || row.paymentReceiptPath,
+          rejectionReason: row.rejection_reason || row.rejectionReason,
+          orderStatus: row.order_status || row.orderStatus || 'NEW',
+          customerNote: row.customer_note || row.customerNote || '',
+          createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+          updatedAt: row.updated_at || row.updatedAt,
+        };
+        ordersMap.set(order.id, order);
+      });
     }
   } catch (err) {
     console.warn('[Fetch Supabase Orders Warning]:', err);
   }
 
-  // 2. Try Backend API /api/orders
+  // 2. Fetch from Supabase 'leton_content' orders_registry
+  try {
+    const client = getSupabase(activeRole, filterId);
+    const { data: regRow } = await client
+      .from('leton_content')
+      .select('*')
+      .eq('id', 'orders_registry')
+      .maybeSingle();
+
+    if (regRow?.content?.orders && Array.isArray(regRow.content.orders)) {
+      regRow.content.orders.forEach((o: CustomerOrder) => {
+        if (!ordersMap.has(o.id)) {
+          ordersMap.set(o.id, o);
+        }
+      });
+    }
+  } catch (regErr) {
+    console.warn('[Orders Registry Backup Note]:', regErr);
+  }
+
+  // 3. Try Backend API /api/orders
   try {
     const token = typeof window !== 'undefined' ? safeGetItem('leton_admin_token') || '' : '';
     const headers: Record<string, string> = {};
@@ -678,35 +672,46 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
     if (res.ok) {
       const json = await res.json();
       if (Array.isArray(json)) {
-        let filtered = json;
-        if (filterId) {
-          filtered = json.filter((o: CustomerOrder) => matchesOutlet(o.outletId, filterId));
-        }
-        safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(filtered).slice(0, 50)));
-        return filtered;
+        json.forEach((o: CustomerOrder) => {
+          if (!ordersMap.has(o.id)) {
+            ordersMap.set(o.id, o);
+          }
+        });
       }
     }
   } catch (err) {
     console.warn('[Fetch Backend Orders Warning]:', err);
   }
 
-  // 3. Fallback to Local Cache
+  // 4. Merge with Local Cache / History
   try {
     const cached = safeGetItem(ADMIN_ORDERS_CACHE_KEY);
     if (cached) {
       const parsed: CustomerOrder[] = JSON.parse(cached);
       if (Array.isArray(parsed)) {
-        if (filterId) {
-          return parsed.filter((o) => matchesOutlet(o.outletId, filterId));
-        }
-        return parsed;
+        parsed.forEach((o) => {
+          if (!ordersMap.has(o.id)) {
+            ordersMap.set(o.id, o);
+          }
+        });
       }
     }
   } catch {
     // ignore
   }
 
-  return [];
+  // Convert map to array sorted by creation date descending
+  let allOrders = Array.from(ordersMap.values()).sort(
+    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
+
+  // Apply strict outlet filtering if targetOutletId is specified
+  if (filterId) {
+    allOrders = allOrders.filter((o) => matchesOutlet(o.outletId, filterId));
+  }
+
+  safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(allOrders).slice(0, 50)));
+  return allOrders;
 }
 
 /**
@@ -821,7 +826,7 @@ export async function updateOrderStatus(
 /**
  * Realtime Subscription for Orders
  * Listens for new and updated orders via Supabase Postgres Realtime Channel,
- * with polling backup.
+ * Server-Sent Events (SSE), and backup polling.
  * If targetOutletId is set, filters notifications and alert sounds specifically for that outlet.
  */
 export function subscribeToOrdersRealtime(
@@ -831,6 +836,7 @@ export function subscribeToOrdersRealtime(
 ): () => void {
   let isSubscribed = true;
   let clientChannel: any = null;
+  let sseSource: EventSource | null = null;
 
   const activeOutlet = targetOutletId || (typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '');
   const activeRole = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '';
@@ -849,6 +855,7 @@ export function subscribeToOrdersRealtime(
     }
   };
 
+  // 1. Supabase Postgres Realtime Listener
   try {
     const client = getSupabase(activeRole, filterOutletId);
     clientChannel = client
@@ -886,7 +893,6 @@ export function subscribeToOrdersRealtime(
               createdAt: raw.created_at || raw.createdAt || new Date().toISOString(),
             };
 
-            // Check if this event belongs to the active outlet (Super Admin doesn't get kitchen alerts)
             if (activeRole !== 'super_admin' && (!filterOutletId || matchesOutlet(newOrder.outletId, filterOutletId))) {
               refresh(newOrder);
             } else {
@@ -914,17 +920,41 @@ export function subscribeToOrdersRealtime(
     console.warn('[Orders Realtime Subscription Error]:', err);
   }
 
-  // Backup polling every 8 seconds
+  // 2. Server-Sent Events (SSE) Listener for Backend events
+  try {
+    sseSource = new EventSource(getApiUrl('/api/events'));
+    sseSource.onmessage = (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        if (payload && (payload.type === 'ORDER_CREATED' || payload.type === 'ORDER_UPDATED')) {
+          if (payload.type === 'ORDER_CREATED' && payload.order) {
+            refresh(payload.order);
+          } else {
+            refresh();
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+  } catch (sseErr) {
+    // SSE optional notice
+  }
+
+  // 3. Backup polling every 5 seconds
   const pollInterval = setInterval(() => {
     if (isSubscribed) {
       refresh();
     }
-  }, 8000);
+  }, 5000);
 
   // Return cleanup
   return () => {
     isSubscribed = false;
     clearInterval(pollInterval);
+    if (sseSource) {
+      sseSource.close();
+    }
     if (clientChannel) {
       try {
         const client = getSupabase(activeRole, filterOutletId);

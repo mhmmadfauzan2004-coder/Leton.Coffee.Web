@@ -68,7 +68,6 @@ export function getSupabase(overrideRole?: string, overrideOutletId?: string): S
   const headers: Record<string, string> = {};
   if (role) headers['x-admin-role'] = role;
   if (outletId) headers['x-outlet-id'] = outletId;
-  if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const url = getSupabaseUrl();
   const key = getSupabaseAnonKey();

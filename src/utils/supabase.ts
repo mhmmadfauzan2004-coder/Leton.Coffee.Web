@@ -701,4 +701,37 @@ export async function updateCustomerProfile(
   }
 }
 
+/**
+ * Retrieve customer orders using active session token via RPC customer_get_my_orders.
+ */
+export async function getCustomerOrdersRpc(
+  customToken?: string
+): Promise<{ success: boolean; orders: any[]; error?: string }> {
+  if (typeof window === 'undefined') return { success: false, orders: [], error: 'Browser required.' };
+
+  const token = customToken || getCustomerSessionToken();
+  if (!token) {
+    return { success: false, orders: [], error: 'Silakan masuk terlebih dahulu.' };
+  }
+
+  try {
+    const client = getSupabase();
+    const { data, error } = await client.rpc('customer_get_my_orders', {
+      p_token: token,
+    });
+
+    if (error) {
+      return { success: false, orders: [], error: error.message };
+    }
+
+    const list = Array.isArray(data)
+      ? data
+      : (data?.orders && Array.isArray(data.orders) ? data.orders : []);
+
+    return { success: true, orders: list };
+  } catch (err: any) {
+    return { success: false, orders: [], error: err?.message || 'Gagal mengambil data pesanan.' };
+  }
+}
+
 

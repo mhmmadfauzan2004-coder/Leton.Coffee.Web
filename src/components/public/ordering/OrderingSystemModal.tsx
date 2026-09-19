@@ -510,7 +510,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                       try {
                         await logoutCustomer();
                         setCustomerProfile(null);
-                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                        setCurrentStep('profile');
                       } catch (err) {
                         console.warn('Logout error:', err);
                       }

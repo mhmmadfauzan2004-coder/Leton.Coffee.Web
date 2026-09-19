@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CustomerProfile, CustomerOrder } from '../../../types';
-import { getSupabase, updateCustomerProfile, getCustomerSessionToken } from '../../../utils/supabase';
+import { getSupabase, updateCustomerProfile, getCustomerOrdersRpc, getCustomerSessionToken } from '../../../utils/supabase';
 import { User, Calendar, History, Save, LogOut, RefreshCw, Clock, Coffee, AlertCircle, CheckCircle, Search } from 'lucide-react';
 
 interface CustomerProfileTabProps {
@@ -27,22 +27,12 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
     setLoadingOrders(true);
     try {
       const client = getSupabase();
-      const token = getCustomerSessionToken();
       let ordersData: any[] | null = null;
 
       // 1. Try secure session RPC
-      if (token) {
-        try {
-          const { data: rpcOrders, error: rpcErr } = await client.rpc('customer_get_my_orders', {
-            p_token: token,
-          });
-          const list = Array.isArray(rpcOrders)
-            ? rpcOrders
-            : (rpcOrders?.orders && Array.isArray(rpcOrders.orders) ? rpcOrders.orders : null);
-          if (!rpcErr && list) {
-            ordersData = list;
-          }
-        } catch {}
+      const rpcResult = await getCustomerOrdersRpc();
+      if (rpcResult.success && Array.isArray(rpcResult.orders)) {
+        ordersData = rpcResult.orders;
       }
 
       // 2. Direct query fallback using customer_id
@@ -50,7 +40,7 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
         const { data, error } = await client
           .from('orders')
           .select('*')
-          .eq('customer_id', profile.userId)
+          .eq('customer_id', profile.userId || profile.id)
           .order('created_at', { ascending: false });
 
         if (!error && data) {

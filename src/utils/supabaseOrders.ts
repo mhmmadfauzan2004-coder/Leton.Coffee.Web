@@ -1,5 +1,5 @@
 import { CustomerOrder, OrderStatus, PaymentStatus } from '../types';
-import { getSupabase, isSupabaseConfigured } from './supabase';
+import { getSupabase, isSupabaseConfigured, getCustomerSessionToken } from './supabase';
 import { normalizeIndonesianPhone } from './phone';
 import { matchesOutlet } from '../data/adminAccounts';
 import { getApiUrl } from './api';
@@ -502,7 +502,26 @@ export async function createNewOrder(
       }
     } catch {}
 
-    const effectiveCustomerId = orderData.customerId || null;
+    // Securely validate customer session token from client
+    let validatedCustomerId: string | null = null;
+    const customerToken = getCustomerSessionToken();
+    if (customerToken) {
+      try {
+        const { data: sessionData } = await client.rpc('customer_get_session', {
+          p_token: customerToken,
+        });
+        if (sessionData && sessionData.success && sessionData.customer?.id) {
+          validatedCustomerId = sessionData.customer.id;
+        }
+      } catch (sessErr) {
+        console.warn('Session verification during order placement notice:', sessErr);
+      }
+    }
+
+    // Guest checkout has effectiveCustomerId = null; authenticated customer has validatedCustomerId
+    const effectiveCustomerId = validatedCustomerId || null;
+    orderData.customerId = effectiveCustomerId || undefined;
+
     const effectivePhone = orderData.customerPhone ? normalizeIndonesianPhone(orderData.customerPhone) : null;
 
     const payload = {

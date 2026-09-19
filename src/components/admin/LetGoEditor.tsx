@@ -7,15 +7,18 @@ import { resolveMediaUrl } from '../../utils/api';
 import { Save, Loader2, RotateCcw, Plus, Trash2, MapPin, Truck, Sliders, Sun, Moon, Sparkles } from 'lucide-react';
 
 export const LetGoEditor: React.FC = () => {
-  const { data, saveData } = useContent();
+  const { data, saveData, showToast } = useContent();
   const [form, setForm] = useState<MobileService>({ ...data.mobileService });
   const [newLocation, setNewLocation] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (data && data.mobileService) {
+      const activeBg = data.mobileService.bgImage || data.mobileService.truckImage || '';
       setForm({
         ...data.mobileService,
+        bgImage: activeBg,
+        truckImage: activeBg,
         bgOverlay: typeof data.mobileService.bgOverlay === 'number' ? data.mobileService.bgOverlay : 45,
         locations:
           Array.isArray(data.mobileService.locations) && data.mobileService.locations.length > 0
@@ -29,15 +32,71 @@ export const LetGoEditor: React.FC = () => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      await saveData({
+      const activeBg = form.bgImage || form.truckImage || '';
+      const success = await saveData({
         ...data,
         mobileService: {
           ...form,
+          bgImage: activeBg,
+          truckImage: activeBg,
           bgOverlay: typeof form.bgOverlay === 'number' ? form.bgOverlay : 45,
         },
       });
+      if (success) {
+        showToast("Perubahan konten LET'GO berhasil disimpan!", 'success');
+      }
+    } catch (err: any) {
+      showToast('Gagal menyimpan perubahan LET\'GO: ' + (err?.message || ''), 'error');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleBgImageChange = async (url: string) => {
+    const updatedForm = {
+      ...form,
+      bgImage: url,
+      truckImage: url,
+    };
+    setForm(updatedForm);
+    try {
+      const success = await saveData({
+        ...data,
+        mobileService: {
+          ...data.mobileService,
+          ...updatedForm,
+          bgImage: url,
+          truckImage: url,
+          bgOverlay: typeof updatedForm.bgOverlay === 'number' ? updatedForm.bgOverlay : 45,
+        },
+      });
+      if (success) {
+        showToast("Foto LET'GO berhasil diunggah & disimpan!", 'success');
+      }
+    } catch (err: any) {
+      showToast('Gagal menyimpan foto LET\'GO: ' + (err?.message || ''), 'error');
+    }
+  };
+
+  const handleGalleryImagesChange = async (updatedImages: string[]) => {
+    const updatedForm = {
+      ...form,
+      letGoGalleryImages: updatedImages,
+    };
+    setForm(updatedForm);
+    try {
+      const success = await saveData({
+        ...data,
+        mobileService: {
+          ...data.mobileService,
+          ...updatedForm,
+        },
+      });
+      if (success) {
+        showToast("Slide foto LET'GO berhasil diperbarui & disimpan!", 'success');
+      }
+    } catch (err: any) {
+      showToast('Gagal menyimpan slide foto: ' + (err?.message || ''), 'error');
     }
   };
 
@@ -221,7 +280,8 @@ export const LetGoEditor: React.FC = () => {
         <GalleryManager
           label="SLIDE FOTO HALAMAN LET'GO (CAROUSEL)"
           images={form.letGoGalleryImages || []}
-          onChange={(updated) => setForm({ ...form, letGoGalleryImages: updated })}
+          filePrefix="letgo_gallery"
+          onChange={handleGalleryImagesChange}
           description="Foto-foto dokumentasi Let'Go / mobile coffee Leton Coffee. Foto tampil dalam format horizontal image carousel / slider di halaman LET'GO."
         />
       </div>
@@ -230,8 +290,9 @@ export const LetGoEditor: React.FC = () => {
       <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-md space-y-6">
         <ImageUploadField
           label="FOTO LATAR BELAKANG HALAMAN LET'GO"
-          value={form.bgImage}
-          onChange={(url) => setForm({ ...form, bgImage: url })}
+          value={form.bgImage || form.truckImage || ''}
+          filePrefix="letgo_bg"
+          onChange={handleBgImageChange}
           aspectRatio="16:9"
           description="Foto full-screen suasana outdoor / mobile coffee booth untuk background wallpaper halaman LET'GO (Rasio 16:9)."
         />

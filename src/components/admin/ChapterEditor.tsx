@@ -435,15 +435,17 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
       </div>
 
       {/* Chapter Swipe Gallery Manager */}
-      <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-md">
-        <GalleryManager
-          label={`GALERI FOTO SWIPE (${form.chapterName} — ${form.branchName || 'CABANG'})`}
-          images={(form.galleryImages || []).filter((img) => typeof img === 'string' && img.trim().length > 0)}
-          filePrefix={galleryPrefix}
-          onChange={handleGalleryImagesChange}
-          description="Foto-foto yang diunggah di sini otomatis diunggah ke Supabase Storage (prefix: chapter_6_gallery) dan langsung tersimpan di database."
-        />
-      </div>
+      {branchId !== 'chapter-5' && (
+        <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-md">
+          <GalleryManager
+            label={`GALERI FOTO SWIPE (${form.chapterName} — ${form.branchName || 'CABANG'})`}
+            images={(form.galleryImages || []).filter((img) => typeof img === 'string' && img.trim().length > 0)}
+            filePrefix={galleryPrefix}
+            onChange={handleGalleryImagesChange}
+            description="Foto-foto yang diunggah di sini otomatis diunggah ke Supabase Storage dan langsung tersimpan di database."
+          />
+        </div>
+      )}
 
       {/* Location, Hours, Maps URL & Central WhatsApp Info */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

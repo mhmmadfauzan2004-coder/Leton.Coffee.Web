@@ -24,6 +24,7 @@ import {
   TrendingUp,
   Boxes,
   Building2,
+  QrCode,
 } from 'lucide-react';
 
 interface DashboardOverviewProps {
@@ -194,6 +195,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
       tab: 'home',
       icon: Sparkles,
       color: 'text-cyan-400',
+    },
+    {
+      title: 'KELOLA FOTO QRIS PAYMENT',
+      description: 'Upload & ganti foto QRIS resmi toko yang tampil di checkout customer.',
+      tab: 'qris-payment',
+      icon: QrCode,
+      color: 'text-amber-400',
     },
     {
       title: 'KELOLA MENU & KATEGORI',

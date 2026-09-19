@@ -528,6 +528,8 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         folder = 'cabang';
       } else if (prefixLower.includes('barista')) {
         folder = 'barista';
+      } else if (prefixLower.includes('letgo') || prefixLower.includes('let-go') || prefixLower.includes('truck') || prefixLower.includes('mobile')) {
+        folder = 'letgo';
       } else if (prefixLower.includes('booth') || prefixLower.includes('open-booth')) {
         folder = 'open-booth';
       } else if (

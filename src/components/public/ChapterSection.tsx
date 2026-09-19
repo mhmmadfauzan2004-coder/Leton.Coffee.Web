@@ -136,7 +136,7 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch, reversed
         </div>
 
         {/* Swipeable Gallery for Branch if photos are uploaded */}
-        {branch.galleryImages && branch.galleryImages.length > 0 && (
+        {branch.id !== 'chapter-5' && branch.galleryImages && branch.galleryImages.length > 0 && (
           <div className="mt-8">
             <LetGoCardsGallery
               images={branch.galleryImages}

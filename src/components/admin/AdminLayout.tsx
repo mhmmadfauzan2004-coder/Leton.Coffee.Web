@@ -11,6 +11,7 @@ import { StorySliderManager } from './StorySliderManager';
 import { BaristaManager } from './BaristaManager';
 import { ContactEditor } from './ContactEditor';
 import { SettingsEditor } from './SettingsEditor';
+import { QrisPaymentEditor } from './QrisPaymentEditor';
 import { OrderManager } from './OrderManager';
 import { StockManager } from './StockManager';
 import { SalesReportManager } from './SalesReportManager';
@@ -26,6 +27,7 @@ import {
   Images,
   Phone,
   Settings,
+  QrCode,
   LogOut,
   ExternalLink,
   Menu,
@@ -70,6 +72,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
 
   const contentItems = [
     { id: 'home', label: 'HOME / HERO', icon: Home },
+    { id: 'qris-payment', label: 'QRIS PAYMENT', icon: QrCode },
     { id: 'chapter-5', label: 'CHAPTER 5 (SUDIRMAN)', icon: MapPin },
     { id: 'chapter-6', label: 'CHAPTER 6 (KELAKAP)', icon: MapPin },
     { id: 'let-go', label: "LET'GO MOBILE", icon: Truck },
@@ -414,6 +417,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
           {activeTab === 'orders' && <OrderManager />}
           {activeTab === 'stock' && <StockManager />}
           {activeTab === 'home' && !isOutletAdmin && <HomeEditor />}
+          {activeTab === 'qris-payment' && !isOutletAdmin && <QrisPaymentEditor />}
           {activeTab === 'chapter-5' && !isOutletAdmin && (
             <ChapterEditor branchId="chapter-5" title="Chapter 05 — Urban Hub" />
           )}

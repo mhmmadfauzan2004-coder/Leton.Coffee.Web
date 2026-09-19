@@ -1,5 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { OrderOutlet } from '../../../types';
+import { useContent } from '../../../context/ContentContext';
+import { resolveMediaUrl } from '../../../utils/api';
 import { formatRupiah } from '../../../utils/formatters';
 import {
   QrCode,
@@ -38,6 +40,9 @@ export const QrisPaymentCard: React.FC<QrisPaymentCardProps> = ({
   onClearReceipt,
   onUploadFile,
 }) => {
+  const { data } = useContent();
+  const activeQrisUrl = outlet.qrisImage || data.siteSettings?.qrisImage || '';
+
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const [localFileError, setLocalFileError] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
@@ -241,12 +246,12 @@ export const QrisPaymentCard: React.FC<QrisPaymentCardProps> = ({
 
         {/* The QRIS Visual */}
         <div className="w-full relative z-10">
-          {outlet.qrisImage ? (
+          {activeQrisUrl ? (
             <div className="max-w-[260px] mx-auto bg-white p-3 rounded-2xl shadow-xl border border-slate-200">
               <img
-                src={outlet.qrisImage}
+                src={resolveMediaUrl(activeQrisUrl)}
                 alt="QRIS Leton Coffee"
-                className="w-full h-auto rounded-xl object-contain"
+                className="w-full h-auto rounded-xl object-contain max-h-80"
               />
             </div>
           ) : (
@@ -479,11 +484,11 @@ export const QrisPaymentCard: React.FC<QrisPaymentCardProps> = ({
             </p>
 
             <div className="py-2 flex justify-center">
-              {outlet.qrisImage ? (
+              {activeQrisUrl ? (
                 <img
-                  src={outlet.qrisImage}
+                  src={resolveMediaUrl(activeQrisUrl)}
                   alt="QRIS Leton"
-                  className="w-full max-w-[280px] rounded-2xl"
+                  className="w-full max-w-[280px] rounded-2xl object-contain max-h-[60vh]"
                 />
               ) : (
                 qrisSvgVisual

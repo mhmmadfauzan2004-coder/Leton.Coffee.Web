@@ -8,6 +8,7 @@ export interface SiteSettings {
   heroBgImage: string;
   heroCtaMenuText: string;
   heroCtaOrderText: string;
+  qrisImage?: string;
 }
 
 export interface BranchItem {

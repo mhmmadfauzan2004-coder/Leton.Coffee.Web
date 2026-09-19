@@ -80,6 +80,14 @@ export const MenuManager: React.FC = () => {
     order: 0,
   });
 
+  // Size Cup modal state
+  const [isSizeModalOpen, setIsSizeModalOpen] = useState(false);
+  const [editingSize, setEditingSize] = useState<{ name: string; price: number; originalName: string } | null>(null);
+  const [sizeModalForm, setSizeModalForm] = useState<{ name: string; price: number }>({
+    name: '',
+    price: 0,
+  });
+
   // Customization (Topping / Syrup) modal state
   const [isCustomOptionModalOpen, setIsCustomOptionModalOpen] = useState(false);
   const [customOptionType, setCustomOptionType] = useState<'topping' | 'syrup'>('topping');
@@ -94,7 +102,7 @@ export const MenuManager: React.FC = () => {
 
   // Delete confirmation modal state
   const [deleteConfirm, setDeleteConfirm] = useState<{
-    type: 'item' | 'category' | 'topping' | 'syrup';
+    type: 'item' | 'category' | 'topping' | 'syrup' | 'size';
     id: string;
     name: string;
   } | null>(null);
@@ -320,6 +328,68 @@ export const MenuManager: React.FC = () => {
     }
   };
 
+  const handleOpenAddSize = () => {
+    setEditingSize(null);
+    setSizeModalForm({
+      name: '',
+      price: 0,
+    });
+    setIsSizeModalOpen(true);
+  };
+
+  const handleOpenEditSize = (sz: ProductSizeOption) => {
+    setEditingSize({ name: sz.name, price: sz.price, originalName: sz.name });
+    setSizeModalForm({
+      name: sz.name,
+      price: sz.price,
+    });
+    setIsSizeModalOpen(true);
+  };
+
+  const handleSaveSizeModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sizeModalForm.name.trim()) {
+      showToast('Nama Size Cup wajib diisi.', 'error');
+      return;
+    }
+
+    setIsSavingSizes(true);
+    try {
+      const cleanName = sizeModalForm.name.trim();
+      const cleanPrice = Math.max(0, parseInt(String(sizeModalForm.price)) || 0);
+
+      let nextSizes = [...masterSizes];
+      if (editingSize) {
+        const idx = nextSizes.findIndex(
+          (s) => s.name.toLowerCase() === editingSize.originalName.toLowerCase()
+        );
+        if (idx >= 0) {
+          nextSizes[idx] = { name: cleanName, price: cleanPrice };
+        } else {
+          nextSizes.push({ name: cleanName, price: cleanPrice });
+        }
+      } else {
+        const exists = nextSizes.some((s) => s.name.toLowerCase() === cleanName.toLowerCase());
+        if (exists) {
+          showToast(`Size Cup "${cleanName}" sudah ada dalam daftar.`, 'error');
+          setIsSavingSizes(false);
+          return;
+        }
+        nextSizes.push({ name: cleanName, price: cleanPrice });
+      }
+
+      const success = await saveMasterSizes(nextSizes);
+      if (success) {
+        showToast(`Size Cup "${cleanName}" (${formatRupiah(cleanPrice)}) berhasil disimpan!`, 'success');
+        setIsSizeModalOpen(false);
+      }
+    } catch (err: any) {
+      showToast('Gagal menyimpan Size Cup: ' + (err.message || 'Error tidak diketahui'), 'error');
+    } finally {
+      setIsSavingSizes(false);
+    }
+  };
+
   const handleSaveMasterSizes = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingSizes(true);
@@ -349,6 +419,12 @@ export const MenuManager: React.FC = () => {
       await deleteCustomOption('topping', deleteConfirm.id);
     } else if (deleteConfirm.type === 'syrup') {
       await deleteCustomOption('syrup', deleteConfirm.id);
+    } else if (deleteConfirm.type === 'size') {
+      const nextSizes = masterSizes.filter((s) => s.name.toLowerCase() !== deleteConfirm.name.toLowerCase());
+      const success = await saveMasterSizes(nextSizes);
+      if (success) {
+        showToast(`Size Cup "${deleteConfirm.name}" berhasil dihapus.`, 'info');
+      }
     }
 
     setDeleteConfirm(null);
@@ -823,75 +899,67 @@ export const MenuManager: React.FC = () => {
       {/* SUBTAB 5: MASTER SIZES */}
       {activeSubTab === 'sizes' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="font-display font-bold text-lg text-white uppercase">
-                PENGATURAN HARGA MASTER SIZE CUP
+                PENGELOLAAN SIZE CUP ({masterSizes.length})
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Atur selisih harga tambahan untuk ukuran Regular dan Large secara terpusat.
+                Kelola nama dan selisih harga tambahan untuk ukuran cup yang tersedia untuk pesanan pelanggan.
               </p>
             </div>
+
+            <button
+              type="button"
+              onClick={handleOpenAddSize}
+              className="px-4 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#00E5FF]/20 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Tambah Size Cup</span>
+            </button>
           </div>
 
-          <form onSubmit={handleSaveMasterSizes} className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-6 max-w-xl">
-            <div className="space-y-4">
-              {sizeForm.map((sizeOpt, idx) => (
-                <div key={sizeOpt.name} className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-4">
-                  <div>
-                    <span className="text-[10px] font-mono tracking-widest text-[#00E5FF] uppercase">
-                      UKURAN CUP
-                    </span>
-                    <h4 className="font-display font-bold text-base text-white mt-0.5">
-                      {sizeOpt.name}
-                    </h4>
-                    <p className="text-[11px] text-slate-400">
-                      {sizeOpt.name === 'Regular' ? 'Ukuran standar (Default +Rp0)' : 'Ukuran lebih besar (+Tambahan)'}
-                    </p>
-                  </div>
-
-                  <div className="w-40">
-                    <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">
-                      Tambahan (IDR)
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={1000}
-                      value={sizeOpt.price}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value) || 0;
-                        const next = [...sizeForm];
-                        next[idx] = { ...next[idx], price: val };
-                        setSizeForm(next);
-                      }}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-xs font-bold focus:outline-none focus:border-[#00E5FF]"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                type="submit"
-                disabled={isSavingSizes}
-                className="px-6 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] disabled:opacity-50 text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer shadow-lg shadow-[#00E5FF]/20"
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {masterSizes.map((sz) => (
+              <div
+                key={sz.name}
+                className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between gap-3"
               >
-                {isSavingSizes ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Menyimpan...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    <span>Simpan Master Size</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
+                <div>
+                  <span className="text-[10px] font-mono tracking-widest text-[#00E5FF] uppercase">
+                    SIZE CUP
+                  </span>
+                  <h4 className="font-display font-bold text-base text-white mt-0.5">
+                    {sz.name}
+                  </h4>
+                  <p className="font-mono font-bold text-xs text-[#00E5FF] mt-1">
+                    {sz.price === 0 ? 'Rp0 (Standar)' : `+${formatRupiah(sz.price)}`}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditSize(sz)}
+                    className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer"
+                    title="Edit Size Cup"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDeleteConfirm({ type: 'size', id: sz.name, name: sz.name })
+                    }
+                    className="p-2 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 cursor-pointer"
+                    title="Hapus Size Cup"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1003,57 +1071,214 @@ export const MenuManager: React.FC = () => {
                 />
               </div>
 
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
                 <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase">
                   Pilihan Customization Menu
                 </label>
 
-                {/* Size Cup */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      id="item-has-size"
-                      checked={itemForm.hasSize !== false}
-                      onChange={(e) => setItemForm({ ...itemForm, hasSize: e.target.checked })}
-                      className="w-4 h-4 rounded text-cyan-400 bg-slate-950 border-slate-800 focus:ring-0"
-                    />
-                    <label htmlFor="item-has-size" className="text-xs text-white font-semibold cursor-pointer">
-                      Produk Menggunakan Size Cup (Regular / Large)
-                    </label>
+                {/* 1. Size Cup */}
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="item-has-size"
+                        checked={itemForm.hasSize !== false}
+                        onChange={(e) => setItemForm({ ...itemForm, hasSize: e.target.checked })}
+                        className="w-4 h-4 rounded text-cyan-400 bg-slate-950 border-slate-800 focus:ring-0"
+                      />
+                      <label htmlFor="item-has-size" className="text-xs text-white font-bold cursor-pointer">
+                        Produk Menggunakan Size Cup
+                      </label>
+                    </div>
                   </div>
+
+                  {itemForm.hasSize !== false && (
+                    <div className="pt-2 border-t border-slate-800/80 space-y-2.5">
+                      <div className="space-y-1.5">
+                        {masterSizes.map((sz) => (
+                          <div
+                            key={sz.name}
+                            className="flex items-center justify-between p-2 rounded-lg bg-slate-950 border border-slate-800/80 text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-white">{sz.name}</span>
+                              <span className="font-mono text-cyan-400 font-bold">
+                                {sz.price === 0 ? 'Rp0' : formatRupiah(sz.price)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditSize(sz)}
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setDeleteConfirm({ type: 'size', id: sz.name, name: sz.name })
+                                }
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Hapus</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleOpenAddSize}
+                        className="px-3 py-1.5 rounded-lg bg-[#00E5FF]/10 hover:bg-[#00E5FF]/20 border border-[#00E5FF]/30 text-[#00E5FF] text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>+ Tambah Size Cup</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {/* Topping */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      id="item-has-topping"
-                      checked={itemForm.hasTopping !== false}
-                      onChange={(e) => setItemForm({ ...itemForm, hasTopping: e.target.checked })}
-                      className="w-4 h-4 rounded text-cyan-400 bg-slate-950 border-slate-800 focus:ring-0"
-                    />
-                    <label htmlFor="item-has-topping" className="text-xs text-white font-semibold cursor-pointer">
-                      Produk Menggunakan Topping
-                    </label>
+                {/* 2. Topping */}
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="item-has-topping"
+                        checked={itemForm.hasTopping !== false}
+                        onChange={(e) => setItemForm({ ...itemForm, hasTopping: e.target.checked })}
+                        className="w-4 h-4 rounded text-cyan-400 bg-slate-950 border-slate-800 focus:ring-0"
+                      />
+                      <label htmlFor="item-has-topping" className="text-xs text-white font-bold cursor-pointer">
+                        Produk Menggunakan Topping
+                      </label>
+                    </div>
                   </div>
+
+                  {itemForm.hasTopping !== false && (
+                    <div className="pt-2 border-t border-slate-800/80 space-y-2.5">
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {masterToppings.map((top) => (
+                          <div
+                            key={top.id}
+                            className="flex items-center justify-between p-2 rounded-lg bg-slate-950 border border-slate-800/80 text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-white">{top.name}</span>
+                              <span className="font-mono text-cyan-400 font-bold">
+                                {formatRupiah(top.price)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditCustomOption('topping', top)}
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                <span>Edit</span>
+                              </button>
+                              {top.id !== 'top-no-topping' && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDeleteConfirm({ type: 'topping', id: top.id, name: top.name })
+                                  }
+                                  className="px-2 py-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Hapus</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAddCustomOption('topping')}
+                        className="px-3 py-1.5 rounded-lg bg-[#00E5FF]/10 hover:bg-[#00E5FF]/20 border border-[#00E5FF]/30 text-[#00E5FF] text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>+ Tambah Topping</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {/* Syrup */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      id="item-has-syrup"
-                      checked={itemForm.hasSyrup !== false}
-                      onChange={(e) => setItemForm({ ...itemForm, hasSyrup: e.target.checked })}
-                      className="w-4 h-4 rounded text-cyan-400 bg-slate-950 border-slate-800 focus:ring-0"
-                    />
-                    <label htmlFor="item-has-syrup" className="text-xs text-white font-semibold cursor-pointer">
-                      Produk Menggunakan Additional Syrup
-                    </label>
+                {/* 3. Additional Syrup */}
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="item-has-syrup"
+                        checked={itemForm.hasSyrup !== false}
+                        onChange={(e) => setItemForm({ ...itemForm, hasSyrup: e.target.checked })}
+                        className="w-4 h-4 rounded text-cyan-400 bg-slate-950 border-slate-800 focus:ring-0"
+                      />
+                      <label htmlFor="item-has-syrup" className="text-xs text-white font-bold cursor-pointer">
+                        Produk Menggunakan Additional Syrup
+                      </label>
+                    </div>
                   </div>
+
+                  {itemForm.hasSyrup !== false && (
+                    <div className="pt-2 border-t border-slate-800/80 space-y-2.5">
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {masterSyrups.map((syr) => (
+                          <div
+                            key={syr.id}
+                            className="flex items-center justify-between p-2 rounded-lg bg-slate-950 border border-slate-800/80 text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-white">{syr.name}</span>
+                              <span className="font-mono text-amber-400 font-bold">
+                                {formatRupiah(syr.price)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditCustomOption('syrup', syr)}
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                <span>Edit</span>
+                              </button>
+                              {syr.id !== 'syr-no-syrup' && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDeleteConfirm({ type: 'syrup', id: syr.id, name: syr.name })
+                                  }
+                                  className="px-2 py-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Hapus</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAddCustomOption('syrup')}
+                        className="px-3 py-1.5 rounded-lg bg-[#00E5FF]/10 hover:bg-[#00E5FF]/20 border border-[#00E5FF]/30 text-[#00E5FF] text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>+ Tambah Syrup</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1260,6 +1485,91 @@ export const MenuManager: React.FC = () => {
                     <>
                       <Save className="w-4 h-4" />
                       <span>Simpan {customOptionType === 'topping' ? 'Topping' : 'Syrup'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------- */}
+      {/* MODAL: ADD / EDIT SIZE CUP                  */}
+      {/* ------------------------------------------- */}
+      {isSizeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <h3 className="font-display font-black text-xl text-white uppercase tracking-tight">
+                {editingSize ? 'EDIT SIZE CUP' : 'TAMBAH SIZE CUP BARU'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsSizeModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSizeModal} className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
+                  Nama Size Cup
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={sizeModalForm.name}
+                  onChange={(e) => setSizeModalForm({ ...sizeModalForm, name: e.target.value })}
+                  placeholder="Contoh: Jumbo, Extra Large"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
+                  Harga Tambahan (IDR)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  step={1000}
+                  value={sizeModalForm.price}
+                  onChange={(e) =>
+                    setSizeModalForm({ ...sizeModalForm, price: parseInt(e.target.value) || 0 })
+                  }
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Isi 0 untuk ukuran standar (tanpa biaya tambahan).
+                </p>
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsSizeModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingSizes}
+                  className="px-6 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] disabled:opacity-50 text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer shadow-lg shadow-[#00E5FF]/20"
+                >
+                  {isSavingSizes ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Simpan Size Cup</span>
                     </>
                   )}
                 </button>

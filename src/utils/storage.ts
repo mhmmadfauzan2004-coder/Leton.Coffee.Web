@@ -12,7 +12,7 @@ import {
   CustomizationOption,
 } from '../types';
 import { initialLetonData } from '../data/initialData';
-import { DEFAULT_MASTER_TOPPINGS, DEFAULT_MASTER_SYRUPS } from '../data/addOnsData';
+import { DEFAULT_MASTER_TOPPINGS, DEFAULT_MASTER_SYRUPS, DEFAULT_SIZES } from '../data/addOnsData';
 import { saveGlobalDataToIdb, loadGlobalDataFromIdb } from './idbStorage';
 import {
   safeSetItem,
@@ -79,12 +79,18 @@ export function sanitizeLoadedData(raw: any): LetonData {
     initialLetonData.siteSettings.heroBgImage
   );
 
+  const cleanedQris = resolveCleanImage(
+    raw.siteSettings?.qrisImage,
+    initialLetonData.siteSettings.qrisImage || ''
+  );
+
   return {
     siteSettings: {
       ...initialLetonData.siteSettings,
       ...(raw.siteSettings || {}),
       logoUrl: cleanedLogo,
       heroBgImage: cleanedHeroBg,
+      qrisImage: cleanedQris,
     },
     branches:
       Array.isArray(raw.branches) && raw.branches.length > 0
@@ -110,13 +116,16 @@ export function sanitizeLoadedData(raw: any): LetonData {
     mobileService: {
       ...initialLetonData.mobileService,
       ...(raw.mobileService || {}),
-      bgImage: resolveCleanImage(raw.mobileService?.bgImage, initialLetonData.mobileService.bgImage),
+      bgImage: resolveCleanImage(
+        raw.mobileService?.bgImage || raw.mobileService?.truckImage,
+        initialLetonData.mobileService.bgImage
+      ),
       openBoothBgImage: resolveCleanImage(
         raw.mobileService?.openBoothBgImage,
         initialLetonData.mobileService.openBoothBgImage || initialLetonData.mobileService.bgImage
       ),
       truckImage: resolveCleanImage(
-        raw.mobileService?.truckImage,
+        raw.mobileService?.truckImage || raw.mobileService?.bgImage,
         initialLetonData.mobileService.truckImage || initialLetonData.mobileService.bgImage
       ),
       locations:
@@ -172,6 +181,10 @@ export function sanitizeLoadedData(raw: any): LetonData {
       Array.isArray(raw.masterSyrups) && raw.masterSyrups.length > 0
         ? raw.masterSyrups
         : (initialLetonData.masterSyrups || DEFAULT_MASTER_SYRUPS),
+    masterSizes:
+      Array.isArray(raw.masterSizes) && raw.masterSizes.length > 0
+        ? raw.masterSizes
+        : (initialLetonData.masterSizes || DEFAULT_SIZES),
     baristas:
       Array.isArray(raw.baristas) && raw.baristas.length > 0
         ? raw.baristas.map((b: any, idx: number) => {

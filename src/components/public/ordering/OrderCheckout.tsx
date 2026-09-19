@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useContent } from '../../../context/ContentContext';
+import { resolveMediaUrl } from '../../../utils/api';
 import {
   CartItem,
   OrderOutlet,
@@ -54,6 +56,9 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   isSubmitting,
   customerProfile,
 }) => {
+  const { data } = useContent();
+  const activeQrisUrl = outlet.qrisImage || data?.siteSettings?.qrisImage;
+
   // Form State
   const [orderType, setOrderType] = useState<OrderType>('DINE IN');
   const [tableNumber, setTableNumber] = useState<string>('');
@@ -480,58 +485,68 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
                 NMID: ID102003921829
               </div>
 
-              {/* Crisp SVG QR Code */}
-              <div className="p-3 bg-white rounded-xl border border-[#E0F2FE] shadow-sm relative w-48 h-48 flex items-center justify-center">
-                <svg className="w-full h-full text-[#172033]" fill="none" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg">
-                  <rect fill="currentColor" height="35" rx="4" width="35" x="10" y="10" />
-                  <rect fill="#ffffff" height="25" rx="2" width="25" x="15" y="15" />
-                  <rect fill="currentColor" height="15" rx="1" width="15" x="20" y="20" />
-                  <rect fill="currentColor" height="35" rx="4" width="35" x="95" y="10" />
-                  <rect fill="#ffffff" height="25" rx="2" width="25" x="100" y="15" />
-                  <rect fill="currentColor" height="15" rx="1" width="15" x="105" y="20" />
-                  <rect fill="currentColor" height="35" rx="4" width="35" x="10" y="95" />
-                  <rect fill="#ffffff" height="25" rx="2" width="25" x="15" y="100" />
-                  <rect fill="currentColor" height="15" rx="1" width="15" x="20" y="105" />
-                  {/* Data Points */}
-                  <rect fill="currentColor" height="6" width="6" x="52" y="12" />
-                  <rect fill="currentColor" height="6" width="6" x="62" y="12" />
-                  <rect fill="currentColor" height="6" width="6" x="72" y="12" />
-                  <rect fill="currentColor" height="6" width="6" x="82" y="12" />
-                  <rect fill="currentColor" height="6" width="6" x="52" y="24" />
-                  <rect fill="currentColor" height="6" width="6" x="72" y="24" />
-                  <rect fill="currentColor" height="6" width="6" x="52" y="36" />
-                  <rect fill="currentColor" height="6" width="6" x="62" y="36" />
-                  <rect fill="currentColor" height="6" width="6" x="82" y="36" />
-                  <rect fill="currentColor" height="6" width="6" x="12" y="52" />
-                  <rect fill="currentColor" height="6" width="6" x="24" y="52" />
-                  <rect fill="currentColor" height="6" width="6" x="36" y="52" />
-                  <rect fill="currentColor" height="6" width="6" x="48" y="52" />
-                  <rect fill="currentColor" height="6" width="6" x="86" y="52" />
-                  <rect fill="currentColor" height="6" width="6" x="98" y="52" />
-                  <rect fill="currentColor" height="6" width="6" x="110" y="52" />
-                  <rect fill="currentColor" height="6" width="6" x="12" y="64" />
-                  <rect fill="currentColor" height="6" width="6" x="36" y="64" />
-                  <rect fill="currentColor" height="6" width="6" x="98" y="64" />
-                  <rect fill="currentColor" height="6" width="6" x="12" y="76" />
-                  <rect fill="currentColor" height="6" width="6" x="48" y="76" />
-                  <rect fill="currentColor" height="6" width="6" x="86" y="76" />
-                  <rect fill="currentColor" height="6" width="6" x="52" y="98" />
-                  <rect fill="currentColor" height="6" width="6" x="64" y="98" />
-                  <rect fill="currentColor" height="6" width="6" x="76" y="98" />
-                  <rect fill="currentColor" height="6" width="6" x="88" y="98" />
-                  <rect fill="currentColor" height="6" width="6" x="100" y="98" />
-                  <rect fill="currentColor" height="6" width="6" x="52" y="110" />
-                  <rect fill="currentColor" height="6" width="6" x="76" y="110" />
-                  <rect fill="currentColor" height="6" width="6" x="100" y="110" />
-                  <rect fill="currentColor" height="6" width="6" x="52" y="122" />
-                  <rect fill="currentColor" height="6" width="6" x="64" y="122" />
-                  <rect fill="currentColor" height="6" width="6" x="88" y="122" />
-                </svg>
-                {/* Central Brand Tag */}
-                <div className="absolute inset-0 m-auto w-10 h-10 rounded-lg bg-white border border-[#E0F2FE] shadow-md flex items-center justify-center font-display font-black text-xs text-[#0284C7]">
-                  LTC
+              {/* QR Code Display */}
+              {activeQrisUrl ? (
+                <div className="p-3 bg-white rounded-xl border border-[#E0F2FE] shadow-sm relative w-[#220px] max-w-full flex items-center justify-center">
+                  <img
+                    src={resolveMediaUrl(activeQrisUrl)}
+                    alt={`QRIS ${outlet.name}`}
+                    className="w-full h-auto rounded-lg object-contain max-h-64"
+                  />
                 </div>
-              </div>
+              ) : (
+                <div className="p-3 bg-white rounded-xl border border-[#E0F2FE] shadow-sm relative w-48 h-48 flex items-center justify-center">
+                  <svg className="w-full h-full text-[#172033]" fill="none" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg">
+                    <rect fill="currentColor" height="35" rx="4" width="35" x="10" y="10" />
+                    <rect fill="#ffffff" height="25" rx="2" width="25" x="15" y="15" />
+                    <rect fill="currentColor" height="15" rx="1" width="15" x="20" y="20" />
+                    <rect fill="currentColor" height="35" rx="4" width="35" x="95" y="10" />
+                    <rect fill="#ffffff" height="25" rx="2" width="25" x="100" y="15" />
+                    <rect fill="currentColor" height="15" rx="1" width="15" x="105" y="20" />
+                    <rect fill="currentColor" height="35" rx="4" width="35" x="10" y="95" />
+                    <rect fill="#ffffff" height="25" rx="2" width="25" x="15" y="100" />
+                    <rect fill="currentColor" height="15" rx="1" width="15" x="20" y="105" />
+                    {/* Data Points */}
+                    <rect fill="currentColor" height="6" width="6" x="52" y="12" />
+                    <rect fill="currentColor" height="6" width="6" x="62" y="12" />
+                    <rect fill="currentColor" height="6" width="6" x="72" y="12" />
+                    <rect fill="currentColor" height="6" width="6" x="82" y="12" />
+                    <rect fill="currentColor" height="6" width="6" x="52" y="24" />
+                    <rect fill="currentColor" height="6" width="6" x="72" y="24" />
+                    <rect fill="currentColor" height="6" width="6" x="52" y="36" />
+                    <rect fill="currentColor" height="6" width="6" x="62" y="36" />
+                    <rect fill="currentColor" height="6" width="6" x="82" y="36" />
+                    <rect fill="currentColor" height="6" width="6" x="12" y="52" />
+                    <rect fill="currentColor" height="6" width="6" x="24" y="52" />
+                    <rect fill="currentColor" height="6" width="6" x="36" y="52" />
+                    <rect fill="currentColor" height="6" width="6" x="48" y="52" />
+                    <rect fill="currentColor" height="6" width="6" x="86" y="52" />
+                    <rect fill="currentColor" height="6" width="6" x="98" y="52" />
+                    <rect fill="currentColor" height="6" width="6" x="110" y="52" />
+                    <rect fill="currentColor" height="6" width="6" x="12" y="64" />
+                    <rect fill="currentColor" height="6" width="6" x="36" y="64" />
+                    <rect fill="currentColor" height="6" width="6" x="98" y="64" />
+                    <rect fill="currentColor" height="6" width="6" x="12" y="76" />
+                    <rect fill="currentColor" height="6" width="6" x="48" y="76" />
+                    <rect fill="currentColor" height="6" width="6" x="86" y="76" />
+                    <rect fill="currentColor" height="6" width="6" x="52" y="98" />
+                    <rect fill="currentColor" height="6" width="6" x="64" y="98" />
+                    <rect fill="currentColor" height="6" width="6" x="76" y="98" />
+                    <rect fill="currentColor" height="6" width="6" x="88" y="98" />
+                    <rect fill="currentColor" height="6" width="6" x="100" y="98" />
+                    <rect fill="currentColor" height="6" width="6" x="52" y="110" />
+                    <rect fill="currentColor" height="6" width="6" x="76" y="110" />
+                    <rect fill="currentColor" height="6" width="6" x="100" y="110" />
+                    <rect fill="currentColor" height="6" width="6" x="52" y="122" />
+                    <rect fill="currentColor" height="6" width="6" x="64" y="122" />
+                    <rect fill="currentColor" height="6" width="6" x="88" y="122" />
+                  </svg>
+                  {/* Central Brand Tag */}
+                  <div className="absolute inset-0 m-auto w-10 h-10 rounded-lg bg-white border border-[#E0F2FE] shadow-md flex items-center justify-center font-display font-black text-xs text-[#0284C7]">
+                    LTC
+                  </div>
+                </div>
+              )}
 
               <div className="mt-3 inline-flex items-center gap-1.5 bg-white px-3 py-1 rounded-full border border-[#E0F2FE] shadow-sm">
                 <span className="text-[10px] text-[#64748B]">Total Scan:</span>

@@ -7,13 +7,17 @@ import {
   OrderType,
   PaymentMethod,
   AddOnOption,
+  CustomerProfile,
 } from '../../../types';
 import { OutletSelector } from './OutletSelector';
 import { OrderMenu } from './OrderMenu';
 import { OrderCartDrawer } from './OrderCartDrawer';
 import { OrderCheckout } from './OrderCheckout';
 import { OrderConfirmation } from './OrderConfirmation';
+import CustomerAuthForm from './CustomerAuthForm';
+import CustomerProfileTab from './CustomerProfileTab';
 import { createNewOrder, generateOrderNumber } from '../../../utils/supabaseOrders';
+import { getCurrentCustomerProfile, getSupabase } from '../../../utils/supabase';
 import {
   DEFAULT_SIZE,
   DEFAULT_TOPPING,
@@ -21,7 +25,7 @@ import {
   generateCartItemId,
   calculateItemUnitPrice,
 } from '../../../data/addOnsData';
-import { X, ArrowLeft, ShoppingBag } from 'lucide-react';
+import { X, ArrowLeft, ShoppingBag, User } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 
 interface OrderingSystemModalProps {
@@ -61,11 +65,27 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
 
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [generalNote, setGeneralNote] = useState<string>('');
-  const [currentStep, setCurrentStep] = useState<'outlet' | 'menu' | 'checkout' | 'confirmation'>('outlet');
+  const [currentStep, setCurrentStep] = useState<'outlet' | 'menu' | 'checkout' | 'confirmation' | 'profile'>('outlet');
   const [completedOrder, setCompletedOrder] = useState<CustomerOrder | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [pendingCustomizeItem, setPendingCustomizeItem] = useState<MenuItem | null>(null);
+  const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
   const modalContainerRef = useRef<HTMLDivElement>(null);
+
+  // Sync active customer profile session on mount and when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const syncProfile = async () => {
+        try {
+          const profile = await getCurrentCustomerProfile();
+          setCustomerProfile(profile);
+        } catch (err) {
+          console.warn('Error syncing customer profile:', err);
+        }
+      };
+      syncProfile();
+    }
+  }, [isOpen]);
 
   // Scroll reset helper for modal and window
   const scrollToTop = () => {
@@ -261,6 +281,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
         outletName: selectedOutlet.name,
         customerName: details.customerName,
         customerPhone: details.customerPhone,
+        userId: customerProfile?.userId || undefined, // Associates the order with the logged-in member
         orderType: details.orderType,
         tableNumber: details.orderType === 'DINE IN' ? details.tableNumber : undefined,
         items: cart.map((item) => {
@@ -336,7 +357,9 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
           {currentStep !== 'outlet' && currentStep !== 'confirmation' && (
             <button
               onClick={() => {
-                if (currentStep === 'checkout') {
+                if (currentStep === 'profile') {
+                  setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                } else if (currentStep === 'checkout') {
                   setCurrentStep('menu');
                 } else if (currentStep === 'menu') {
                   setCurrentStep('outlet');
@@ -366,6 +389,30 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
 
         {/* Right Actions */}
         <div className="flex items-center gap-2">
+          {/* Member Profile Access Button */}
+          <button
+            onClick={() => {
+              if (currentStep === 'profile') {
+                setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+              } else {
+                setCurrentStep('profile');
+              }
+            }}
+            className={`p-2 sm:px-3.5 sm:py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer tracking-wide ${
+              currentStep === 'profile'
+                ? 'bg-[#C39A6B] text-white border-[#C39A6B] hover:bg-[#B38A5B]'
+                : customerProfile
+                ? 'bg-amber-500/10 border-[#C39A6B]/30 text-[#C39A6B] hover:bg-amber-500/20'
+                : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+            title={customerProfile ? `Akun: ${customerProfile.namaLengkap}` : 'Masuk Member'}
+          >
+            <User className={`w-4 h-4 ${customerProfile ? 'text-[#C39A6B]' : ''}`} />
+            <span className="hidden sm:inline font-semibold">
+              {customerProfile ? customerProfile.namaLengkap.split(' ')[0] : 'MEMBER'}
+            </span>
+          </button>
+
           {selectedOutlet && currentStep === 'menu' && (
             <button
               onClick={() => setIsCartOpen(true)}
@@ -393,7 +440,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
       </header>
 
       {/* Main Step Body */}
-      <main className="flex-1 w-full">
+      <main className="flex-1 w-full bg-[#F8FBFF]">
         {currentStep === 'outlet' && (
           <OutletSelector
             onSelectOutlet={(outlet) => {
@@ -425,7 +472,43 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
             onBackToCart={() => setIsCartOpen(true)}
             onSubmitOrder={handleSubmitOrder}
             isSubmitting={isSubmitting}
+            customerProfile={customerProfile}
           />
+        )}
+
+        {currentStep === 'profile' && (
+          <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+            {customerProfile ? (
+              <CustomerProfileTab
+                profile={customerProfile}
+                onLogout={async () => {
+                  try {
+                    const client = getSupabase();
+                    await client.auth.signOut();
+                    setCustomerProfile(null);
+                    setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                  } catch (err) {
+                    console.warn('Logout error:', err);
+                  }
+                }}
+                onProfileUpdate={(updated) => {
+                  setCustomerProfile((prev) => prev ? { ...prev, ...updated } : null);
+                }}
+              />
+            ) : (
+              <div className="py-6">
+                <CustomerAuthForm
+                  onAuthSuccess={(profile) => {
+                    setCustomerProfile(profile);
+                    setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                  }}
+                  onCancel={() => {
+                    setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                  }}
+                />
+              </div>
+            )}
+          </div>
         )}
 
         {currentStep === 'confirmation' && completedOrder && selectedOutlet && (

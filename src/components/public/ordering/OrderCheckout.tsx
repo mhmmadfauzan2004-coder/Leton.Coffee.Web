@@ -4,6 +4,7 @@ import {
   OrderOutlet,
   OrderType,
   PaymentMethod,
+  CustomerProfile,
 } from '../../../types';
 import { calculateItemUnitPrice } from '../../../data/addOnsData';
 import { formatRupiah } from '../../../utils/formatters';
@@ -23,6 +24,7 @@ import {
   Layers,
   Sparkles,
   Droplets,
+  Award,
 } from 'lucide-react';
 
 interface OrderCheckoutProps {
@@ -40,6 +42,7 @@ interface OrderCheckoutProps {
     paymentReceiptPath?: string;
   }) => Promise<void>;
   isSubmitting: boolean;
+  customerProfile?: CustomerProfile | null;
 }
 
 export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
@@ -49,12 +52,13 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   onBackToCart,
   onSubmitOrder,
   isSubmitting,
+  customerProfile,
 }) => {
   // Form State
   const [orderType, setOrderType] = useState<OrderType>('DINE IN');
   const [tableNumber, setTableNumber] = useState<string>('');
-  const [customerName, setCustomerName] = useState<string>('');
-  const [customerPhone, setCustomerPhone] = useState<string>('');
+  const [customerName, setCustomerName] = useState<string>(customerProfile?.namaLengkap || '');
+  const [customerPhone, setCustomerPhone] = useState<string>(customerProfile?.nomorHp || '');
   const [orderNote, setOrderNote] = useState<string>(generalNote || '');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('QRIS');
   const [formError, setFormError] = useState<string>('');
@@ -300,16 +304,29 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
             {/* Customer Info Fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
               <div className="space-y-1.5">
-                <label className="text-xs text-[#172033] font-bold">
-                  Nama Lengkap <span className="text-rose-500">*</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-[#172033] font-bold">
+                    Nama Lengkap <span className="text-rose-500">*</span>
+                  </label>
+                  {customerProfile && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#C39A6B]">
+                      <Award className="w-3 h-3 text-[#C39A6B] shrink-0" />
+                      <span>Member Leton</span>
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   required
+                  disabled={Boolean(customerProfile)}
                   placeholder="Nama pemesan..."
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#E0F2FE] rounded-xl text-sm text-[#172033] focus:outline-none focus:border-[#38BDF8]"
+                  className={`w-full px-3.5 py-2.5 rounded-xl text-sm text-[#172033] focus:outline-none focus:border-[#38BDF8] ${
+                    customerProfile 
+                      ? 'bg-amber-50/50 border-[#C39A6B]/30 font-semibold text-[#172033]' 
+                      : 'bg-white border border-[#E0F2FE]'
+                  }`}
                 />
               </div>
 
@@ -317,10 +334,15 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
                 <label className="text-xs text-[#172033] font-bold">No. WhatsApp</label>
                 <input
                   type="tel"
+                  disabled={Boolean(customerProfile)}
                   placeholder="0812-xxxx-xxxx"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#E0F2FE] rounded-xl text-sm text-[#172033] focus:outline-none focus:border-[#38BDF8]"
+                  className={`w-full px-3.5 py-2.5 rounded-xl text-sm text-[#172033] focus:outline-none focus:border-[#38BDF8] ${
+                    customerProfile 
+                      ? 'bg-amber-50/50 border-[#C39A6B]/30 font-semibold text-[#172033]' 
+                      : 'bg-white border border-[#E0F2FE]'
+                  }`}
                 />
               </div>
 

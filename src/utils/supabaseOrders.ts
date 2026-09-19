@@ -497,6 +497,7 @@ export async function createNewOrder(
       outlet_name: orderData.outletName,
       customer_name: orderData.customerName,
       customer_phone: orderData.customerPhone || null,
+      user_id: orderData.userId || null, // Associates the order with a customer profile if logged in
       order_type: orderData.orderType,
       table_number: orderData.tableNumber || null,
       items: orderData.items,
@@ -926,6 +927,16 @@ export async function fetchSingleOrder(orderIdOrNumber: string): Promise<Custome
       .maybeSingle();
 
     if (!error && data) {
+      // Security Check: If a customer is logged in, and this order is associated with a user,
+      // only allow them to view it if it is their own order.
+      const activeRole = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') : '';
+      const { data: { user } } = await client.auth.getUser().catch(() => ({ data: { user: null } }));
+      
+      if (data.user_id && user && !activeRole && data.user_id !== user.id) {
+        console.warn('[Security] Unauthorized access attempt to order:', orderIdOrNumber);
+        return null;
+      }
+
       return {
         id: data.id,
         orderNumber: data.order_number || data.orderNumber || 'LTN-????',
@@ -933,6 +944,7 @@ export async function fetchSingleOrder(orderIdOrNumber: string): Promise<Custome
         outletName: data.outlet_name || data.outletName || '',
         customerName: data.customer_name || data.customerName || '',
         customerPhone: data.customer_phone || data.customerPhone || '',
+        userId: data.user_id || data.userId || undefined,
         orderType: data.order_type || data.orderType || 'DINE IN',
         tableNumber: data.table_number || data.tableNumber || '',
         items: Array.isArray(data.items) ? data.items : [],

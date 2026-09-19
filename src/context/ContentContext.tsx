@@ -518,7 +518,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       // 1. Determine target folder inside 'leton-images' bucket based on label/prefix
-      let folder = 'other';
+      let folder = 'lainnya';
       const prefixLower = fileNamePrefix.toLowerCase();
       if (prefixLower.includes('logo')) {
         folder = 'logo';

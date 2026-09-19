@@ -227,6 +227,7 @@ export interface CustomerOrder {
   outletName: string;
   customerName: string;
   customerPhone?: string;
+  userId?: string; // Links new orders to a customer account (auth.users.id)
   orderType: OrderType;
   tableNumber?: string;
   items: OrderItem[];
@@ -240,6 +241,16 @@ export interface CustomerOrder {
   orderStatus: OrderStatus;
   customerNote?: string;
   createdAt: string; // ISO String
+  updatedAt?: string;
+}
+
+export interface CustomerProfile {
+  id: string;
+  userId: string;
+  namaLengkap: string;
+  nomorHp: string;
+  tanggalLahir: string;
+  createdAt?: string;
   updatedAt?: string;
 }
 

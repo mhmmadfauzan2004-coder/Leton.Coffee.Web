@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { LetonData } from '../types';
+import { LetonData, CustomerProfile } from '../types';
 import { initialLetonData } from '../data/initialData';
 import { sanitizeLoadedData } from './storage';
 import { stripHeavyBase64Images } from './safeStorage';
@@ -401,6 +401,267 @@ export async function updateSupabaseAuthPassword(newPassword: string): Promise<{
   } catch (err: any) {
     console.warn('updateSupabaseAuthPassword exception:', err);
     return { success: false, error: err?.message || 'Gagal mengubah password di Supabase Auth' };
+  }
+}
+
+/**
+ * 8. Customer Authentication & Profiles
+ */
+export async function registerCustomer(
+  namaLengkap: string,
+  nomorHp: string,
+  tanggalLahir: string,
+  password: string
+): Promise<{ success: boolean; profile?: CustomerProfile; error?: string }> {
+  try {
+    const client = getSupabase();
+
+    // Clean inputs
+    const cleanNama = namaLengkap.trim();
+    const cleanPhone = nomorHp.replace(/[^0-9]/g, '');
+
+    if (!cleanNama) return { success: false, error: 'Nama lengkap wajib diisi.' };
+    if (!cleanPhone) return { success: false, error: 'Nomor HP wajib diisi.' };
+    if (!tanggalLahir) return { success: false, error: 'Tanggal lahir wajib diisi.' };
+
+    // Check if name or phone is already taken using secure uniqueness RPC helper
+    const { data: uniqueness, error: uniqueErr } = await client.rpc('check_profile_uniqueness', {
+      p_nama_lengkap: cleanNama,
+      p_nomor_hp: cleanPhone
+    });
+
+    if (uniqueErr) {
+      console.warn('Uniqueness RPC error, trying direct table fallback:', uniqueErr.message);
+      
+      // Fallback direct query if RLS/RPC is not fully deployed yet
+      const { data: existingName } = await client
+        .from('profiles')
+        .select('id')
+        .eq('nama_lengkap', cleanNama)
+        .maybeSingle();
+
+      if (existingName) {
+        return { success: false, error: 'Nama lengkap sudah terdaftar. Silakan pilih nama lain atau masuk.' };
+      }
+
+      const { data: existingPhone } = await client
+        .from('profiles')
+        .select('id')
+        .eq('nomor_hp', cleanPhone)
+        .maybeSingle();
+
+      if (existingPhone) {
+        return { success: false, error: 'Nomor HP ini sudah terdaftar. Silakan gunakan nomor lain atau masuk.' };
+      }
+    } else if (uniqueness) {
+      if (uniqueness.name_exists) {
+        return { success: false, error: 'Nama lengkap sudah terdaftar. Silakan pilih nama lain atau masuk.' };
+      }
+      if (uniqueness.phone_exists) {
+        return { success: false, error: 'Nomor HP ini sudah terdaftar. Silakan gunakan nomor lain atau masuk.' };
+      }
+    }
+
+    // Generate a completely random internal email identifier in c_<random>@auth.leton.local format
+    const randomSuffix = Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12);
+    const virtualEmail = `c_${randomSuffix}@auth.leton.local`;
+
+    // Create user in Supabase Auth
+    const { data: signUpData, error: signUpError } = await client.auth.signUp({
+      email: virtualEmail,
+      password: password,
+    });
+
+    if (signUpError || !signUpData.user) {
+      return { success: false, error: signUpError?.message || 'Gagal mendaftarkan akun di sistem keamanan.' };
+    }
+
+    // Insert profile data including the internal email mapping
+    const profilePayload = {
+      user_id: signUpData.user.id,
+      nama_lengkap: cleanNama,
+      nomor_hp: cleanPhone,
+      tanggal_lahir: tanggalLahir,
+      email_internal: virtualEmail,
+    };
+
+    const { data: insertProfile, error: profileError } = await client
+      .from('profiles')
+      .insert(profilePayload)
+      .select()
+      .single();
+
+    if (profileError) {
+      console.error('Error inserting profile:', profileError);
+      return { success: false, error: 'Akun berhasil dibuat tetapi gagal menginisialisasi data profil. Hubungi Admin.' };
+    }
+
+    const customerProfile: CustomerProfile = {
+      id: insertProfile.id,
+      userId: insertProfile.user_id,
+      namaLengkap: insertProfile.nama_lengkap,
+      nomorHp: insertProfile.nomor_hp,
+      tanggalLahir: insertProfile.tanggal_lahir,
+      createdAt: insertProfile.created_at,
+      updatedAt: insertProfile.updated_at,
+    };
+
+    return { success: true, profile: customerProfile };
+  } catch (err: any) {
+    console.error('Customer registration exception:', err);
+    return { success: false, error: err?.message || 'Terjadi kesalahan sistem saat mendaftar.' };
+  }
+}
+
+export async function loginCustomer(
+  namaLengkap: string,
+  password: string
+): Promise<{ success: boolean; profile?: CustomerProfile; error?: string }> {
+  try {
+    const client = getSupabase();
+    const cleanNama = namaLengkap.trim();
+
+    if (!cleanNama) return { success: false, error: 'Nama lengkap wajib diisi.' };
+    if (!password) return { success: false, error: 'Password wajib diisi.' };
+
+    // Fetch the email_internal securely via RPC get_email_by_name helper
+    const { data: virtualEmail, error: rpcErr } = await client.rpc('get_email_by_name', {
+      p_nama_lengkap: cleanNama
+    });
+
+    let profileRow: any = null;
+    let finalEmail = virtualEmail;
+
+    if (rpcErr || !finalEmail) {
+      console.warn('Secure email lookup RPC unavailable or returned null, falling back to direct table select:', rpcErr?.message);
+      
+      // Fallback query if RPC isn't deployed yet
+      const { data: fallbackRow, error: profileErr } = await client
+        .from('profiles')
+        .select('*')
+        .eq('nama_lengkap', cleanNama)
+        .maybeSingle();
+
+      if (profileErr || !fallbackRow) {
+        return { success: false, error: 'Nama Lengkap tidak terdaftar atau password salah.' };
+      }
+      profileRow = fallbackRow;
+      finalEmail = fallbackRow.email_internal;
+    }
+
+    if (!finalEmail) {
+      return { success: false, error: 'Nama Lengkap tidak terdaftar atau password salah.' };
+    }
+
+    // Sign in using the registered random internal email and password
+    const { data: signInData, error: signInError } = await client.auth.signInWithPassword({
+      email: finalEmail,
+      password: password,
+    });
+
+    if (signInError || !signInData.user) {
+      return { success: false, error: signInError?.message || 'Nama Lengkap atau Password salah.' };
+    }
+
+    // If we didn't fetch the profileRow from fallback yet, fetch it securely now since we are fully authenticated!
+    if (!profileRow) {
+      const { data: authenticatedRow, error: authProfileErr } = await client
+        .from('profiles')
+        .select('*')
+        .eq('user_id', signInData.user.id)
+        .maybeSingle();
+
+      if (authProfileErr || !authenticatedRow) {
+        return { success: false, error: 'Gagal memuat profil anggota terautentikasi. Silakan coba lagi.' };
+      }
+      profileRow = authenticatedRow;
+    }
+
+    const customerProfile: CustomerProfile = {
+      id: profileRow.id,
+      userId: profileRow.user_id,
+      namaLengkap: profileRow.nama_lengkap,
+      nomorHp: profileRow.nomor_hp,
+      tanggalLahir: profileRow.tanggal_lahir,
+      createdAt: profileRow.created_at,
+      updatedAt: profileRow.updated_at,
+    };
+
+    return { success: true, profile: customerProfile };
+  } catch (err: any) {
+    console.error('Customer login exception:', err);
+    return { success: false, error: err?.message || 'Terjadi kesalahan sistem saat masuk.' };
+  }
+}
+
+export async function getCurrentCustomerProfile(): Promise<CustomerProfile | null> {
+  try {
+    const client = getSupabase();
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) return null;
+
+    const { data: profileRow, error } = await client
+      .from('profiles')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (error || !profileRow) return null;
+
+    return {
+      id: profileRow.id,
+      userId: profileRow.user_id,
+      namaLengkap: profileRow.nama_lengkap,
+      nomorHp: profileRow.nomor_hp,
+      tanggalLahir: profileRow.tanggal_lahir,
+      createdAt: profileRow.created_at,
+      updatedAt: profileRow.updated_at,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function updateCustomerProfile(
+  namaLengkap: string,
+  tanggalLahir: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const client = getSupabase();
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) return { success: false, error: 'Silakan masuk terlebih dahulu.' };
+
+    const cleanNama = namaLengkap.trim();
+    if (!cleanNama) return { success: false, error: 'Nama lengkap wajib diisi.' };
+
+    // Check if name is taken by other user
+    const { data: otherUser } = await client
+      .from('profiles')
+      .select('id')
+      .eq('nama_lengkap', cleanNama)
+      .neq('user_id', user.id)
+      .maybeSingle();
+
+    if (otherUser) {
+      return { success: false, error: 'Nama lengkap sudah terpakai oleh akun lain.' };
+    }
+
+    const { error } = await client
+      .from('profiles')
+      .update({
+        nama_lengkap: cleanNama,
+        tanggal_lahir: tanggalLahir,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', user.id);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Gagal mengubah profil.' };
   }
 }
 

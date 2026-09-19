@@ -268,14 +268,13 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
-// Helper to format phone for Supabase Phone Auth (E.164)
-function formatPhoneForSupabase(phone: string): string {
-  const digits = (phone || '').replace(/[^0-9]/g, '');
+// Helper to normalize Indonesian phone number to E.164 (+628xxxxxxxxxx)
+function normalizeIndonesianPhone(phone: string): string {
+  let digits = (phone || '').trim().replace(/[^0-9]/g, '');
   if (digits.startsWith('0')) {
-    return '+62' + digits.slice(1);
-  }
-  if (!digits.startsWith('62')) {
-    return '+62' + digits;
+    digits = '62' + digits.slice(1);
+  } else if (!digits.startsWith('62')) {
+    digits = '62' + digits;
   }
   return '+' + digits;
 }
@@ -285,13 +284,13 @@ app.post('/api/pelanggan/daftar', async (req, res) => {
   try {
     const { namaLengkap, nomorHp, tanggalLahir, password } = req.body;
     
-    // Clean inputs
+    // Clean and normalize inputs
     const cleanNama = (namaLengkap || '').trim();
-    const cleanPhoneDigits = (nomorHp || '').replace(/[^0-9]/g, '');
-    const formattedPhone = formatPhoneForSupabase(nomorHp);
+    const rawPhoneDigits = (nomorHp || '').replace(/[^0-9]/g, '');
+    const normalizedPhone = normalizeIndonesianPhone(nomorHp);
 
     if (!cleanNama) return res.status(400).json({ error: 'Nama lengkap wajib diisi.' });
-    if (!cleanPhoneDigits) return res.status(400).json({ error: 'Nomor HP wajib diisi.' });
+    if (!rawPhoneDigits) return res.status(400).json({ error: 'Nomor HP wajib diisi.' });
     if (!tanggalLahir) return res.status(400).json({ error: 'Tanggal lahir wajib diisi.' });
     if (!password) return res.status(400).json({ error: 'Password wajib diisi.' });
 
@@ -306,20 +305,20 @@ app.post('/api/pelanggan/daftar', async (req, res) => {
       return res.status(400).json({ error: 'Nama lengkap sudah terdaftar. Silakan pilih nama lain.' });
     }
 
-    // Check if phone is already taken in profiles
+    // Check if phone is already taken in profiles (check both normalized and raw digits)
     const { data: existingPhone } = await supabase
       .from('profiles')
       .select('id')
-      .eq('nomor_hp', cleanPhoneDigits)
+      .or(`nomor_hp.eq.${normalizedPhone},nomor_hp.eq.${rawPhoneDigits}`)
       .maybeSingle();
 
     if (existingPhone) {
       return res.status(400).json({ error: 'Nomor HP ini sudah terdaftar. Silakan gunakan nomor lain.' });
     }
 
-    // Sign up using Supabase Phone + Password Auth
+    // Sign up using Supabase Phone + Password Auth with normalized phone (+628xxxxxxxxxx)
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      phone: formattedPhone,
+      phone: normalizedPhone,
       password: password,
     });
 
@@ -327,11 +326,11 @@ app.post('/api/pelanggan/daftar', async (req, res) => {
       return res.status(400).json({ error: signUpError?.message || 'Gagal mendaftarkan akun dengan nomor HP tersebut.' });
     }
 
-    // Insert profile data
+    // Insert profile data with normalized phone (+628xxxxxxxxxx)
     const profilePayload = {
       user_id: signUpData.user.id,
       nama_lengkap: cleanNama,
-      nomor_hp: cleanPhoneDigits,
+      nomor_hp: normalizedPhone,
       tanggal_lahir: tanggalLahir,
     };
 
@@ -348,7 +347,7 @@ app.post('/api/pelanggan/daftar', async (req, res) => {
 
     // Sign in to obtain session tokens (access_token, refresh_token)
     const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      phone: formattedPhone,
+      phone: normalizedPhone,
       password: password,
     });
 
@@ -399,11 +398,11 @@ app.post('/api/pelanggan/login', async (req, res) => {
       return res.status(400).json({ error: 'Nama Lengkap tidak terdaftar atau password salah.' });
     }
 
-    const formattedPhone = formatPhoneForSupabase(profileRow.nomor_hp);
+    const normalizedPhone = normalizeIndonesianPhone(profileRow.nomor_hp);
 
-    // Sign in on backend using phone and password
+    // Sign in on backend using normalized phone and password
     const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      phone: formattedPhone,
+      phone: normalizedPhone,
       password: password,
     });
 

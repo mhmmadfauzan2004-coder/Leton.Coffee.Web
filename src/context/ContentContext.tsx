@@ -509,7 +509,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Upload image to Supabase Storage Bucket ('leton-images') with fallback to server
+  // Upload image directly and exclusively to Supabase Storage Bucket ('leton-images')
   const uploadImage = async (file: File, fileNamePrefix: string = 'menu'): Promise<string | null> => {
     try {
       if (!auth.isAuthenticated) {
@@ -517,46 +517,52 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return null;
       }
 
-      // 1. Try uploading to Supabase Storage ('leton-images' bucket)
+      // 1. Determine target folder inside 'leton-images' bucket based on label/prefix
+      let folder = 'other';
+      const prefixLower = fileNamePrefix.toLowerCase();
+      if (prefixLower.includes('logo')) {
+        folder = 'logo';
+      } else if (prefixLower.includes('menu') || prefixLower.includes('produk') || prefixLower.includes('item')) {
+        folder = 'menu';
+      } else if (prefixLower.includes('cabang') || prefixLower.includes('outlet') || prefixLower.includes('branch') || prefixLower.includes('chapter')) {
+        folder = 'cabang';
+      } else if (prefixLower.includes('barista')) {
+        folder = 'barista';
+      } else if (prefixLower.includes('booth') || prefixLower.includes('open-booth')) {
+        folder = 'open-booth';
+      } else if (
+        prefixLower.includes('cerita') ||
+        prefixLower.includes('story') ||
+        prefixLower.includes('slider') ||
+        prefixLower.includes('slide') ||
+        prefixLower.includes('utama') ||
+        prefixLower.includes('sekunder') ||
+        prefixLower.includes('about') ||
+        prefixLower.includes('hero') ||
+        prefixLower.includes('bg') ||
+        prefixLower.includes('background')
+      ) {
+        folder = 'cerita';
+      }
+
+      // 2. Direct upload to Supabase Storage ('leton-images' bucket)
       if (isSupabaseConfigured()) {
-        const supabaseUpload = await uploadImageToSupabase(file, 'menu', fileNamePrefix);
+        const supabaseUpload = await uploadImageToSupabase(file, folder, fileNamePrefix);
         if (supabaseUpload.success && supabaseUpload.url) {
           showToast('Foto berhasil diupload ke Supabase Storage!', 'success');
           return supabaseUpload.url;
         } else {
-          console.warn('Supabase upload failed:', supabaseUpload.error);
-          showToast('Warning: Gagal upload ke Supabase Storage (' + supabaseUpload.error + '). Mencoba fallback ke server lokal...', 'info');
+          console.error('Supabase upload failed:', supabaseUpload.error);
+          showToast(`Gagal upload ke Supabase Storage: ${supabaseUpload.error}`, 'error');
+          return null;
         }
+      } else {
+        showToast('Gagal upload: Supabase belum dikonfigurasi dengan benar di menu Settings.', 'error');
+        return null;
       }
-
-      // 2. Fallback to Express backend disk storage if available
-      try {
-        const formData = new FormData();
-        formData.append('image', file);
-        formData.append('prefix', fileNamePrefix);
-
-        const res = await fetch(getApiUrl('/api/upload-image'), {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${auth.token || 'leton_local_token'}`,
-          },
-          body: formData,
-        });
-
-        if (res.ok) {
-          const json = await res.json().catch(() => null);
-          if (json && json.success && (json.url || json.fullUrl)) {
-            showToast('Foto berhasil diupload ke server!', 'success');
-            return json.url || json.fullUrl;
-          }
-        }
-      } catch (backendErr) {
-        console.warn('Backend image upload error:', backendErr);
-      }
-
-      return null;
     } catch (err: any) {
-      console.warn('Upload image error:', err);
+      console.error('Upload image exception:', err);
+      showToast('Terjadi kesalahan saat memproses foto.', 'error');
       return null;
     }
   };

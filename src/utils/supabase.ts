@@ -270,7 +270,16 @@ export async function uploadImageToSupabase(
 
     if (uploadError) {
       console.error('Supabase Storage upload error:', uploadError);
-      return { success: false, error: uploadError.message };
+      let errorMsg = uploadError.message;
+      if (
+        errorMsg === 'Bucket not found' ||
+        errorMsg.includes('Bucket not found') ||
+        errorMsg.includes('NoSuchBucket') ||
+        errorMsg.includes('does not exist')
+      ) {
+        errorMsg = `Bucket "${SUPABASE_STORAGE_BUCKET}" tidak ditemukan di Supabase. Silakan buat bucket publik bernama "${SUPABASE_STORAGE_BUCKET}" di panel Storage Supabase Anda.`;
+      }
+      return { success: false, error: errorMsg };
     }
 
     // Retrieve public URL from bucket

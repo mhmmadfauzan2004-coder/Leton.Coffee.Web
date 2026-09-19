@@ -40,48 +40,17 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   const [cropperSource, setCropperSource] = useState<string | null>(null);
   const [originalFile, setOriginalFile] = useState<File | null>(null);
 
-  const processAndUploadFile = async (fileToUpload: File, fallbackDataUrl?: string) => {
+  const processAndUploadFile = async (fileToUpload: File, _fallbackDataUrl?: string) => {
     setIsUploading(true);
     try {
       const prefix = label ? label.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30) : 'image';
-      // 1. Direct upload to server storage / Supabase with unique prefix
+      // Direct upload to Supabase Storage with unique prefix
       const serverUrl = await uploadImage(fileToUpload, prefix);
       if (serverUrl) {
         onChange(serverUrl);
         setUrlInput(serverUrl);
         setTempPreview(null);
-        showToast('Foto berhasil diunggah & disesuaikan!', 'success');
-      } else {
-        // Fallback: Upload optimized base64 image to server endpoint
-        const fallbackData = fallbackDataUrl || (await optimizeImageFile(fileToUpload, 1200, 0.75));
-        if (fallbackData) {
-          try {
-            const token = localStorage.getItem('leton_admin_token_v1') || localStorage.getItem('leton_admin_token') || 'leton_local_token';
-            const res = await fetch(getApiUrl('/api/upload-image'), {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({ base64Image: fallbackData, prefix }),
-            });
-            const json = await res.json().catch(() => null);
-            if (json && json.success && json.url) {
-              onChange(json.url);
-              setUrlInput(json.url);
-              setTempPreview(null);
-              showToast('Foto berhasil diunggah ke server!', 'success');
-              return;
-            }
-          } catch (serverErr) {
-            console.warn('Base64 upload endpoint failed:', serverErr);
-          }
-
-          onChange(fallbackData);
-          setUrlInput(fallbackData);
-          setTempPreview(null);
-          showToast('Foto berhasil dimuat. Klik tombol "Simpan Perubahan" untuk menyimpan!', 'info');
-        }
+        showToast('Foto berhasil diunggah!', 'success');
       }
     } catch (err) {
       console.error('File upload error:', err);

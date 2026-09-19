@@ -3,8 +3,15 @@
  * Supports split deployment: Frontend (Cloudflare Pages) & Backend (Express Node.js).
  */
 
-// Base API URL from environment variable, e.g. "https://leton-backend.onrender.com"
-export const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+// Base API URL from environment variable or automatic backend fallback for split-domain deployment (e.g. Cloudflare Pages)
+const DEFAULT_BACKEND_URL = 'https://ais-dev-gfncvyyhq4omamytu5kgc4-866159737618.asia-southeast1.run.app';
+
+export const API_BASE_URL = (
+  import.meta.env.VITE_API_URL || 
+  (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && !window.location.origin.includes('run.app')
+    ? DEFAULT_BACKEND_URL
+    : '')
+).replace(/\/+$/, '');
 
 /**
  * Returns the full API URL for a given endpoint path.

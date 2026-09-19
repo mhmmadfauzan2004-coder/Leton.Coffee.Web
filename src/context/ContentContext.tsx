@@ -523,6 +523,9 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (supabaseUpload.success && supabaseUpload.url) {
           showToast('Foto berhasil diupload ke Supabase Storage!', 'success');
           return supabaseUpload.url;
+        } else {
+          console.warn('Supabase upload failed:', supabaseUpload.error);
+          showToast('Warning: Gagal upload ke Supabase Storage (' + supabaseUpload.error + '). Mencoba fallback ke server lokal...', 'info');
         }
       }
 

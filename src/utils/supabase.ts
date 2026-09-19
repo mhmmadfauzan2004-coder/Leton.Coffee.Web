@@ -10,7 +10,11 @@ export const getSupabaseUrl = (): string => {
     const customUrl = localStorage.getItem('leton_custom_supabase_url');
     if (customUrl && customUrl.trim().length > 10) return customUrl.trim();
   }
-  return import.meta.env.VITE_SUPABASE_URL || 'https://galwyavdonfzuibrmswt.supabase.co';
+  const envUrl = import.meta.env.VITE_SUPABASE_URL;
+  if (envUrl && envUrl.trim() && !envUrl.includes('GANTI_DENGAN_URL_YANG_SUDAH_DIKOPY')) {
+    return envUrl.trim();
+  }
+  return 'https://galwyavdonfzuibrmswt.supabase.co';
 };
 
 export const getSupabaseAnonKey = (): string => {
@@ -18,7 +22,11 @@ export const getSupabaseAnonKey = (): string => {
     const customKey = localStorage.getItem('leton_custom_supabase_anon_key');
     if (customKey && customKey.trim().length > 20) return customKey.trim();
   }
-  return import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_lcKDS5QKJkqA4__0j10pZw_7bXUaoGg';
+  const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  if (envKey && envKey.trim() && !envKey.includes('GANTI_DENGAN_ANON_KEY_YANG_SUDAH_DIKOPY') && envKey.trim().length > 20) {
+    return envKey.trim();
+  }
+  return 'sb_publishable_lcKDS5QKJkqA4__0j10pZw_7bXUaoGg';
 };
 
 export const setCustomSupabaseCredentials = (anonKey: string, url?: string) => {

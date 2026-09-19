@@ -56,7 +56,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
         const fallbackData = fallbackDataUrl || (await optimizeImageFile(fileToUpload, 1200, 0.75));
         if (fallbackData) {
           try {
-            const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
+            const token = localStorage.getItem('leton_admin_token_v1') || localStorage.getItem('leton_admin_token') || 'leton_local_token';
             const res = await fetch(getApiUrl('/api/upload-image'), {
               method: 'POST',
               headers: {

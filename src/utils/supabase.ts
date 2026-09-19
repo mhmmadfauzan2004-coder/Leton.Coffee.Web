@@ -3,6 +3,7 @@ import { LetonData, CustomerProfile } from '../types';
 import { initialLetonData } from '../data/initialData';
 import { sanitizeLoadedData } from './storage';
 import { stripHeavyBase64Images } from './safeStorage';
+import { getApiUrl } from './api';
 
 // 1. Supabase Credentials Configuration
 export const getSupabaseUrl = (): string => {
@@ -414,102 +415,32 @@ export async function registerCustomer(
   password: string
 ): Promise<{ success: boolean; profile?: CustomerProfile; error?: string }> {
   try {
+    const res = await fetch(getApiUrl('/api/pelanggan/daftar'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ namaLengkap, nomorHp, tanggalLahir, password }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.error || 'Gagal mendaftar.' };
+    }
+
+    // Set the session securely on client side
     const client = getSupabase();
-
-    // Clean inputs
-    const cleanNama = namaLengkap.trim();
-    const cleanPhone = nomorHp.replace(/[^0-9]/g, '');
-
-    if (!cleanNama) return { success: false, error: 'Nama lengkap wajib diisi.' };
-    if (!cleanPhone) return { success: false, error: 'Nomor HP wajib diisi.' };
-    if (!tanggalLahir) return { success: false, error: 'Tanggal lahir wajib diisi.' };
-
-    // Check if name or phone is already taken using secure uniqueness RPC helper
-    const { data: uniqueness, error: uniqueErr } = await client.rpc('check_profile_uniqueness', {
-      p_nama_lengkap: cleanNama,
-      p_nomor_hp: cleanPhone
+    const { error: sessionError } = await client.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
     });
 
-    if (uniqueErr) {
-      console.warn('Uniqueness RPC error, trying direct table fallback:', uniqueErr.message);
-      
-      // Fallback direct query if RLS/RPC is not fully deployed yet
-      const { data: existingName } = await client
-        .from('profiles')
-        .select('id')
-        .eq('nama_lengkap', cleanNama)
-        .maybeSingle();
-
-      if (existingName) {
-        return { success: false, error: 'Nama lengkap sudah terdaftar. Silakan pilih nama lain atau masuk.' };
-      }
-
-      const { data: existingPhone } = await client
-        .from('profiles')
-        .select('id')
-        .eq('nomor_hp', cleanPhone)
-        .maybeSingle();
-
-      if (existingPhone) {
-        return { success: false, error: 'Nomor HP ini sudah terdaftar. Silakan gunakan nomor lain atau masuk.' };
-      }
-    } else if (uniqueness) {
-      if (uniqueness.name_exists) {
-        return { success: false, error: 'Nama lengkap sudah terdaftar. Silakan pilih nama lain atau masuk.' };
-      }
-      if (uniqueness.phone_exists) {
-        return { success: false, error: 'Nomor HP ini sudah terdaftar. Silakan gunakan nomor lain atau masuk.' };
-      }
+    if (sessionError) {
+      console.error('Session establishment error on client:', sessionError);
     }
 
-    // Generate a completely random internal email identifier in c_<random>@auth.letoncoffee.com format
-    const randomSuffix = Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12);
-    const virtualEmail = `c_${randomSuffix}@auth.letoncoffee.com`;
-
-    // Create user in Supabase Auth
-    const { data: signUpData, error: signUpError } = await client.auth.signUp({
-      email: virtualEmail,
-      password: password,
-    });
-
-    if (signUpError || !signUpData.user) {
-      return { success: false, error: signUpError?.message || 'Gagal mendaftarkan akun di sistem keamanan.' };
-    }
-
-    // Insert profile data including the internal email mapping
-    const profilePayload = {
-      user_id: signUpData.user.id,
-      nama_lengkap: cleanNama,
-      nomor_hp: cleanPhone,
-      tanggal_lahir: tanggalLahir,
-      email_internal: virtualEmail,
-    };
-
-    const { data: insertProfile, error: profileError } = await client
-      .from('profiles')
-      .insert(profilePayload)
-      .select()
-      .single();
-
-    if (profileError) {
-      console.error('Error inserting profile:', profileError);
-      return { success: false, error: 'Akun berhasil dibuat tetapi gagal menginisialisasi data profil. Hubungi Admin.' };
-    }
-
-    const customerProfile: CustomerProfile = {
-      id: insertProfile.id,
-      userId: insertProfile.user_id,
-      namaLengkap: insertProfile.nama_lengkap,
-      nomorHp: insertProfile.nomor_hp,
-      tanggalLahir: insertProfile.tanggal_lahir,
-      createdAt: insertProfile.created_at,
-      updatedAt: insertProfile.updated_at,
-    };
-
-    return { success: true, profile: customerProfile };
+    return { success: true, profile: data.profile };
   } catch (err: any) {
-    console.error('Customer registration exception:', err);
-    return { success: false, error: err?.message || 'Terjadi kesalahan sistem saat mendaftar.' };
+    console.error('Client registration exception:', err);
+    return { success: false, error: err?.message || 'Terjadi kesalahan koneksi saat mendaftar.' };
   }
 }
 
@@ -518,79 +449,32 @@ export async function loginCustomer(
   password: string
 ): Promise<{ success: boolean; profile?: CustomerProfile; error?: string }> {
   try {
+    const res = await fetch(getApiUrl('/api/pelanggan/login'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ namaLengkap, password }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.error || 'Gagal masuk.' };
+    }
+
+    // Set the session securely on client side
     const client = getSupabase();
-    const cleanNama = namaLengkap.trim();
-
-    if (!cleanNama) return { success: false, error: 'Nama lengkap wajib diisi.' };
-    if (!password) return { success: false, error: 'Password wajib diisi.' };
-
-    // Fetch the email_internal securely via RPC get_email_by_name helper
-    const { data: virtualEmail, error: rpcErr } = await client.rpc('get_email_by_name', {
-      p_nama_lengkap: cleanNama
+    const { error: sessionError } = await client.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
     });
 
-    let profileRow: any = null;
-    let finalEmail = virtualEmail;
-
-    if (rpcErr || !finalEmail) {
-      console.warn('Secure email lookup RPC unavailable or returned null, falling back to direct table select:', rpcErr?.message);
-      
-      // Fallback query if RPC isn't deployed yet
-      const { data: fallbackRow, error: profileErr } = await client
-        .from('profiles')
-        .select('*')
-        .eq('nama_lengkap', cleanNama)
-        .maybeSingle();
-
-      if (profileErr || !fallbackRow) {
-        return { success: false, error: 'Nama Lengkap tidak terdaftar atau password salah.' };
-      }
-      profileRow = fallbackRow;
-      finalEmail = fallbackRow.email_internal;
+    if (sessionError) {
+      console.error('Session establishment error on client:', sessionError);
     }
 
-    if (!finalEmail) {
-      return { success: false, error: 'Nama Lengkap tidak terdaftar atau password salah.' };
-    }
-
-    // Sign in using the registered random internal email and password
-    const { data: signInData, error: signInError } = await client.auth.signInWithPassword({
-      email: finalEmail,
-      password: password,
-    });
-
-    if (signInError || !signInData.user) {
-      return { success: false, error: signInError?.message || 'Nama Lengkap atau Password salah.' };
-    }
-
-    // If we didn't fetch the profileRow from fallback yet, fetch it securely now since we are fully authenticated!
-    if (!profileRow) {
-      const { data: authenticatedRow, error: authProfileErr } = await client
-        .from('profiles')
-        .select('*')
-        .eq('user_id', signInData.user.id)
-        .maybeSingle();
-
-      if (authProfileErr || !authenticatedRow) {
-        return { success: false, error: 'Gagal memuat profil anggota terautentikasi. Silakan coba lagi.' };
-      }
-      profileRow = authenticatedRow;
-    }
-
-    const customerProfile: CustomerProfile = {
-      id: profileRow.id,
-      userId: profileRow.user_id,
-      namaLengkap: profileRow.nama_lengkap,
-      nomorHp: profileRow.nomor_hp,
-      tanggalLahir: profileRow.tanggal_lahir,
-      createdAt: profileRow.created_at,
-      updatedAt: profileRow.updated_at,
-    };
-
-    return { success: true, profile: customerProfile };
+    return { success: true, profile: data.profile };
   } catch (err: any) {
-    console.error('Customer login exception:', err);
-    return { success: false, error: err?.message || 'Terjadi kesalahan sistem saat masuk.' };
+    console.error('Client login exception:', err);
+    return { success: false, error: err?.message || 'Terjadi kesalahan koneksi saat masuk.' };
   }
 }
 

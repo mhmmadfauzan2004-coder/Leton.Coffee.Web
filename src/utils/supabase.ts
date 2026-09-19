@@ -462,9 +462,9 @@ export async function registerCustomer(
       }
     }
 
-    // Generate a completely random internal email identifier in c_<random>@auth.leton.local format
+    // Generate a completely random internal email identifier in c_<random>@auth.letoncoffee.com format
     const randomSuffix = Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12);
-    const virtualEmail = `c_${randomSuffix}@auth.leton.local`;
+    const virtualEmail = `c_${randomSuffix}@auth.letoncoffee.com`;
 
     // Create user in Supabase Auth
     const { data: signUpData, error: signUpError } = await client.auth.signUp({

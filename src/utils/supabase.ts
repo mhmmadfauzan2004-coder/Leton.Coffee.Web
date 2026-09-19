@@ -414,22 +414,32 @@ export async function registerCustomer(
   tanggalLahir: string,
   password: string
 ): Promise<{ success: boolean; profile?: CustomerProfile; error?: string }> {
+  const url = getApiUrl('/api/pelanggan/daftar');
   try {
-    const res = await fetch(getApiUrl('/api/pelanggan/daftar'), {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ namaLengkap, nomorHp, tanggalLahir, password }),
     });
 
     const contentType = res.headers.get('content-type');
+    const rawText = await res.text();
+
     if (!contentType || !contentType.includes('application/json')) {
-      const text = await res.text();
-      return { success: false, error: text || `Terjadi kesalahan server (${res.status})` };
+      console.error('Register non-JSON response:', { url, status: res.status, body: rawText });
+      return { success: false, error: `Server error (${res.status}): ${rawText.slice(0, 150) || 'Invalid response'}` };
     }
 
-    const data = await res.json();
+    let data: any;
+    try {
+      data = JSON.parse(rawText);
+    } catch (parseErr) {
+      console.error('Register JSON parse error:', { url, rawText, parseErr });
+      return { success: false, error: `Gagal memparsing respons server: ${rawText.slice(0, 100)}` };
+    }
+
     if (!res.ok || !data.success) {
-      return { success: false, error: data.error || 'Gagal mendaftar.' };
+      return { success: false, error: data.error || `Gagal mendaftar (Status ${res.status})` };
     }
 
     // Set the session securely on client side
@@ -445,8 +455,8 @@ export async function registerCustomer(
 
     return { success: true, profile: data.profile };
   } catch (err: any) {
-    console.error('Client registration exception:', err);
-    return { success: false, error: err?.message || 'Terjadi kesalahan koneksi saat mendaftar.' };
+    console.error('Client registration exception:', { url, error: err });
+    return { success: false, error: `Koneksi gagal ke ${url}: ${err?.message || 'Load failed'}` };
   }
 }
 
@@ -454,22 +464,32 @@ export async function loginCustomer(
   namaLengkap: string,
   password: string
 ): Promise<{ success: boolean; profile?: CustomerProfile; error?: string }> {
+  const url = getApiUrl('/api/pelanggan/login');
   try {
-    const res = await fetch(getApiUrl('/api/pelanggan/login'), {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ namaLengkap, password }),
     });
 
     const contentType = res.headers.get('content-type');
+    const rawText = await res.text();
+
     if (!contentType || !contentType.includes('application/json')) {
-      const text = await res.text();
-      return { success: false, error: text || `Terjadi kesalahan server (${res.status})` };
+      console.error('Login non-JSON response:', { url, status: res.status, body: rawText });
+      return { success: false, error: `Server error (${res.status}): ${rawText.slice(0, 150) || 'Invalid response'}` };
     }
 
-    const data = await res.json();
+    let data: any;
+    try {
+      data = JSON.parse(rawText);
+    } catch (parseErr) {
+      console.error('Login JSON parse error:', { url, rawText, parseErr });
+      return { success: false, error: `Gagal memparsing respons server: ${rawText.slice(0, 100)}` };
+    }
+
     if (!res.ok || !data.success) {
-      return { success: false, error: data.error || 'Gagal masuk.' };
+      return { success: false, error: data.error || `Gagal masuk (Status ${res.status})` };
     }
 
     // Set the session securely on client side
@@ -485,8 +505,8 @@ export async function loginCustomer(
 
     return { success: true, profile: data.profile };
   } catch (err: any) {
-    console.error('Client login exception:', err);
-    return { success: false, error: err?.message || 'Terjadi kesalahan koneksi saat masuk.' };
+    console.error('Client login exception:', { url, error: err });
+    return { success: false, error: `Koneksi gagal ke ${url}: ${err?.message || 'Load failed'}` };
   }
 }
 

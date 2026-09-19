@@ -151,6 +151,13 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
     }
   }, [selectedOutlet, currentStep, checkingAuth, customerProfile]);
 
+  // Enforce auth requirement: if not logged in, must be on profile (auth) step
+  useEffect(() => {
+    if (!checkingAuth && !customerProfile && currentStep !== 'profile' && currentStep !== 'confirmation') {
+      setCurrentStep('profile');
+    }
+  }, [checkingAuth, customerProfile, currentStep]);
+
   // If a menu item was clicked from the public page, set it to customize
   useEffect(() => {
     if (isOpen && preSelectedMenuItem) {
@@ -519,10 +526,6 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                       onAuthSuccess={(profile) => {
                         setCustomerProfile(profile);
                         setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
-                      }}
-                      onCancel={() => {
-                        // Cancelling when not logged in must close the ordering flow entirely
-                        onClose();
                       }}
                     />
                   </div>

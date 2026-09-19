@@ -421,6 +421,12 @@ export async function registerCustomer(
       body: JSON.stringify({ namaLengkap, nomorHp, tanggalLahir, password }),
     });
 
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await res.text();
+      return { success: false, error: text || `Terjadi kesalahan server (${res.status})` };
+    }
+
     const data = await res.json();
     if (!res.ok || !data.success) {
       return { success: false, error: data.error || 'Gagal mendaftar.' };
@@ -454,6 +460,12 @@ export async function loginCustomer(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ namaLengkap, password }),
     });
+
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await res.text();
+      return { success: false, error: text || `Terjadi kesalahan server (${res.status})` };
+    }
 
     const data = await res.json();
     if (!res.ok || !data.success) {

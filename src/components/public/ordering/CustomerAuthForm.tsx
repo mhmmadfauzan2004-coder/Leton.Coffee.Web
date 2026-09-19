@@ -5,10 +5,9 @@ import { Phone, User, Calendar, Lock, AlertCircle, CheckCircle2, Loader2, ArrowR
 
 interface CustomerAuthFormProps {
   onAuthSuccess: (profile: CustomerProfile) => void;
-  onCancel?: () => void;
 }
 
-export default function CustomerAuthForm({ onAuthSuccess, onCancel }: CustomerAuthFormProps) {
+export default function CustomerAuthForm({ onAuthSuccess }: CustomerAuthFormProps) {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -283,17 +282,6 @@ export default function CustomerAuthForm({ onAuthSuccess, onCancel }: CustomerAu
             </>
           )}
         </button>
-
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={loading}
-            className="w-full text-center text-xs text-[#667085] hover:text-[#344054] transition-colors py-1 cursor-pointer font-medium"
-          >
-            Kembali ke Pemilihan Menu
-          </button>
-        )}
       </form>
 
       {/* Switch Mode Button */}

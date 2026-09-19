@@ -26,17 +26,12 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-// CORS configuration supporting external frontend hosting (Cloudflare Pages, Vercel, Netlify, etc.)
-const corsOriginEnv = process.env.CORS_ORIGIN;
-const allowedOrigins = corsOriginEnv
-  ? corsOriginEnv.includes(',')
-    ? corsOriginEnv.split(',').map((s) => s.trim())
-    : corsOriginEnv.trim()
-  : '*';
-
+// CORS configuration supporting external frontend hosting (Cloudflare Pages, Vercel, Netlify, etc.) with credentials support
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (_origin, callback) => {
+      callback(null, true);
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With', 'X-Accel-Buffering'],
     credentials: true,

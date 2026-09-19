@@ -3,9 +3,9 @@ import { LetonData, CustomerProfile } from '../types';
 import { initialLetonData } from '../data/initialData';
 import { sanitizeLoadedData } from './storage';
 import { stripHeavyBase64Images } from './safeStorage';
-import { normalizeIndonesianPhone, isValidIndonesianPhone, generateCustomerInternalEmail } from './phone';
+import { normalizeIndonesianPhone, isValidIndonesianPhone, generateCustomerInternalEmail, generateLegacyCustomerInternalEmail } from './phone';
 
-export { normalizeIndonesianPhone, isValidIndonesianPhone, generateCustomerInternalEmail };
+export { normalizeIndonesianPhone, isValidIndonesianPhone, generateCustomerInternalEmail, generateLegacyCustomerInternalEmail };
 
 // 1. Supabase Credentials Configuration
 export const getSupabaseUrl = (): string => {
@@ -572,6 +572,9 @@ export async function registerCustomer(
       });
       if (signInErr) {
         console.warn('Auto sign-in after register note:', signInErr.message);
+        if (signInErr.message?.toLowerCase().includes('email not confirmed')) {
+          console.warn('Supabase Auth Info: "Confirm email" is active in Supabase dashboard. Disable "Confirm email" in Auth -> Providers -> Email or run the SQL trigger.');
+        }
       }
     }
 
@@ -596,6 +599,7 @@ export async function registerCustomer(
  * Login customer directly via Supabase Auth using Email + Password under the hood.
  * Looks up internal email identity by nama_lengkap using a secure database mechanism (RPC),
  * and authenticates via signInWithPassword({ email: internalEmail, password }).
+ * Supports both new format (cust<phone>@letoncoffee.com) and legacy format (cust_<phone>@letoncoffee.com).
  * 
  * Keamanan:
  * - Menggunakan database RPC `get_customer_email_by_name` (SECURITY DEFINER)
@@ -672,13 +676,41 @@ export async function loginCustomer(
     }
 
     // 2. Direct Supabase Auth Email + Password sign-in from client
-    const { data: signInData, error: signInError } = await client.auth.signInWithPassword({
+    let { data: signInData, error: signInError } = await client.auth.signInWithPassword({
       email: foundEmail,
       password: password,
     });
 
-    if (signInError || !signInData.user) {
-      // If sign-in failed, check if user was registered with phone previously (graceful migration fallback)
+    // 2a. Fallback: If failed, try alternative internal email format (cust_ vs cust) for backward compatibility
+    if (signInError || !signInData?.user) {
+      let altEmail: string | null = null;
+      if (foundEmail.startsWith('cust_')) {
+        altEmail = foundEmail.replace('cust_', 'cust');
+      } else if (foundEmail.startsWith('cust')) {
+        altEmail = foundEmail.replace('cust', 'cust_');
+      }
+
+      if (altEmail) {
+        const { data: altSignIn, error: altErr } = await client.auth.signInWithPassword({
+          email: altEmail,
+          password: password,
+        });
+        if (!altErr && altSignIn?.user) {
+          signInData = altSignIn;
+          signInError = null;
+
+          // Migrate user account to the modern format without underscore (cust<digits>@letoncoffee.com)
+          const modernEmail = generateCustomerInternalEmail(foundPhoneFallback || foundEmail);
+          try {
+            await client.auth.updateUser({ email: modernEmail });
+            await client.from('profiles').update({ email_internal: modernEmail }).eq('user_id', altSignIn.user.id);
+          } catch {}
+        }
+      }
+    }
+
+    // 2b. Fallback: Check if user was registered with legacy phone auth
+    if (signInError || !signInData?.user) {
       if (foundPhoneFallback) {
         const normalizedPhone = normalizeIndonesianPhone(foundPhoneFallback);
         const { data: phoneSignInData, error: phoneSignInError } = await client.auth.signInWithPassword({
@@ -686,39 +718,27 @@ export async function loginCustomer(
           password: password,
         });
 
-        if (!phoneSignInError && phoneSignInData.user) {
-          // Successfully logged in via legacy phone auth!
-          // We can update auth user email to foundEmail so subsequent logins use email directly:
+        if (!phoneSignInError && phoneSignInData?.user) {
+          signInData = phoneSignInData;
+          signInError = null;
+
+          // Seamlessly upgrade legacy phone user to modern email auth
+          const modernEmail = generateCustomerInternalEmail(normalizedPhone);
           try {
-            await client.auth.updateUser({ email: foundEmail });
+            await client.auth.updateUser({ email: modernEmail });
+            await client.from('profiles').update({ email_internal: modernEmail }).eq('user_id', phoneSignInData.user.id);
           } catch {}
-
-          const { data: profileRow } = await client
-            .from('profiles')
-            .select('*')
-            .eq('user_id', phoneSignInData.user.id)
-            .maybeSingle();
-
-          const profile: CustomerProfile = {
-            id: profileRow?.id || phoneSignInData.user.id,
-            userId: phoneSignInData.user.id,
-            namaLengkap: profileRow?.nama_lengkap || cleanNama,
-            nomorHp: profileRow?.nomor_hp ? normalizeIndonesianPhone(profileRow.nomor_hp) : normalizedPhone,
-            tanggalLahir: profileRow?.tanggal_lahir || '',
-            createdAt: profileRow?.created_at || new Date().toISOString(),
-            updatedAt: profileRow?.updated_at || new Date().toISOString(),
-          };
-
-          return { success: true, profile };
         }
       }
+    }
 
+    if (signInError || !signInData?.user) {
       const msg = (signInError?.message || '').toLowerCase();
       if (msg.includes('invalid') || msg.includes('credentials') || msg.includes('password') || msg.includes('grant')) {
         return { success: false, error: 'Password salah.' };
       }
       if (msg.includes('email not confirmed')) {
-        return { success: false, error: 'Akun sedang menunggu konfirmasi. Silakan hubungi admin.' };
+        return { success: false, error: 'Email belum diverifikasi di Supabase. Nonaktifkan "Confirm email" di Dashboard Supabase Auth -> Providers -> Email.' };
       }
       return { success: false, error: 'Gagal login.' };
     }

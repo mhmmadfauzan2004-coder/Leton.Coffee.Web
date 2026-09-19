@@ -205,14 +205,14 @@ BEGIN
     RETURN TRIM(v_email);
   END IF;
 
-  -- 2. Fallback jika data lama belum memiliki email_internal: generate dari nomor_hp
+  -- 2. Fallback jika data lama belum memiliki email_internal: generate dari nomor_hp (tanpa underscore)
   SELECT nomor_hp INTO v_phone
   FROM public.profiles 
   WHERE LOWER(TRIM(nama_lengkap)) = LOWER(TRIM(p_nama)) 
   LIMIT 1;
 
   IF v_phone IS NOT NULL AND TRIM(v_phone) <> '' THEN
-    RETURN 'cust_' || regexp_replace(v_phone, '[^0-9]', '', 'g') || '@letoncoffee.com';
+    RETURN 'cust' || regexp_replace(v_phone, '[^0-9]', '', 'g') || '@letoncoffee.com';
   END IF;
 
   RETURN NULL;
@@ -221,4 +221,29 @@ $$;
 
 REVOKE ALL ON FUNCTION public.get_customer_email_by_name(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_customer_email_by_name(TEXT) TO anon, authenticated;
+
+-- ==============================================================================
+-- 6. AUTO CONFIRM EMAIL TRIGGER FOR INTERNAL CUSTOMER ACCOUNTS
+-- Mencegah kendala "Email not confirmed" pada Supabase Auth tanpa perlu verifikasi email manual
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.auto_confirm_customer_internal_email()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (NEW.email LIKE 'cust%@letoncoffee.com') AND NEW.email_confirmed_at IS NULL THEN
+    NEW.email_confirmed_at := NOW();
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trg_auto_confirm_customer_internal_email ON auth.users;
+CREATE TRIGGER trg_auto_confirm_customer_internal_email
+BEFORE INSERT OR UPDATE ON auth.users
+FOR EACH ROW
+EXECUTE FUNCTION public.auto_confirm_customer_internal_email();
+
+-- Update user lama yang berstatus unconfirmed
+UPDATE auth.users
+SET email_confirmed_at = NOW()
+WHERE email LIKE 'cust%@letoncoffee.com' AND email_confirmed_at IS NULL;
 

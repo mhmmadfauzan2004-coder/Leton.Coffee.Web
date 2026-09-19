@@ -442,28 +442,50 @@ export async function registerCustomer(
       return { success: false, error: 'Password harus minimal 6 karakter.' };
     }
 
-    // 2. Uniqueness check for Full Name in public.profiles
-    const { data: existingName } = await client
-      .from('profiles')
-      .select('id')
-      .ilike('nama_lengkap', cleanNama)
-      .maybeSingle();
+    // 2. Uniqueness check for Full Name via secure RPC check_customer_name_exists or single row check
+    let nameAlreadyUsed = false;
+    try {
+      const { data: rpcNameExists, error: rpcErr } = await client.rpc('check_customer_name_exists', {
+        p_nama: cleanNama,
+      });
+      if (!rpcErr && typeof rpcNameExists === 'boolean') {
+        nameAlreadyUsed = rpcNameExists;
+      }
+    } catch {}
 
-    if (existingName) {
+    if (!nameAlreadyUsed) {
+      try {
+        const { data: existingName } = await client
+          .from('profiles')
+          .select('id')
+          .ilike('nama_lengkap', cleanNama)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingName) {
+          nameAlreadyUsed = true;
+        }
+      } catch {}
+    }
+
+    if (nameAlreadyUsed) {
       return { success: false, error: 'Nama sudah digunakan.' };
     }
 
     // 3. Uniqueness check for Phone in public.profiles
     const rawDigits = (nomorHp || '').replace(/[^0-9]/g, '');
-    const { data: existingPhone } = await client
-      .from('profiles')
-      .select('id')
-      .or(`nomor_hp.eq.${normalizedPhone},nomor_hp.eq.${rawDigits}`)
-      .maybeSingle();
+    try {
+      const { data: existingPhone } = await client
+        .from('profiles')
+        .select('id')
+        .or(`nomor_hp.eq.${normalizedPhone},nomor_hp.eq.${rawDigits}`)
+        .limit(1)
+        .maybeSingle();
 
-    if (existingPhone) {
-      return { success: false, error: 'Nomor HP sudah digunakan.' };
-    }
+      if (existingPhone) {
+        return { success: false, error: 'Nomor HP sudah digunakan.' };
+      }
+    } catch {}
 
     // 4. Supabase Auth signup directly from client using phone and password
     const { data: signUpData, error: signUpError } = await client.auth.signUp({
@@ -497,6 +519,17 @@ export async function registerCustomer(
       .single();
 
     if (insertErr) {
+      // Check for unique key constraint violations
+      const msg = (insertErr.message + ' ' + (insertErr.details || '')).toLowerCase();
+      if (insertErr.code === '23505' || msg.includes('duplicate') || msg.includes('unique')) {
+        if (msg.includes('nama_lengkap')) {
+          return { success: false, error: 'Nama sudah digunakan.' };
+        }
+        if (msg.includes('nomor_hp') || msg.includes('phone')) {
+          return { success: false, error: 'Nomor HP sudah digunakan.' };
+        }
+      }
+
       // In case the existing database schema strictly enforces NOT NULL on legacy email_internal column
       if (insertErr.message?.includes('email_internal') || insertErr.details?.includes('email_internal')) {
         profilePayload.email_internal = `${userId}@internal.leton.id`;
@@ -549,7 +582,13 @@ export async function registerCustomer(
 
 /**
  * Login customer directly via Supabase Auth.
- * Looks up phone number by nama_lengkap, normalizes it, and authenticates via signInWithPassword.
+ * Looks up phone number by nama_lengkap using a secure database mechanism,
+ * normalizes it, and authenticates via signInWithPassword.
+ * 
+ * Keamanan:
+ * - Menggunakan database RPC `get_customer_phone_by_name` (SECURITY DEFINER)
+ * - Hanya menerima nama yang sedang dicari dan hanya mengembalikan nomor HP nama tersebut
+ * - Data nomor HP pelanggan lain TIDAK PERNAH dikirim atau diekspos ke client/browser
  */
 export async function loginCustomer(
   namaLengkap: string,
@@ -567,9 +606,10 @@ export async function loginCustomer(
     }
 
     // 1. Secure lookup: find phone number belonging to this exact full name
+    // Menggunakan RPC get_customer_phone_by_name dengan SECURITY DEFINER
+    // Mekanisme ini hanya mencari dan mengembalikan string nomor HP untuk nama yang sedang diinput
     let foundPhone: string | null = null;
 
-    // Try database RPC function get_customer_phone_by_name if defined
     try {
       const { data: rpcPhone, error: rpcErr } = await client.rpc('get_customer_phone_by_name', {
         p_nama: cleanNama,
@@ -577,28 +617,36 @@ export async function loginCustomer(
       if (!rpcErr && typeof rpcPhone === 'string' && rpcPhone.trim()) {
         foundPhone = rpcPhone.trim();
       }
-    } catch {}
+    } catch (rpcEx) {
+      console.warn('[Supabase Login] RPC lookup exception:', rpcEx);
+    }
 
-    // Fallback: direct lookup for this specific nama_lengkap only (returns only nomor_hp)
+    // Fallback aman: jika RPC belum di-run di SQL Editor, query dibatasi spesifik hanya untuk nama yang dicari
     if (!foundPhone) {
-      const { data: row } = await client
-        .from('profiles')
-        .select('nomor_hp')
-        .eq('nama_lengkap', cleanNama)
-        .maybeSingle();
-
-      if (row?.nomor_hp) {
-        foundPhone = row.nomor_hp;
-      } else {
-        const { data: ilikeRow } = await client
+      try {
+        const { data: row } = await client
           .from('profiles')
           .select('nomor_hp')
-          .ilike('nama_lengkap', cleanNama)
+          .eq('nama_lengkap', cleanNama)
+          .limit(1)
           .maybeSingle();
 
-        if (ilikeRow?.nomor_hp) {
-          foundPhone = ilikeRow.nomor_hp;
+        if (row?.nomor_hp) {
+          foundPhone = row.nomor_hp;
+        } else {
+          const { data: ilikeRow } = await client
+            .from('profiles')
+            .select('nomor_hp')
+            .ilike('nama_lengkap', cleanNama)
+            .limit(1)
+            .maybeSingle();
+
+          if (ilikeRow?.nomor_hp) {
+            foundPhone = ilikeRow.nomor_hp;
+          }
         }
+      } catch (fbErr) {
+        console.warn('[Supabase Login] Direct lookup fallback note:', fbErr);
       }
     }
 

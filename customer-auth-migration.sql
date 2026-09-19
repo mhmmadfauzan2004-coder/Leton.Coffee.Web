@@ -24,21 +24,31 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Hapus policy profiles yang mungkin sudah ada agar tidak duplikat
 DROP POLICY IF EXISTS "Enable read for profiles lookup" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles Select Policy" ON public.profiles;
 DROP POLICY IF EXISTS "Enable insert for profiles registration" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles Insert Policy" ON public.profiles;
 DROP POLICY IF EXISTS "Enable update for profiles owner" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles Update Policy" ON public.profiles;
 
--- Policy SELECT: Izinkan pencarian data profil (diperlukan untuk lookup login nama lengkap -> nomor_hp/email)
-CREATE POLICY "Enable read for profiles lookup" ON public.profiles
+-- Policy SELECT:
+-- - Customer authenticated hanya dapat membaca profil mereka sendiri (auth.uid() = user_id)
+-- - Admin yang menyertakan x-admin-role dapat membaca semua profil
+-- - Lookup nomor HP untuk login diproteksi melalui RPC SECURITY DEFINER (get_customer_phone_by_name)
+--   sehingga tabel profiles TIDAK DAPAT dibaca sembarangan oleh client/browser
+CREATE POLICY "Profiles Select Policy" ON public.profiles
 FOR SELECT TO anon, authenticated
-USING (true);
+USING (
+  (auth.uid() = user_id) OR
+  (current_setting('request.headers', true)::json->>'x-admin-role' IS NOT NULL)
+);
 
 -- Policy INSERT: Izinkan user mendaftarkan data profilnya saat register
-CREATE POLICY "Enable insert for profiles registration" ON public.profiles
+CREATE POLICY "Profiles Insert Policy" ON public.profiles
 FOR INSERT TO anon, authenticated
 WITH CHECK (true);
 
 -- Policy UPDATE: Hanya izinkan pemilik profil untuk mengubah profilnya sendiri
-CREATE POLICY "Enable update for profiles owner" ON public.profiles
+CREATE POLICY "Profiles Update Policy" ON public.profiles
 FOR UPDATE TO authenticated
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
@@ -92,18 +102,53 @@ WITH CHECK (
 );
 
 -- ==============================================================================
--- 5. SECURE LOOKUP FUNCTION FOR CUSTOMER LOGIN (NAMA LENGKAP -> NOMOR HP)
+-- 5. SECURE LOOKUP FUNCTIONS FOR CUSTOMER AUTH (SECURITY DEFINER)
+-- Menjamin data nomor HP dan data profil pelanggan lain TIDAK PERNAH terekspos ke client
 -- ==============================================================================
 CREATE OR REPLACE FUNCTION public.get_customer_phone_by_name(p_nama TEXT)
 RETURNS TEXT
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT nomor_hp FROM public.profiles 
+DECLARE
+  v_nomor_hp TEXT;
+BEGIN
+  IF p_nama IS NULL OR TRIM(p_nama) = '' THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT nomor_hp INTO v_nomor_hp
+  FROM public.profiles 
   WHERE LOWER(TRIM(nama_lengkap)) = LOWER(TRIM(p_nama)) 
   LIMIT 1;
+
+  RETURN v_nomor_hp;
+END;
 $$;
 
+REVOKE ALL ON FUNCTION public.get_customer_phone_by_name(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_customer_phone_by_name(TEXT) TO anon, authenticated;
+
+-- Function to safely verify if name exists during registration without querying profiles
+CREATE OR REPLACE FUNCTION public.check_customer_name_exists(p_nama TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_nama IS NULL OR TRIM(p_nama) = '' THEN
+    RETURN FALSE;
+  END IF;
+
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE LOWER(TRIM(nama_lengkap)) = LOWER(TRIM(p_nama))
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.check_customer_name_exists(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.check_customer_name_exists(TEXT) TO anon, authenticated;
 

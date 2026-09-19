@@ -62,10 +62,10 @@ export default function CustomerAuthForm({ onAuthSuccess }: CustomerAuthFormProp
     try {
       const res = await loginCustomer(cleanInput, loginPassword);
       if (res.success && res.profile) {
-        setSuccessMsg('Masuk berhasil! Menyiapkan pesanan Anda...');
+        setSuccessMsg('Masuk berhasil! Mengalihkan ke pemilihan outlet...');
         setTimeout(() => {
           onAuthSuccess(res.profile!);
-        }, 600);
+        }, 350);
       } else {
         setErrorMsg(res.error || 'Nama Lengkap atau Password salah.');
       }
@@ -134,10 +134,10 @@ export default function CustomerAuthForm({ onAuthSuccess }: CustomerAuthFormProp
     try {
       const res = await registerCustomer(cleanNama, cleanHp, tanggalLahir, regPassword);
       if (res.success && res.profile) {
-        setSuccessMsg('Pendaftaran berhasil! Selamat datang sebagai Member Leton.');
+        setSuccessMsg('Pendaftaran berhasil! Mengalihkan ke pemilihan outlet...');
         setTimeout(() => {
           onAuthSuccess(res.profile!);
-        }, 700);
+        }, 350);
       } else {
         setErrorMsg(res.error || 'Pendaftaran gagal. Silakan periksa kembali data Anda.');
       }

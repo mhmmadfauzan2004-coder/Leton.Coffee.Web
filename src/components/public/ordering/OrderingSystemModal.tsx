@@ -88,6 +88,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
           }
         } catch (err) {
           console.warn('Error syncing customer profile:', err);
+          setCustomerProfile(null);
           setCurrentStep('profile');
         } finally {
           setCheckingAuth(false);
@@ -143,13 +144,6 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
       localStorage.setItem('leton_selected_outlet', JSON.stringify(selectedOutlet));
     }
   }, [selectedOutlet]);
-
-  // Initialize step based on outlet
-  useEffect(() => {
-    if (selectedOutlet && currentStep === 'outlet' && !checkingAuth && customerProfile) {
-      setCurrentStep('menu');
-    }
-  }, [selectedOutlet, currentStep, checkingAuth, customerProfile]);
 
   // Enforce auth requirement: if not logged in, must be on profile (auth) step
   useEffect(() => {
@@ -371,15 +365,21 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
       {/* Universal Ordering Header */}
       <header className="sticky top-0 z-30 bg-[#070b12]/95 border-b border-slate-800 backdrop-blur-md px-4 sm:px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {currentStep !== 'outlet' && currentStep !== 'confirmation' && (currentStep !== 'profile' || customerProfile) && (
+          {currentStep !== 'confirmation' && (
             <button
               onClick={() => {
                 if (currentStep === 'profile') {
-                  setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                  if (customerProfile) {
+                    setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                  } else {
+                    onClose();
+                  }
                 } else if (currentStep === 'checkout') {
                   setCurrentStep('menu');
                 } else if (currentStep === 'menu') {
                   setCurrentStep('outlet');
+                } else if (currentStep === 'outlet') {
+                  onClose();
                 }
               }}
               className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
@@ -409,7 +409,10 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
           {/* Member Profile Access Button */}
           <button
             onClick={() => {
-              if (!customerProfile) return; // Cannot toggle away if not logged in
+              if (!customerProfile) {
+                setCurrentStep('profile');
+                return;
+              }
               if (currentStep === 'profile') {
                 setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
               } else {
@@ -458,15 +461,16 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
       </header>
 
       {/* Main Step Body */}
-      <main className="flex-1 w-full bg-[#F8FBFF]">
+      <main className="flex-1 w-full bg-[#070b12] text-slate-100 min-h-[calc(100vh-65px)]">
         {checkingAuth ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
             <div className="w-10 h-10 border-4 border-[#00E5FF] border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-500 font-semibold text-xs tracking-wider uppercase">Memuat Sesi Member...</p>
+            <p className="text-slate-400 font-semibold text-xs tracking-wider uppercase font-mono">Memuat Sesi Member...</p>
           </div>
         ) : (
           <>
-            {currentStep === 'outlet' && (
+            {/* Step 1: Pilih Outlet (also default fallback if no outlet selected) */}
+            {(currentStep === 'outlet' || (!selectedOutlet && currentStep !== 'profile' && currentStep !== 'confirmation')) && (
               <OutletSelector
                 onSelectOutlet={(outlet) => {
                   setSelectedOutlet(outlet);
@@ -476,6 +480,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
               />
             )}
 
+            {/* Step 2: Menu */}
             {currentStep === 'menu' && selectedOutlet && (
               <OrderMenu
                 outlet={selectedOutlet}
@@ -489,6 +494,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
               />
             )}
 
+            {/* Step 3: Checkout */}
             {currentStep === 'checkout' && selectedOutlet && (
               <OrderCheckout
                 outlet={selectedOutlet}
@@ -501,6 +507,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
               />
             )}
 
+            {/* Step: Profile / Auth */}
             {currentStep === 'profile' && (
               <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
                 {customerProfile ? (
@@ -513,6 +520,8 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                         setCurrentStep('profile');
                       } catch (err) {
                         console.warn('Logout error:', err);
+                        setCustomerProfile(null);
+                        setCurrentStep('profile');
                       }
                     }}
                     onProfileUpdate={(updated) => {
@@ -524,7 +533,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                     <CustomerAuthForm
                       onAuthSuccess={(profile) => {
                         setCustomerProfile(profile);
-                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                        setCurrentStep('outlet');
                       }}
                     />
                   </div>
@@ -532,10 +541,11 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
               </div>
             )}
 
-            {currentStep === 'confirmation' && completedOrder && selectedOutlet && (
+            {/* Step: Confirmation */}
+            {currentStep === 'confirmation' && completedOrder && (
               <OrderConfirmation
                 order={completedOrder}
-                outlet={selectedOutlet}
+                outlet={selectedOutlet || ({ id: completedOrder.outletId, name: completedOrder.outletName || 'Leton Coffee' } as any)}
                 onOrderAgain={handleOrderAgain}
                 onBackToHome={onClose}
               />

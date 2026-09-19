@@ -364,7 +364,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
       {/* Universal Ordering Header */}
       <header className="sticky top-0 z-30 bg-[#070b12]/95 border-b border-slate-800 backdrop-blur-md px-4 sm:px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {currentStep !== 'outlet' && currentStep !== 'confirmation' && (
+          {currentStep !== 'outlet' && currentStep !== 'confirmation' && (currentStep !== 'profile' || customerProfile) && (
             <button
               onClick={() => {
                 if (currentStep === 'profile') {
@@ -402,6 +402,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
           {/* Member Profile Access Button */}
           <button
             onClick={() => {
+              if (!customerProfile) return; // Cannot toggle away if not logged in
               if (currentStep === 'profile') {
                 setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
               } else {
@@ -520,7 +521,8 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                         setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
                       }}
                       onCancel={() => {
-                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                        // Cancelling when not logged in must close the ordering flow entirely
+                        onClose();
                       }}
                     />
                   </div>

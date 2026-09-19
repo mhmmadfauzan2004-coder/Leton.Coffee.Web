@@ -30,12 +30,15 @@ import {
   XCircle,
   X,
   FileCheck,
+  ClipboardList,
+  Printer,
   ExternalLink,
   ShieldCheck,
   Building2,
   Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { KitchenSlipModal } from './KitchenSlipModal';
 
 export const OrderManager: React.FC = () => {
   const { auth, showToast } = useContent();
@@ -61,6 +64,10 @@ export const OrderManager: React.FC = () => {
   const [rejectingOrder, setRejectingOrder] = useState<CustomerOrder | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState<string>('');
   const [isSubmittingReject, setIsSubmittingReject] = useState<boolean>(false);
+
+  // Kitchen Slip / Checker modal states
+  const [selectedOrderForSlip, setSelectedOrderForSlip] = useState<CustomerOrder | null>(null);
+  const [isSlipModalOpen, setIsSlipModalOpen] = useState<boolean>(false);
 
   // Play synthetic chime when new order arrives
   const playOrderChime = () => {
@@ -551,9 +558,31 @@ export const OrderManager: React.FC = () => {
                 {/* Header Row */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
                   <div className="flex flex-wrap items-center gap-2.5">
-                    <span className="font-mono font-black text-lg sm:text-xl text-[#00E5FF] tracking-wider">
-                      {order.orderNumber}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedOrderForSlip(order);
+                        setIsSlipModalOpen(true);
+                      }}
+                      className="font-mono font-black text-lg sm:text-xl text-[#00E5FF] hover:text-cyan-300 tracking-wider flex items-center gap-1.5 transition-all cursor-pointer group text-left focus:outline-none bg-transparent border-0 p-0"
+                      title="Klik untuk membuka Slip Dapur / Barista"
+                    >
+                      <span>{order.orderNumber}</span>
+                      <ClipboardList className="w-4 h-4 text-[#00E5FF]/70 group-hover:text-[#00E5FF] transition-all group-hover:scale-110" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedOrderForSlip(order);
+                        setIsSlipModalOpen(true);
+                      }}
+                      className="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold bg-[#00E5FF]/10 hover:bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/30 hover:border-[#00E5FF]/60 flex items-center gap-1 transition-all cursor-pointer"
+                      title="Cetak atau Lihat Slip Dapur"
+                    >
+                      <Printer className="w-3 h-3" />
+                      <span>SLIP DAPUR</span>
+                    </button>
 
                     {/* Order Status Badge */}
                     <span
@@ -1173,6 +1202,16 @@ export const OrderManager: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Kitchen / Bar Slip Modal */}
+      <KitchenSlipModal
+        isOpen={isSlipModalOpen}
+        onClose={() => {
+          setIsSlipModalOpen(false);
+          setSelectedOrderForSlip(null);
+        }}
+        order={selectedOrderForSlip}
+      />
     </div>
   );
 };

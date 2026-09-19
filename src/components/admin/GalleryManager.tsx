@@ -23,6 +23,7 @@ interface GalleryManagerProps {
   onChange: (updatedImages: string[]) => void;
   description?: string;
   maxImages?: number;
+  filePrefix?: string;
 }
 
 export const GalleryManager: React.FC<GalleryManagerProps> = ({
@@ -31,6 +32,7 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({
   onChange,
   description = 'Kelola daftar foto gallery horizontal. Anda dapat mengunggah foto baru, mengatur urutan posisi, atau menghapus foto.',
   maxImages = 12,
+  filePrefix,
 }) => {
   const { uploadImage, showToast } = useContent();
   const [isUploading, setIsUploading] = useState(false);
@@ -51,7 +53,8 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({
     try {
       let finalUrl = '';
       // 1. Direct upload to server storage / Supabase
-      const serverUrl = await uploadImage(fileToUpload);
+      const prefix = filePrefix || (label ? label.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30) : 'gallery');
+      const serverUrl = await uploadImage(fileToUpload, prefix);
       if (serverUrl) {
         finalUrl = serverUrl;
       } else {

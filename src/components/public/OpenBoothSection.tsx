@@ -4,134 +4,139 @@ import { resolveMediaUrl } from '../../utils/api';
 import { createWhatsAppLink } from '../../utils/formatters';
 import { OpenBoothCardsGallery } from './OpenBoothCardsGallery';
 import { motion } from 'motion/react';
-import { Store, MessageCircle } from 'lucide-react';
+import { Store, MessageCircle, Sparkles, CheckCircle2, Calendar, Coffee, Award } from 'lucide-react';
 
 export const OpenBoothSection: React.FC = () => {
   const { data } = useContent();
   const { mobileService, contactSettings } = data;
 
-  const bgPhoto = resolveMediaUrl(
+  const photo = resolveMediaUrl(
     mobileService.openBoothBgImage || mobileService.bgImage || mobileService.truckImage
   );
-  const overlayPercent =
-    typeof mobileService.openBoothBgOverlay === 'number'
-      ? mobileService.openBoothBgOverlay
-      : 45;
-  const overlayOpacity = Math.max(0, Math.min(100, overlayPercent)) / 100;
 
   const openBoothDesc =
     mobileService.openBoothDescription ||
-    'Leton Open Booth adalah coffee booth mobile dari Leton Coffee yang hadir di area publik dan lokasi tertentu untuk melayani customer secara langsung.';
+    'Leton Open Booth adalah layanan pop-up coffee bar dari Leton Coffee yang siap hadir di berbagai acara spesial, pameran publik, bazaar, pernikahan, dan corporate gathering di seluruh Kota Dumai.';
 
   const whatsappNumber = contactSettings?.whatsapp || '082168936647';
   const eventWaLink = createWhatsAppLink(
     whatsappNumber,
-    'Halo Leton Coffee, saya ingin BOOK FOR EVENT. Bisa minta informasi lebih lanjut?'
+    'Halo Leton Coffee, saya tertarik untuk BOOK FOR EVENT / OPEN BOOTH. Bisa minta informasi paket dan ketersediaan tanggal?'
   );
 
   return (
     <section
       id="leton-open-booth"
-      className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden py-28 sm:py-36 px-4 sm:px-6 lg:px-8 bg-[#070b12]"
+      className="relative w-full overflow-hidden py-20 sm:py-28 px-4 sm:px-6 lg:px-8 bg-[#F0F7FF] border-t border-[#E0F2FE]"
     >
-      {/* Background Image Layer */}
-      {bgPhoto && (
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-300 pointer-events-none"
-          style={{ backgroundImage: `url("${bgPhoto}")` }}
-        />
-      )}
+      {/* Ambient background glows */}
+      <div className="absolute top-1/3 -right-20 w-96 h-96 rounded-full bg-[#E0F2FE]/60 blur-3xl pointer-events-none" />
+      <div className="absolute bottom-10 -left-20 w-96 h-96 rounded-full bg-[#BAE6FD]/40 blur-3xl pointer-events-none" />
 
-      {/* Dynamic CSS Dark Overlay Layer (Controlled from Admin 0% - 100%) */}
-      <div
-        className="absolute inset-0 bg-black pointer-events-none transition-opacity duration-300"
-        style={{ opacity: overlayOpacity }}
-      />
+      <div className="max-w-7xl mx-auto w-full relative z-10">
+        {/* Main Split Showcase Card */}
+        <div className="bg-white rounded-3xl border border-[#E0F2FE] shadow-xl overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-0 items-stretch">
+          {/* Details Column (7 cols) */}
+          <div className="lg:col-span-7 p-6 sm:p-10 lg:p-12 flex flex-col justify-between order-2 lg:order-1">
+            <div>
+              {/* Badge */}
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#F0F7FF] text-[#0284C7] border border-[#E0F2FE] text-xs font-mono font-bold uppercase tracking-wider mb-4">
+                <Store className="w-3.5 h-3.5 text-[#0284C7]" />
+                <span>05 — {mobileService.openBoothSubtitle || 'POP-UP & PUBLIC SPACE'}</span>
+              </div>
 
-      {/* Background Subtle Gradient Overlay */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#070b12]/90 via-transparent to-[#070b12]/95 pointer-events-none" />
+              {/* Title */}
+              <h2 className="font-display font-black text-2xl sm:text-4xl lg:text-5xl text-[#172033] uppercase tracking-tight leading-tight">
+                {mobileService.openBoothTitle || 'LETON OPEN BOOTH'}
+              </h2>
 
-      {/* Main Content Container */}
-      <div className="relative z-10 max-w-6xl mx-auto w-full text-center flex flex-col items-center">
-        {/* Header Badge */}
-        <motion.div
-          initial={{ opacity: 0, y: -15 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#FDFBF7]/90 backdrop-blur-md border border-[#2563EB]/40 text-[#2563EB] text-xs sm:text-sm font-mono tracking-widest uppercase mb-4 shadow-lg shadow-black/40"
-        >
-          <Store className="w-4 h-4 text-[#2563EB]" />
-          <span className="font-bold">05 — {mobileService.openBoothSubtitle || 'POP-UP & PUBLIC SPACE'}</span>
-        </motion.div>
+              {/* Subtitle / Tagline */}
+              <p className="mt-2 text-sm sm:text-base font-bold text-[#0284C7] uppercase tracking-wide">
+                LAYANAN COFFEE BAR UNTUK EVENT &amp; PUBLIC SPACE
+              </p>
 
-        {/* Title */}
-        <motion.h2
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.1 }}
-          className="font-display font-black text-4xl sm:text-6xl md:text-7xl text-white tracking-tight uppercase leading-tight drop-shadow-lg"
-        >
-          {mobileService.openBoothTitle || 'LETON OPEN BOOTH'}
-        </motion.h2>
+              {/* Description */}
+              <p className="mt-4 text-sm sm:text-base text-[#64748B] leading-relaxed">
+                {openBoothDesc}
+              </p>
 
-        {/* Subtitle */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="mt-3 text-sm sm:text-base md:text-lg text-[#60A5FA] font-semibold tracking-widest uppercase drop-shadow-md font-mono"
-        >
-          HADIR DI AREA PUBLIK
-        </motion.p>
+              {/* Service Highlights */}
+              <div className="mt-6 pt-5 border-t border-[#E0F2FE] grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-2xl bg-[#F8FBFF] border border-[#E0F2FE] flex flex-col gap-1.5">
+                  <div className="w-7 h-7 rounded-lg bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center">
+                    <Coffee className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-bold text-[#172033] mt-1">Full Barista &amp; Mesin</span>
+                  <span className="text-[11px] text-[#64748B] leading-tight">Espresso bar lengkap dengan racikan barista terlatih.</span>
+                </div>
 
-        {/* Concept Description */}
-        <motion.p
-          initial={{ opacity: 0, y: 15 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.3 }}
-          className="mt-6 text-base sm:text-lg md:text-xl text-slate-100 leading-relaxed max-w-2xl drop-shadow-md font-normal"
-        >
-          {openBoothDesc}
-        </motion.p>
+                <div className="p-3.5 rounded-2xl bg-[#F8FBFF] border border-[#E0F2FE] flex flex-col gap-1.5">
+                  <div className="w-7 h-7 rounded-lg bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center">
+                    <Award className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-bold text-[#172033] mt-1">Custom Menu Event</span>
+                  <span className="text-[11px] text-[#64748B] leading-tight">Signature coffee, matcha, tea, hingga mocktail segar.</span>
+                </div>
 
-        {/* BOOK FOR EVENT Button (Replaces location list box) */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="mt-8 mb-4"
-        >
-          <a
-            href={eventWaLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            id="book-for-event-btn"
-            className="inline-flex items-center gap-3 px-8 py-4 rounded-full bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-display font-bold text-sm sm:text-base tracking-wider uppercase shadow-xl shadow-[#2563EB]/30 hover:shadow-2xl hover:shadow-[#2563EB]/50 hover:scale-105 active:scale-[0.98] transition-all cursor-pointer border border-[#60A5FA]/30"
-          >
-            <MessageCircle className="w-5 h-5 text-white" />
-            <span>BOOK FOR EVENT</span>
-          </a>
-        </motion.div>
+                <div className="p-3.5 rounded-2xl bg-[#F8FBFF] border border-[#E0F2FE] flex flex-col gap-1.5">
+                  <div className="w-7 h-7 rounded-lg bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-bold text-[#172033] mt-1">Indoor &amp; Outdoor</span>
+                  <span className="text-[11px] text-[#64748B] leading-tight">Setup fleksibel untuk wedding, bazaar, kantor &amp; festival.</span>
+                </div>
+              </div>
+            </div>
 
-        {/* Horizontal Swipe Cards Photo Gallery */}
+            {/* Actions */}
+            <div className="mt-8 pt-6 border-t border-[#E0F2FE] flex flex-wrap items-center gap-3">
+              <a
+                href={eventWaLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                id="openbooth-whatsapp-btn"
+                className="px-7 py-3.5 rounded-xl bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold text-xs sm:text-sm tracking-wide uppercase flex items-center gap-2.5 shadow-[0_4px_14px_rgba(2,132,199,0.25)] transition-all cursor-pointer"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>BOOK FOR EVENT / KONSULTASI BOOTH</span>
+              </a>
+            </div>
+          </div>
+
+          {/* Visual Column (5 cols) */}
+          <div className="lg:col-span-5 relative min-h-[300px] sm:min-h-[400px] lg:min-h-full bg-[#E0F2FE] order-1 lg:order-2">
+            {photo ? (
+              <img
+                src={photo}
+                alt={mobileService.openBoothTitle || 'LETON OPEN BOOTH'}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center text-[#0284C7] p-8 text-center">
+                <Store className="w-16 h-16 opacity-40 mb-2" />
+                <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#64748B]">
+                  Open Booth Experience
+                </span>
+              </div>
+            )}
+
+            {/* Booking Available Badge */}
+            <div className="absolute top-4 left-4">
+              <span className="px-3.5 py-1.5 rounded-full bg-white/95 backdrop-blur-md text-[#0284C7] text-xs font-bold font-mono uppercase tracking-wider shadow-sm flex items-center gap-1.5 border border-[#E0F2FE]">
+                <Calendar className="w-3.5 h-3.5 text-[#0284C7]" />
+                <span>Booking Event Tersedia</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Horizontal Photo Slider / Carousel for LETON OPEN BOOTH */}
         {mobileService.galleryImages && mobileService.galleryImages.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6, delay: 0.5 }}
-            className="w-full"
-          >
-            <OpenBoothCardsGallery
-              images={mobileService.galleryImages}
-              sectionLabel="LETON OPEN BOOTH"
-            />
-          </motion.div>
+          <OpenBoothCardsGallery
+            images={mobileService.galleryImages}
+            sectionLabel="LETON OPEN BOOTH"
+          />
         )}
       </div>
     </section>

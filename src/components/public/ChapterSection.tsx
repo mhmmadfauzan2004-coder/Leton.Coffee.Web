@@ -3,6 +3,7 @@ import { BranchItem } from '../../types';
 import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
+import { LetGoCardsGallery } from './LetGoCardsGallery';
 import { motion } from 'motion/react';
 import { MapPin, Clock, MessageCircle, ExternalLink, Navigation, Store } from 'lucide-react';
 
@@ -11,7 +12,7 @@ interface ChapterSectionProps {
   reversed?: boolean;
 }
 
-export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
+export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch, reversed = false }) => {
   const { data } = useContent();
   const { contactSettings } = data;
 
@@ -31,7 +32,11 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
         {/* Card Layout */}
         <div className="bg-white rounded-3xl border border-[#E0F2FE] shadow-xl overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-0 items-stretch">
           {/* Image Column (5 cols) */}
-          <div className="lg:col-span-5 relative min-h-[300px] sm:min-h-[400px] lg:min-h-full bg-[#E0F2FE]">
+          <div
+            className={`lg:col-span-5 relative min-h-[300px] sm:min-h-[400px] lg:min-h-full bg-[#E0F2FE] ${
+              reversed ? 'order-1 lg:order-2' : 'order-1 lg:order-1'
+            }`}
+          >
             {resolvedBg ? (
               <img
                 src={resolvedBg}
@@ -53,7 +58,11 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
           </div>
 
           {/* Details Column (7 cols) */}
-          <div className="lg:col-span-7 p-6 sm:p-10 lg:p-12 flex flex-col justify-between">
+          <div
+            className={`lg:col-span-7 p-6 sm:p-10 lg:p-12 flex flex-col justify-between ${
+              reversed ? 'order-2 lg:order-1' : 'order-2 lg:order-2'
+            }`}
+          >
             <div>
               {/* Badge */}
               <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#F0F7FF] text-[#0284C7] border border-[#E0F2FE] text-xs font-mono font-bold uppercase tracking-wider mb-4">
@@ -125,6 +134,16 @@ export const ChapterSection: React.FC<ChapterSectionProps> = ({ branch }) => {
             </div>
           </div>
         </div>
+
+        {/* Swipeable Gallery for Branch if photos are uploaded */}
+        {branch.galleryImages && branch.galleryImages.length > 0 && (
+          <div className="mt-8">
+            <LetGoCardsGallery
+              images={branch.galleryImages}
+              sectionLabel={`${branch.chapterName} (${branch.branchName})`}
+            />
+          </div>
+        )}
       </div>
     </section>
   );

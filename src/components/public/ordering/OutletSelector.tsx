@@ -24,14 +24,20 @@ export const OutletSelector: React.FC<OutletSelectorProps> = ({ onSelectOutlet }
     let dynamicAddress = outlet.address;
     let dynamicHours = outlet.hours;
 
-    if (outlet.id === 'sudirman' && data?.branches?.[0]) {
-      dynamicImage = data.branches[0].bgImage || outlet.image;
-      dynamicAddress = data.branches[0].address || outlet.address;
-      dynamicHours = data.branches[0].openingHours || outlet.hours;
-    } else if (outlet.id === 'kelakap_7' && data?.branches?.[1]) {
-      dynamicImage = data.branches[1].bgImage || outlet.image;
-      dynamicAddress = data.branches[1].address || outlet.address;
-      dynamicHours = data.branches[1].openingHours || outlet.hours;
+    if (outlet.id === 'sudirman') {
+      const b5 = data?.branches?.find((b) => b.id === 'chapter-5') || data?.branches?.[0];
+      if (b5) {
+        dynamicImage = b5.bgImage || outlet.image;
+        dynamicAddress = b5.address || outlet.address;
+        dynamicHours = b5.openingHours || outlet.hours;
+      }
+    } else if (outlet.id === 'kelakap_7') {
+      const b6 = data?.branches?.find((b) => b.id === 'chapter-6') || data?.branches?.[1];
+      if (b6) {
+        dynamicImage = b6.bgImage || outlet.image;
+        dynamicAddress = b6.address || outlet.address;
+        dynamicHours = b6.openingHours || outlet.hours;
+      }
     }
 
     return {

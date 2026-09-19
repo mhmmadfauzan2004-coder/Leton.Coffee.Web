@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { resolveMediaUrl } from '../../utils/api';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Maximize2, Image as ImageIcon } from 'lucide-react';
 
 interface OpenBoothCardsGalleryProps {
   images?: string[];
@@ -114,7 +114,22 @@ export const OpenBoothCardsGallery: React.FC<OpenBoothCardsGalleryProps> = ({
   }, [lightboxIndex, total]);
 
   return (
-    <div className="w-full relative mt-8 sm:mt-12 overflow-hidden">
+    <div className="w-full relative mt-8 sm:mt-12">
+      {/* Mini header for gallery */}
+      <div className="flex items-center justify-between mb-4 px-1">
+        <div className="flex items-center gap-2">
+          <ImageIcon className="w-4 h-4 text-[#0284C7]" />
+          <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#64748B]">
+            Dokumentasi &amp; Portofolio {sectionLabel}
+          </span>
+        </div>
+        {total > 1 && (
+          <span className="text-xs font-mono font-bold text-[#0284C7] bg-[#E0F2FE] px-2.5 py-0.5 rounded-full">
+            {activeIndex + 1} / {total}
+          </span>
+        )}
+      </div>
+
       {/* Horizontal Cards Row Container */}
       <div className="relative group/cards w-full">
         {/* Scrollable Track (Cards Row with Peeking on Mobile) */}
@@ -132,10 +147,10 @@ export const OpenBoothCardsGallery: React.FC<OpenBoothCardsGalleryProps> = ({
               <div
                 key={idx}
                 onClick={() => setLightboxIndex(idx)}
-                className={`w-[80%] sm:w-[50%] md:w-[38%] lg:w-[30%] shrink-0 snap-start relative aspect-[4/3] sm:aspect-[16/11] rounded-2xl sm:rounded-3xl overflow-hidden border transition-all duration-300 cursor-pointer group/card bg-slate-950/80 shadow-xl select-none ${
+                className={`w-[82%] sm:w-[50%] md:w-[38%] lg:w-[30%] shrink-0 snap-start relative aspect-[4/3] sm:aspect-[16/11] rounded-2xl sm:rounded-3xl overflow-hidden border transition-all duration-300 cursor-pointer group/card bg-white shadow-md select-none ${
                   isCurrent
-                    ? 'border-white/30 shadow-2xl shadow-black/80'
-                    : 'border-white/10 opacity-90 hover:opacity-100 hover:border-white/25'
+                    ? 'border-[#0284C7] ring-2 ring-[#0284C7]/20 shadow-xl'
+                    : 'border-[#E0F2FE] hover:border-[#BAE6FD] hover:shadow-lg'
                 }`}
               >
                 {/* Photo Element */}
@@ -148,16 +163,13 @@ export const OpenBoothCardsGallery: React.FC<OpenBoothCardsGalleryProps> = ({
                   className="w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover/card:scale-105"
                 />
 
-                {/* Subtle vignette layer at bottom */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20 pointer-events-none" />
-
                 {/* Photo Index Tag */}
-                <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-[10px] sm:text-xs font-mono font-bold text-white/90 border border-white/15">
+                <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-white/90 backdrop-blur-md text-[10px] sm:text-xs font-mono font-bold text-[#0284C7] border border-[#E0F2FE] shadow-sm">
                   #{String(idx + 1).padStart(2, '0')}
                 </div>
 
                 {/* Zoom indicator on hover */}
-                <div className="absolute top-3 right-3 p-1.5 rounded-full bg-black/60 backdrop-blur-md text-white/80 opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 pointer-events-none border border-white/10">
+                <div className="absolute top-3 right-3 p-1.5 rounded-full bg-white/90 backdrop-blur-md text-[#0284C7] opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 pointer-events-none border border-[#E0F2FE] shadow-sm">
                   <Maximize2 className="w-3.5 h-3.5" />
                 </div>
               </div>
@@ -165,24 +177,24 @@ export const OpenBoothCardsGallery: React.FC<OpenBoothCardsGalleryProps> = ({
           })}
         </div>
 
-        {/* Desktop Minimalist Subtle Scroll Arrows */}
-        {total > 3 && (
+        {/* Minimalist Navigation Buttons (Desktop & Tablet) */}
+        {total > 1 && (
           <>
             <button
               type="button"
               onClick={handlePrev}
               aria-label="Geser ke kiri"
-              className="hidden lg:flex absolute -left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/80 hover:bg-[#2563EB] border border-white/20 text-white items-center justify-center backdrop-blur-md transition-all shadow-xl cursor-pointer z-10 opacity-0 group-hover/cards:opacity-100 hover:scale-110 active:scale-95"
+              className="hidden sm:flex absolute -left-2 sm:-left-4 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#172033] items-center justify-center transition-all shadow-md cursor-pointer z-10 opacity-0 group-hover/cards:opacity-100 hover:scale-110 active:scale-95"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft className="w-5 h-5 text-[#0284C7]" />
             </button>
             <button
               type="button"
               onClick={handleNext}
               aria-label="Geser ke kanan"
-              className="hidden lg:flex absolute -right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/80 hover:bg-[#2563EB] border border-white/20 text-white items-center justify-center backdrop-blur-md transition-all shadow-xl cursor-pointer z-10 opacity-0 group-hover/cards:opacity-100 hover:scale-110 active:scale-95"
+              className="hidden sm:flex absolute -right-2 sm:-right-4 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#172033] items-center justify-center transition-all shadow-md cursor-pointer z-10 opacity-0 group-hover/cards:opacity-100 hover:scale-110 active:scale-95"
             >
-              <ChevronRight className="w-5 h-5" />
+              <ChevronRight className="w-5 h-5 text-[#0284C7]" />
             </button>
           </>
         )}
@@ -190,7 +202,7 @@ export const OpenBoothCardsGallery: React.FC<OpenBoothCardsGalleryProps> = ({
 
       {/* Minimalist Dot Position Indicators: ● ○ ○ ○ */}
       {total > 1 && (
-        <div className="mt-5 flex items-center justify-center gap-2">
+        <div className="mt-4 flex items-center justify-center gap-1.5">
           {validImages.map((_, dotIdx) => {
             const isActive = activeIndex === dotIdx;
             return (
@@ -201,8 +213,8 @@ export const OpenBoothCardsGallery: React.FC<OpenBoothCardsGalleryProps> = ({
                 aria-label={`Lihat foto ${dotIdx + 1}`}
                 className={`transition-all duration-300 rounded-full cursor-pointer ${
                   isActive
-                    ? 'w-6 h-2 bg-[#60A5FA] shadow-md shadow-[#60A5FA]/40'
-                    : 'w-2 h-2 bg-white/25 hover:bg-white/50'
+                    ? 'w-6 h-2 bg-[#0284C7] shadow-sm'
+                    : 'w-2 h-2 bg-[#CBD5E1] hover:bg-[#94A3B8]'
                 }`}
               />
             );
@@ -211,8 +223,8 @@ export const OpenBoothCardsGallery: React.FC<OpenBoothCardsGalleryProps> = ({
       )}
 
       {/* Subtle swipe guidance text on mobile */}
-      <p className="text-[11px] font-mono text-slate-300 text-center sm:hidden mt-2 drop-shadow-md">
-        ← Geser foto untuk melihat dokumentasi booth →
+      <p className="text-[11px] font-mono text-[#94A3B8] text-center sm:hidden mt-2.5">
+        ← Geser foto ke kiri / kanan →
       </p>
 
       {/* Lightbox Modal for High-Def View */}
@@ -222,63 +234,67 @@ export const OpenBoothCardsGallery: React.FC<OpenBoothCardsGalleryProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 sm:p-8"
+            className="fixed inset-0 z-50 bg-[#0F172A]/90 backdrop-blur-md flex flex-col items-center justify-center p-4 sm:p-8"
             onClick={() => setLightboxIndex(null)}
           >
             {/* Top Bar */}
             <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-20">
-              <span className="text-xs font-mono font-bold text-white/90 bg-white/10 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/10">
-                {String(lightboxIndex + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
+              <span className="text-xs font-mono font-bold text-white bg-white/10 px-3.5 py-1.5 rounded-full backdrop-blur-md border border-white/20">
+                {sectionLabel} • FOTO {lightboxIndex + 1} DARI {total}
               </span>
+
               <button
                 type="button"
-                onClick={() => setLightboxIndex(null)}
-                className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex(null);
+                }}
+                className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-colors cursor-pointer border border-white/20"
                 aria-label="Tutup"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Lightbox Image Container */}
+            {/* Lightbox Main Image */}
             <div
               className="relative max-w-5xl max-h-[80vh] w-full flex items-center justify-center"
               onClick={(e) => e.stopPropagation()}
             >
               <img
                 src={resolveMediaUrl(validImages[lightboxIndex])}
-                alt={`${sectionLabel} Full View`}
-                className="max-h-[80vh] max-w-full object-contain rounded-2xl shadow-2xl border border-white/15"
+                alt={`${sectionLabel} - Foto ${lightboxIndex + 1}`}
+                referrerPolicy="no-referrer"
+                className="max-h-[80vh] max-w-full object-contain rounded-2xl shadow-2xl border border-white/20 bg-black/40"
               />
 
-              {/* Prev Button */}
+              {/* Prev / Next in Lightbox */}
               {total > 1 && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setLightboxIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : total - 1));
-                  }}
-                  className="absolute left-2 sm:-left-12 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/70 hover:bg-[#2563EB] border border-white/20 text-white flex items-center justify-center transition-all cursor-pointer shadow-lg"
-                >
-                  <ChevronLeft className="w-6 h-6" />
-                </button>
-              )}
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : total - 1));
+                    }}
+                    aria-label="Foto Sebelumnya"
+                    className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/60 hover:bg-[#0284C7] border border-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all shadow-xl cursor-pointer hover:scale-110"
+                  >
+                    <ChevronLeft className="w-6 h-6" />
+                  </button>
 
-              {/* Next Button */}
-              {total > 1 && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setLightboxIndex((prev) =>
-                      prev !== null && prev < total - 1 ? prev + 1 : 0
-                    );
-                  }}
-                  className="absolute right-2 sm:-right-12 top-1/2 -translate-y-1/2 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/70 hover:bg-[#2563EB] border border-white/20 text-white flex items-center justify-center transition-all cursor-pointer shadow-lg"
-                >
-                  <ChevronRight className="w-6 h-6" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxIndex((prev) => (prev !== null && prev < total - 1 ? prev + 1 : 0));
+                    }}
+                    aria-label="Foto Berikutnya"
+                    className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/60 hover:bg-[#0284C7] border border-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all shadow-xl cursor-pointer hover:scale-110"
+                  >
+                    <ChevronRight className="w-6 h-6" />
+                  </button>
+                </>
               )}
             </div>
           </motion.div>
@@ -287,3 +303,4 @@ export const OpenBoothCardsGallery: React.FC<OpenBoothCardsGalleryProps> = ({
     </div>
   );
 };
+

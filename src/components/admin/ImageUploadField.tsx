@@ -20,6 +20,10 @@ interface ImageUploadFieldProps {
   onChange: (url: string) => void;
   description?: string;
   aspectRatio?: string;
+  filePrefix?: string;
+  onUploadStart?: () => void;
+  onUploadComplete?: (url: string) => void;
+  onUploadError?: (error: string) => void;
 }
 
 export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
@@ -28,10 +32,15 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   onChange,
   description,
   aspectRatio = 'free',
+  filePrefix,
+  onUploadStart,
+  onUploadComplete,
+  onUploadError,
 }) => {
   const { uploadImage, showToast } = useContent();
   const [isUploading, setIsUploading] = useState(false);
   const [tempPreview, setTempPreview] = useState<string | null>(null);
+  const [uploadErrorMsg, setUploadErrorMsg] = useState<string | null>(null);
   const [mode, setMode] = useState<'upload' | 'url'>('upload');
   const [urlInput, setUrlInput] = useState(value || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -42,19 +51,30 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
 
   const processAndUploadFile = async (fileToUpload: File, _fallbackDataUrl?: string) => {
     setIsUploading(true);
+    setUploadErrorMsg(null);
+    onUploadStart?.();
     try {
-      const prefix = label ? label.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30) : 'image';
+      const prefix = filePrefix || (label ? label.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 30) : 'image');
       // Direct upload to Supabase Storage with unique prefix
       const serverUrl = await uploadImage(fileToUpload, prefix);
       if (serverUrl) {
         onChange(serverUrl);
         setUrlInput(serverUrl);
         setTempPreview(null);
-        showToast('Foto berhasil diunggah!', 'success');
+        setUploadErrorMsg(null);
+        onUploadComplete?.(serverUrl);
+        showToast('Foto berhasil diunggah ke Supabase Storage!', 'success');
+      } else {
+        const err = 'Gagal mengupload foto ke Supabase Storage. Pastikan sesi login aktif dan bucket storage dapat diakses.';
+        setUploadErrorMsg(err);
+        onUploadError?.(err);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('File upload error:', err);
-      showToast('Gagal memproses foto. Silakan coba lagi.', 'error');
+      const errMsg = err?.message || 'Gagal memproses foto. Silakan coba lagi.';
+      setUploadErrorMsg(errMsg);
+      onUploadError?.(errMsg);
+      showToast(errMsg, 'error');
     } finally {
       setIsUploading(false);
       setCropperSource(null);
@@ -246,6 +266,11 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
                   <CropIcon className="w-3 h-3 text-[#00E5FF]" /> Auto-Crop Tool & Cloud Sync Aktif
                 </span>
               </div>
+              {uploadErrorMsg && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono">
+                  {uploadErrorMsg}
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-2">

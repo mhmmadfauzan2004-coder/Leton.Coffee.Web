@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { resolveMediaUrl } from '../../utils/api';
 import { initialLetonData } from '../../data/initialData';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Maximize2, Image as ImageIcon } from 'lucide-react';
 
 interface LetGoCardsGalleryProps {
   images?: string[];
@@ -27,6 +27,9 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const isScrollingRef = useRef(false);
+
+  // If no images at all, don't show empty block
+  if (total === 0) return null;
 
   // Scroll to a specific card index smoothly
   const scrollToCard = useCallback(
@@ -117,9 +120,24 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
   }, [lightboxIndex, total]);
 
   return (
-    <div className="w-full relative mt-10 sm:mt-14 overflow-hidden">
+    <div className="w-full relative mt-8 sm:mt-12">
+      {/* Mini header for gallery */}
+      <div className="flex items-center justify-between mb-4 px-1">
+        <div className="flex items-center gap-2">
+          <ImageIcon className="w-4 h-4 text-[#0284C7]" />
+          <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#64748B]">
+            Galeri Suasana {sectionLabel}
+          </span>
+        </div>
+        {total > 1 && (
+          <span className="text-xs font-mono font-bold text-[#0284C7] bg-[#E0F2FE] px-2.5 py-0.5 rounded-full">
+            {activeIndex + 1} / {total}
+          </span>
+        )}
+      </div>
+
       {/* Horizontal Cards Row Container */}
-      <div className="relative group/cards w-full max-w-5xl mx-auto px-2 sm:px-4">
+      <div className="relative group/cards w-full">
         {/* Scrollable Track (Cards Row with Peeking next card on Mobile) */}
         <div
           ref={scrollRef}
@@ -135,10 +153,10 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
               <div
                 key={idx}
                 onClick={() => setLightboxIndex(idx)}
-                className={`w-[82%] sm:w-[50%] md:w-[38%] lg:w-[32%] shrink-0 snap-start relative aspect-4/3 sm:aspect-16/11 rounded-2xl sm:rounded-3xl overflow-hidden border transition-all duration-300 cursor-pointer group/card bg-slate-950/85 shadow-xl select-none ${
+                className={`w-[82%] sm:w-[50%] md:w-[38%] lg:w-[32%] shrink-0 snap-start relative aspect-[4/3] sm:aspect-[16/11] rounded-2xl sm:rounded-3xl overflow-hidden border transition-all duration-300 cursor-pointer group/card bg-white shadow-md select-none ${
                   isCurrent
-                    ? 'border-[#2563EB]/80 shadow-2xl shadow-[#2563EB]/15'
-                    : 'border-white/10 opacity-85 hover:opacity-100 hover:border-white/30'
+                    ? 'border-[#0284C7] ring-2 ring-[#0284C7]/20 shadow-xl'
+                    : 'border-[#E0F2FE] hover:border-[#BAE6FD] hover:shadow-lg'
                 }`}
               >
                 {/* Photo Element */}
@@ -151,16 +169,13 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
                   className="w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover/card:scale-105"
                 />
 
-                {/* Subtle dark vignette layer */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20 pointer-events-none" />
-
                 {/* Photo Index Tag */}
-                <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-[10px] sm:text-xs font-mono font-bold text-white/90 border border-white/15">
+                <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-white/90 backdrop-blur-md text-[10px] sm:text-xs font-mono font-bold text-[#0284C7] border border-[#E0F2FE] shadow-sm">
                   #{String(idx + 1).padStart(2, '0')}
                 </div>
 
                 {/* Zoom indicator on hover */}
-                <div className="absolute top-3 right-3 p-1.5 rounded-full bg-black/60 backdrop-blur-md text-white/80 opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 pointer-events-none border border-white/10">
+                <div className="absolute top-3 right-3 p-1.5 rounded-full bg-white/90 backdrop-blur-md text-[#0284C7] opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 pointer-events-none border border-[#E0F2FE] shadow-sm">
                   <Maximize2 className="w-3.5 h-3.5" />
                 </div>
               </div>
@@ -175,17 +190,17 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
               type="button"
               onClick={handlePrev}
               aria-label="Geser ke kiri"
-              className="hidden sm:flex absolute -left-1 sm:-left-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-950/80 hover:bg-[#2563EB] border border-white/20 text-white items-center justify-center backdrop-blur-md transition-all shadow-xl cursor-pointer z-10 opacity-0 group-hover/cards:opacity-100 hover:scale-110 active:scale-95"
+              className="hidden sm:flex absolute -left-2 sm:-left-4 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#172033] items-center justify-center transition-all shadow-md cursor-pointer z-10 opacity-0 group-hover/cards:opacity-100 hover:scale-110 active:scale-95"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft className="w-5 h-5 text-[#0284C7]" />
             </button>
             <button
               type="button"
               onClick={handleNext}
               aria-label="Geser ke kanan"
-              className="hidden sm:flex absolute -right-1 sm:-right-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-950/80 hover:bg-[#2563EB] border border-white/20 text-white items-center justify-center backdrop-blur-md transition-all shadow-xl cursor-pointer z-10 opacity-0 group-hover/cards:opacity-100 hover:scale-110 active:scale-95"
+              className="hidden sm:flex absolute -right-2 sm:-right-4 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#172033] items-center justify-center transition-all shadow-md cursor-pointer z-10 opacity-0 group-hover/cards:opacity-100 hover:scale-110 active:scale-95"
             >
-              <ChevronRight className="w-5 h-5" />
+              <ChevronRight className="w-5 h-5 text-[#0284C7]" />
             </button>
           </>
         )}
@@ -193,7 +208,7 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
 
       {/* Minimalist Dot Position Indicators: ● ○ ○ ○ */}
       {total > 1 && (
-        <div className="mt-5 flex items-center justify-center gap-2">
+        <div className="mt-4 flex items-center justify-center gap-1.5">
           {displayImages.map((_, dotIdx) => {
             const isActive = activeIndex === dotIdx;
             return (
@@ -204,8 +219,8 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
                 aria-label={`Lihat foto ${dotIdx + 1}`}
                 className={`transition-all duration-300 rounded-full cursor-pointer ${
                   isActive
-                    ? 'w-6 h-2 bg-[#60A5FA] shadow-md shadow-[#60A5FA]/40'
-                    : 'w-2 h-2 bg-white/25 hover:bg-white/50'
+                    ? 'w-6 h-2 bg-[#0284C7] shadow-sm'
+                    : 'w-2 h-2 bg-[#CBD5E1] hover:bg-[#94A3B8]'
                 }`}
               />
             );
@@ -214,7 +229,7 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
       )}
 
       {/* Subtle swipe guidance text on mobile */}
-      <p className="text-[11px] font-mono text-slate-400 text-center sm:hidden mt-2.5 drop-shadow-md">
+      <p className="text-[11px] font-mono text-[#94A3B8] text-center sm:hidden mt-2.5">
         ← Geser foto ke kiri / kanan →
       </p>
 
@@ -225,12 +240,12 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 sm:p-8"
+            className="fixed inset-0 z-50 bg-[#0F172A]/90 backdrop-blur-md flex flex-col items-center justify-center p-4 sm:p-8"
             onClick={() => setLightboxIndex(null)}
           >
             {/* Top Bar */}
             <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-20">
-              <span className="text-xs font-mono font-bold text-white/90 bg-white/10 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/10">
+              <span className="text-xs font-mono font-bold text-white bg-white/10 px-3.5 py-1.5 rounded-full backdrop-blur-md border border-white/20">
                 {sectionLabel} • FOTO {lightboxIndex + 1} DARI {total}
               </span>
 
@@ -240,7 +255,7 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
                   e.stopPropagation();
                   setLightboxIndex(null);
                 }}
-                className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-colors cursor-pointer border border-white/10"
+                className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-colors cursor-pointer border border-white/20"
                 aria-label="Tutup"
               >
                 <X className="w-5 h-5" />
@@ -256,7 +271,7 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
                 src={resolveMediaUrl(displayImages[lightboxIndex])}
                 alt={`${sectionLabel} - Foto ${lightboxIndex + 1}`}
                 referrerPolicy="no-referrer"
-                className="max-h-[80vh] max-w-full object-contain rounded-2xl shadow-2xl border border-white/10"
+                className="max-h-[80vh] max-w-full object-contain rounded-2xl shadow-2xl border border-white/20 bg-black/40"
               />
 
               {/* Prev / Next in Lightbox */}
@@ -269,7 +284,7 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
                       setLightboxIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : total - 1));
                     }}
                     aria-label="Foto Sebelumnya"
-                    className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/60 hover:bg-[#2563EB] border border-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all shadow-xl cursor-pointer hover:scale-110"
+                    className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/60 hover:bg-[#0284C7] border border-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all shadow-xl cursor-pointer hover:scale-110"
                   >
                     <ChevronLeft className="w-6 h-6" />
                   </button>
@@ -281,7 +296,7 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
                       setLightboxIndex((prev) => (prev !== null && prev < total - 1 ? prev + 1 : 0));
                     }}
                     aria-label="Foto Berikutnya"
-                    className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/60 hover:bg-[#2563EB] border border-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all shadow-xl cursor-pointer hover:scale-110"
+                    className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-black/60 hover:bg-[#0284C7] border border-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all shadow-xl cursor-pointer hover:scale-110"
                   >
                     <ChevronRight className="w-6 h-6" />
                   </button>

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { BranchItem } from '../../types';
 import { ImageUploadField } from './ImageUploadField';
 import { GalleryManager } from './GalleryManager';
 import { resolveMediaUrl } from '../../utils/api';
-import { Save, Loader2, RotateCcw, Sliders, Sun, Moon, Sparkles } from 'lucide-react';
+import { deleteImageFromSupabase, isSupabaseConfigured } from '../../utils/supabase';
+import { Save, Loader2, RotateCcw, Sliders, Sun, Moon, Sparkles, CheckCircle2 } from 'lucide-react';
 
 interface ChapterEditorProps {
   branchId: string;
@@ -12,15 +13,15 @@ interface ChapterEditorProps {
 }
 
 export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title }) => {
-  const { data, saveData } = useContent();
+  const { data, saveData, showToast } = useContent();
   const currentBranch = data.branches.find((b) => b.id === branchId);
 
   const [form, setForm] = useState<BranchItem>(
     currentBranch || {
       id: branchId,
-      chapterNumber: '02',
-      chapterName: 'CHAPTER',
-      branchName: 'CABANG',
+      chapterNumber: branchId === 'chapter-6' ? '03' : '02',
+      chapterName: branchId === 'chapter-6' ? 'CHAPTER 6' : 'CHAPTER 5',
+      branchName: branchId === 'chapter-6' ? 'DUMAI RATU SIMA' : 'DUMAI SUDIRMAN',
       badge: '',
       tagline: '',
       description: '',
@@ -34,32 +35,105 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
   );
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [saveStatusMsg, setSaveStatusMsg] = useState<string | null>(null);
+  const lastBranchIdRef = useRef<string>(branchId);
 
   useEffect(() => {
     const branch = data.branches.find((b) => b.id === branchId);
     if (branch) {
-      setForm({
-        ...branch,
-        bgOverlay: typeof branch.bgOverlay === 'number' ? branch.bgOverlay : 45,
-      });
+      if (lastBranchIdRef.current !== branchId) {
+        lastBranchIdRef.current = branchId;
+        setForm({
+          ...branch,
+          bgOverlay: typeof branch.bgOverlay === 'number' ? branch.bgOverlay : 45,
+        });
+      } else {
+        setForm((prev) => ({
+          ...prev,
+          bgImage: branch.bgImage || prev.bgImage,
+        }));
+      }
     }
   }, [branchId, data.branches]);
+
+  const handleBgImageChange = async (newUrl: string) => {
+    const oldUrl = form.bgImage;
+    const updatedForm = { ...form, bgImage: newUrl, id: branchId };
+    setForm(updatedForm);
+
+    setIsSaving(true);
+    setSaveStatusMsg('Menyimpan foto baru ke database...');
+    try {
+      let found = false;
+      const updatedBranches = (data.branches || []).map((b) => {
+        if (b.id === branchId) {
+          found = true;
+          return { ...b, ...updatedForm, id: branchId };
+        }
+        return b;
+      });
+      if (!found) {
+        updatedBranches.push({ ...updatedForm, id: branchId });
+      }
+
+      const saveOk = await saveData({
+        ...data,
+        branches: updatedBranches,
+      });
+
+      if (saveOk) {
+        setSaveStatusMsg('Foto berhasil tersimpan di database!');
+        showToast(`Foto ${form.chapterName} berhasil diperbarui dan tersimpan!`, 'success');
+
+        if (oldUrl && oldUrl !== newUrl && isSupabaseConfigured()) {
+          deleteImageFromSupabase(oldUrl).catch(() => {});
+        }
+      } else {
+        setSaveStatusMsg('Gagal menyimpan foto ke database.');
+      }
+    } catch (err: any) {
+      console.error('Error saving chapter photo to DB:', err);
+      setSaveStatusMsg('Terjadi kesalahan saat menyimpan foto.');
+      showToast('Gagal menyimpan foto ke database: ' + (err?.message || 'Error'), 'error');
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setSaveStatusMsg(null), 4000);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
+    setSaveStatusMsg(null);
     try {
-      const updatedBranches = data.branches.map((b) =>
-        b.id === branchId
-          ? { ...form, bgOverlay: typeof form.bgOverlay === 'number' ? form.bgOverlay : 45 }
-          : b
-      );
-      await saveData({
+      let found = false;
+      const updatedBranches = (data.branches || []).map((b) => {
+        if (b.id === branchId) {
+          found = true;
+          return { ...form, id: branchId, bgOverlay: typeof form.bgOverlay === 'number' ? form.bgOverlay : 45 };
+        }
+        return b;
+      });
+      if (!found) {
+        updatedBranches.push({ ...form, id: branchId, bgOverlay: typeof form.bgOverlay === 'number' ? form.bgOverlay : 45 });
+      }
+
+      const success = await saveData({
         ...data,
         branches: updatedBranches,
       });
+
+      if (success) {
+        showToast(`Perubahan ${form.chapterName} berhasil disimpan!`, 'success');
+        setSaveStatusMsg('Semua data cabang tersimpan di cloud.');
+      }
+    } catch (err: any) {
+      console.error('Error saving chapter:', err);
+      showToast('Gagal menyimpan: ' + (err?.message || 'Unknown error'), 'error');
     } finally {
       setIsSaving(false);
+      setTimeout(() => setSaveStatusMsg(null), 4000);
     }
   };
 
@@ -74,6 +148,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
 
   const currentOverlay = typeof form.bgOverlay === 'number' ? form.bgOverlay : 45;
   const resolvedBgImage = resolveMediaUrl(form.bgImage);
+  const chapterPrefix = branchId === 'chapter-6' ? 'chapter_6_bg' : 'chapter_5_bg';
+  const galleryPrefix = branchId === 'chapter-6' ? 'chapter_6_gallery' : 'chapter_5_gallery';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8 max-w-4xl">
@@ -106,6 +182,13 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
           </button>
         </div>
       </div>
+
+      {saveStatusMsg && (
+        <div className="p-3.5 rounded-xl bg-cyan-950/40 border border-[#00E5FF]/30 text-cyan-300 text-xs font-mono flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-[#00E5FF] shrink-0" />
+          <span>{saveStatusMsg}</span>
+        </div>
+      )}
 
       {/* Main Chapter Identity */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -182,11 +265,15 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
       {/* Background Image Upload */}
       <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-md space-y-6">
         <ImageUploadField
-          label={`FOTO LATAR BELAKANG CHAPTER (${form.branchName || form.chapterName})`}
+          label={`FOTO UTAMA ${form.chapterName} (${form.branchName || 'CABANG'})`}
           value={form.bgImage}
-          onChange={(url) => setForm({ ...form, bgImage: url })}
+          onChange={handleBgImageChange}
+          filePrefix={chapterPrefix}
+          onUploadStart={() => setIsUploadingPhoto(true)}
+          onUploadComplete={() => setIsUploadingPhoto(false)}
+          onUploadError={() => setIsUploadingPhoto(false)}
           aspectRatio="16:9"
-          description="Foto full-screen 16:9 resolusi tinggi yang akan dijadikan latar belakang utama halaman chapter ini."
+          description={`Foto utama format 16:9 resolusi tinggi untuk latar belakang dan kartu ${form.chapterName}. Foto baru otomatis diunggah ke Supabase Storage (prefix: ${chapterPrefix}) dan disimpan ke database.`}
         />
 
         {/* Overlay / Pencahayaan Foto Slider Control */}
@@ -307,6 +394,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
         <GalleryManager
           label={`GALERI FOTO SWIPE (${form.chapterName} — ${form.branchName || 'CABANG'})`}
           images={form.galleryImages || []}
+          filePrefix={galleryPrefix}
           onChange={(updated) => setForm({ ...form, galleryImages: updated })}
           description="Foto-foto yang diunggah di sini otomatis tampil dalam format swipe gallery horizontal interaktif di halaman cabang ini."
         />

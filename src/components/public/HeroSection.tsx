@@ -2,7 +2,7 @@ import React from 'react';
 import { useContent } from '../../context/ContentContext';
 import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
-import { ShoppingBag, BookOpen, Coffee, Star, CheckCircle2, Award } from 'lucide-react';
+import { ShoppingBag, BookOpen, Coffee, Star } from 'lucide-react';
 
 interface HeroSectionProps {
   onOpenOrder?: () => void;
@@ -99,7 +99,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenOrder }) => {
             </div>
           </motion.div>
 
-          {/* Hero Visual Bento Presentation (5 cols) */}
+          {/* Hero Visual Presentation (5 cols) - Clean Pure Photo */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -107,45 +107,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ onOpenOrder }) => {
             className="lg:col-span-5 relative"
           >
             <div className="relative mx-auto w-full max-w-lg">
-              {/* Main Hero Visual Card */}
-              <div className="relative rounded-3xl bg-white p-3 border border-[#E0F2FE] shadow-xl overflow-hidden">
-                <div className="relative w-full h-[360px] sm:h-[400px] rounded-2xl overflow-hidden bg-[#F0F7FF]">
-                  <img
-                    src={resolveMediaUrl(siteSettings.heroBgImage)}
-                    alt={siteSettings.brandName}
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#172033]/85 via-[#172033]/20 to-transparent" />
-                  <div className="absolute bottom-4 left-4 right-4 text-white">
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs uppercase mb-1 font-bold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#38BDF8]" />
-                      <span>Dumai Coastal Roast</span>
-                    </div>
-                    <h3 className="text-lg font-bold">Crafted with Pure Coastal Soul</h3>
-                    <p className="text-xs text-slate-200 opacity-90">
-                      Slow bar, single origin pour-overs &amp; artisan cold brew.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Overlapping Floating Card 1: Featured Beverage Highlight */}
-              <div className="absolute -bottom-5 -left-3 sm:-left-6 bg-white p-3 rounded-2xl border border-[#E0F2FE] shadow-xl flex items-center gap-3 max-w-xs">
-                <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 bg-[#F0F7FF] border border-[#E0F2FE] flex items-center justify-center">
-                  <Coffee className="w-6 h-6 text-[#0284C7]" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] text-[#0284C7] font-bold uppercase tracking-wider">BEST SELLER #1</span>
-                  <span className="text-xs sm:text-sm text-[#172033] font-bold leading-tight">Leton Aren Signature</span>
-                  <span className="text-[11px] text-[#64748B]">Organic palm sugar &amp; sea-salt</span>
-                </div>
-              </div>
-
-              {/* Overlapping Floating Pill 2: Roasting Freshness */}
-              <div className="hidden sm:flex absolute -top-3 -right-3 bg-[#0284C7] text-white px-3.5 py-1.5 rounded-full shadow-lg items-center gap-1.5 text-xs font-bold tracking-wide">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>FRESH ROAST DAILY</span>
+              <div className="relative w-full aspect-[4/5] sm:aspect-[4/5] lg:aspect-[4/5] max-h-[460px] rounded-3xl overflow-hidden shadow-2xl bg-slate-100">
+                <img
+                  src={resolveMediaUrl(siteSettings.heroBgImage)}
+                  alt={siteSettings.brandName || "Leton Coffee"}
+                  className="w-full h-full object-cover object-center"
+                  referrerPolicy="no-referrer"
+                />
               </div>
             </div>
           </motion.div>

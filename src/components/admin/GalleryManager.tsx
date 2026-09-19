@@ -93,7 +93,7 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({
     if (!file) return;
 
     if (images.length >= maxImages) {
-      showToast(`Maksimal ${maxImages} foto per galeri.`, 'warning');
+      showToast(`Maksimal ${maxImages} foto per galeri.`, 'info');
       return;
     }
 
@@ -140,7 +140,7 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({
   const handleAddUrl = () => {
     if (!urlInput.trim()) return;
     if (images.length >= maxImages) {
-      showToast(`Maksimal ${maxImages} foto per galeri.`, 'warning');
+      showToast(`Maksimal ${maxImages} foto per galeri.`, 'info');
       return;
     }
     onChange([...images, urlInput.trim()]);

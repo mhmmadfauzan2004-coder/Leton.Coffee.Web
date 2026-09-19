@@ -428,6 +428,74 @@ export function getCustomerSessionToken(): string | null {
 }
 
 /**
+ * Extract and normalize a safe, fully validated CustomerProfile from raw RPC or database response.
+ */
+function extractCustomerProfile(rawCustomer: any): CustomerProfile {
+  if (!rawCustomer) {
+    return {
+      id: '',
+      userId: '',
+      namaLengkap: 'Member Leton',
+      nomorHp: '',
+      tanggalLahir: '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  let obj = rawCustomer;
+  if (typeof rawCustomer === 'string') {
+    try {
+      obj = JSON.parse(rawCustomer);
+    } catch (err) {
+      console.warn('[extractCustomerProfile] Failed to parse stringified customer JSON:', err);
+      obj = {};
+    }
+  }
+
+  const id = obj.id || obj.userId || obj.user_id || '';
+  const nama = obj.namaLengkap || obj.nama_lengkap || obj.nama || obj.full_name || 'Member Leton';
+  const hp = obj.nomorHp || obj.nomor_hp || obj.phone || obj.handphone || '';
+  const birthDate = obj.tanggalLahir || obj.tanggal_lahir || obj.birth_date || obj.birthdate || '';
+  const createdAt = obj.createdAt || obj.created_at || new Date().toISOString();
+  const updatedAt = obj.updatedAt || obj.updated_at || new Date().toISOString();
+
+  return {
+    id: String(id),
+    userId: String(id),
+    namaLengkap: String(nama),
+    nomorHp: String(hp),
+    tanggalLahir: String(birthDate),
+    createdAt: String(createdAt),
+    updatedAt: String(updatedAt),
+  };
+}
+
+/**
+ * Safely parse any JSON/JSONB response returned by Supabase RPC.
+ */
+function parseRpcResponse(rawData: any): { success: boolean; token?: string; customer?: any; error?: string } {
+  if (!rawData) {
+    return { success: false, error: 'Empty RPC response' };
+  }
+  let parsed = rawData;
+  if (typeof rawData === 'string') {
+    try {
+      parsed = JSON.parse(rawData);
+    } catch (e) {
+      console.error('[RPC parse error]: Failed to parse raw string data:', e);
+      return { success: false, error: 'Format response tidak valid' };
+    }
+  }
+  return {
+    success: Boolean(parsed.success),
+    token: parsed.token || parsed.session_token || parsed.p_token,
+    customer: parsed.customer,
+    error: parsed.error || parsed.message,
+  };
+}
+
+/**
  * Register a new customer with Nama Lengkap, Nomor HP, Tanggal Lahir, and Password.
  * Password is cryptographically hashed with bcrypt on the server-side.
  * Never generates or uses fake emails.
@@ -474,35 +542,25 @@ export async function registerCustomer(
       };
     }
 
-    if (!data || !data.success) {
+    const parsed = parseRpcResponse(data);
+    if (!parsed.success) {
+      console.error('[Customer Register Business Error]:', parsed.error);
       return {
         success: false,
-        error: data?.error || 'Pendaftaran gagal. Silakan periksa kembali data Anda.',
+        error: parsed.error || 'Pendaftaran gagal. Silakan periksa kembali data Anda.',
       };
     }
 
-    const customer = data.customer;
-    const sessionToken = data.token;
+    const sessionToken = parsed.token;
+    const profile = extractCustomerProfile(parsed.customer);
 
     // Persist session token and profile safely
     if (typeof window !== 'undefined') {
       if (sessionToken) {
         localStorage.setItem(CUSTOMER_TOKEN_KEY, sessionToken);
       }
-      if (customer) {
-        localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(customer));
-      }
+      localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
     }
-
-    const profile: CustomerProfile = {
-      id: customer.id,
-      userId: customer.userId || customer.id,
-      namaLengkap: customer.namaLengkap,
-      nomorHp: customer.nomorHp,
-      tanggalLahir: customer.tanggalLahir,
-      createdAt: customer.createdAt || new Date().toISOString(),
-      updatedAt: customer.updatedAt || new Date().toISOString(),
-    };
 
     return { success: true, profile };
   } catch (err: any) {
@@ -539,37 +597,27 @@ export async function loginCustomer(
 
     if (error) {
       console.error('[Customer Login RPC Error]:', error);
-      return { success: false, error: 'Nama Lengkap atau Password salah.' };
+      return { success: false, error: error.message || 'Nama Lengkap atau Password salah.' };
     }
 
-    if (!data || !data.success) {
+    const parsed = parseRpcResponse(data);
+    if (!parsed.success) {
+      console.error('[Customer Login Business Error]:', parsed.error);
       return {
         success: false,
-        error: data?.error || 'Nama Lengkap atau Password salah.',
+        error: parsed.error || 'Nama Lengkap atau Password salah.',
       };
     }
 
-    const customer = data.customer;
-    const sessionToken = data.token;
+    const sessionToken = parsed.token;
+    const profile = extractCustomerProfile(parsed.customer);
 
     if (typeof window !== 'undefined') {
       if (sessionToken) {
         localStorage.setItem(CUSTOMER_TOKEN_KEY, sessionToken);
       }
-      if (customer) {
-        localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(customer));
-      }
+      localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
     }
-
-    const profile: CustomerProfile = {
-      id: customer.id,
-      userId: customer.userId || customer.id,
-      namaLengkap: customer.namaLengkap,
-      nomorHp: customer.nomorHp,
-      tanggalLahir: customer.tanggalLahir,
-      createdAt: customer.createdAt || new Date().toISOString(),
-      updatedAt: customer.updatedAt || new Date().toISOString(),
-    };
 
     return { success: true, profile };
   } catch (err: any) {
@@ -594,31 +642,37 @@ export async function getCurrentCustomerProfile(): Promise<CustomerProfile | nul
       p_token: token,
     });
 
-    if (error || !data || !data.success || !data.customer) {
-      // Session expired or invalid
+    if (error) {
+      console.error('[Customer Get Session RPC Error]:', error);
+      // In case of transient network error, fallback to cached profile if available
+      try {
+        const cached = localStorage.getItem(CUSTOMER_PROFILE_KEY);
+        if (cached) {
+          return extractCustomerProfile(JSON.parse(cached));
+        }
+      } catch {}
+      return null;
+    }
+
+    const parsed = parseRpcResponse(data);
+    if (!parsed.success || !parsed.customer) {
+      // Session expired or invalid on server
       localStorage.removeItem(CUSTOMER_TOKEN_KEY);
       localStorage.removeItem(CUSTOMER_PROFILE_KEY);
       return null;
     }
 
-    const customer = data.customer;
-    localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(customer));
+    const profile = extractCustomerProfile(parsed.customer);
+    localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
 
-    return {
-      id: customer.id,
-      userId: customer.userId || customer.id,
-      namaLengkap: customer.namaLengkap,
-      nomorHp: customer.nomorHp,
-      tanggalLahir: customer.tanggalLahir,
-      createdAt: customer.createdAt || new Date().toISOString(),
-      updatedAt: customer.updatedAt || new Date().toISOString(),
-    };
-  } catch {
+    return profile;
+  } catch (err) {
+    console.error('[Customer Get Session Exception]:', err);
     // In case of transient offline, fallback to cached profile if available
     try {
       const cached = localStorage.getItem(CUSTOMER_PROFILE_KEY);
       if (cached) {
-        return JSON.parse(cached) as CustomerProfile;
+        return extractCustomerProfile(JSON.parse(cached));
       }
     } catch {}
     return null;
@@ -673,30 +727,22 @@ export async function updateCustomerProfile(
     });
 
     if (error) {
+      console.error('[Customer Update Profile RPC Error]:', error);
       return { success: false, error: error.message || 'Gagal mengubah profil.' };
     }
 
-    if (!data || !data.success) {
-      return { success: false, error: data?.error || 'Gagal mengubah profil.' };
+    const parsed = parseRpcResponse(data);
+    if (!parsed.success) {
+      console.error('[Customer Update Profile Business Error]:', parsed.error);
+      return { success: false, error: parsed.error || 'Gagal mengubah profil.' };
     }
 
-    const customer = data.customer;
-    if (customer) {
-      localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(customer));
-    }
-
-    const profile: CustomerProfile = {
-      id: customer.id,
-      userId: customer.userId || customer.id,
-      namaLengkap: customer.namaLengkap,
-      nomorHp: customer.nomorHp,
-      tanggalLahir: customer.tanggalLahir,
-      createdAt: customer.createdAt || new Date().toISOString(),
-      updatedAt: customer.updatedAt || new Date().toISOString(),
-    };
+    const profile = extractCustomerProfile(parsed.customer || { namaLengkap: cleanNama, tanggalLahir });
+    localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
 
     return { success: true, profile };
   } catch (err: any) {
+    console.error('[Customer Update Profile Exception]:', err);
     return { success: false, error: err?.message || 'Gagal mengubah profil.' };
   }
 }

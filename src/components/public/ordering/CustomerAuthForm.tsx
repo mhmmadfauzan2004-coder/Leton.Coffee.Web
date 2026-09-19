@@ -63,14 +63,13 @@ export default function CustomerAuthForm({ onAuthSuccess }: CustomerAuthFormProp
       const res = await loginCustomer(cleanInput, loginPassword);
       if (res.success && res.profile) {
         setSuccessMsg('Masuk berhasil! Mengalihkan ke pemilihan outlet...');
-        setTimeout(() => {
-          onAuthSuccess(res.profile!);
-        }, 350);
+        onAuthSuccess(res.profile);
       } else {
         setErrorMsg(res.error || 'Nama Lengkap atau Password salah.');
       }
     } catch (err: any) {
-      setErrorMsg('Nama Lengkap atau Password salah.');
+      console.error('[CustomerAuthForm handleLogin exception]:', err);
+      setErrorMsg(err?.message || 'Nama Lengkap atau Password salah.');
     } finally {
       setLoading(false);
     }
@@ -135,13 +134,12 @@ export default function CustomerAuthForm({ onAuthSuccess }: CustomerAuthFormProp
       const res = await registerCustomer(cleanNama, cleanHp, tanggalLahir, regPassword);
       if (res.success && res.profile) {
         setSuccessMsg('Pendaftaran berhasil! Mengalihkan ke pemilihan outlet...');
-        setTimeout(() => {
-          onAuthSuccess(res.profile!);
-        }, 350);
+        onAuthSuccess(res.profile);
       } else {
         setErrorMsg(res.error || 'Pendaftaran gagal. Silakan periksa kembali data Anda.');
       }
     } catch (err: any) {
+      console.error('[CustomerAuthForm handleRegister exception]:', err);
       setErrorMsg(err?.message || 'Terjadi kesalahan sistem saat mendaftar.');
     } finally {
       setLoading(false);

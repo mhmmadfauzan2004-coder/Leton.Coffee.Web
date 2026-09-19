@@ -65,12 +65,12 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
 
   // Standard category grouping
   const categoriesList = useMemo(() => {
-    return [...menuCategories].sort((a, b) => (a.order || 0) - (b.order || 0));
+    return [...(menuCategories || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
   }, [menuCategories]);
 
   // Filtered menu
   const filteredItems = useMemo(() => {
-    return menuItems
+    return (menuItems || [])
       .filter((item) => {
         const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory;
         const matchesSearch =

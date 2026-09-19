@@ -415,10 +415,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
           {activeTab === 'stock' && <StockManager />}
           {activeTab === 'home' && !isOutletAdmin && <HomeEditor />}
           {activeTab === 'chapter-5' && !isOutletAdmin && (
-            <ChapterEditor chapterId="chapter-5" />
+            <ChapterEditor branchId="chapter-5" title="Chapter 05 — Urban Hub" />
           )}
           {activeTab === 'chapter-6' && !isOutletAdmin && (
-            <ChapterEditor chapterId="chapter-6" />
+            <ChapterEditor branchId="chapter-6" title="Chapter 06 — Open Air Spot" />
           )}
           {activeTab === 'let-go' && !isOutletAdmin && <LetGoEditor />}
           {activeTab === 'open-booth' && !isOutletAdmin && <OpenBoothEditor />}

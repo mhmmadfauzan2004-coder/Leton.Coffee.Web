@@ -644,10 +644,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.leton_content;`;
       {/* Cropper Modal for cropping before upload if desired */}
       {cropperSource && (
         <ImageCropperModal
-          isOpen={true}
           imageSrc={cropperSource}
-          aspectRatio="4:3"
-          onClose={() => {
+          defaultAspectRatio="4:3"
+          onCancel={() => {
             setCropperSource(null);
             setOriginalFile(null);
             if (fileInputRef.current) fileInputRef.current.value = '';

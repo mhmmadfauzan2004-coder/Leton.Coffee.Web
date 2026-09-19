@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ContentProvider, useContent } from './context/ContentContext';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { Navbar } from './components/public/Navbar';
 import { HeroSection } from './components/public/HeroSection';
 import { ChapterSection } from './components/public/ChapterSection';
@@ -209,8 +210,10 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <ContentProvider>
-      <AppContent />
-    </ContentProvider>
+    <ErrorBoundary>
+      <ContentProvider>
+        <AppContent />
+      </ContentProvider>
+    </ErrorBoundary>
   );
 }

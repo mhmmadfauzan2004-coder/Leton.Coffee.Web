@@ -27,6 +27,7 @@ import {
 } from '../../../data/addOnsData';
 import { X, ArrowLeft, ShoppingBag, User } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
+import { ErrorBoundary } from '../../common/ErrorBoundary';
 
 interface OrderingSystemModalProps {
   isOpen: boolean;
@@ -426,11 +427,11 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                 ? 'bg-amber-500/10 border-[#C39A6B]/30 text-[#C39A6B] hover:bg-amber-500/20'
                 : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
             }`}
-            title={customerProfile ? `Akun: ${customerProfile.namaLengkap}` : 'Masuk Member'}
+            title={customerProfile?.namaLengkap ? `Akun: ${customerProfile.namaLengkap}` : 'Masuk Member'}
           >
             <User className={`w-4 h-4 ${customerProfile ? 'text-[#C39A6B]' : ''}`} />
             <span className="hidden sm:inline font-semibold">
-              {customerProfile ? customerProfile.namaLengkap.split(' ')[0] : 'MEMBER'}
+              {(customerProfile?.namaLengkap ? customerProfile.namaLengkap.trim().split(' ')[0] : '') || 'MEMBER'}
             </span>
           </button>
 
@@ -462,96 +463,102 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
 
       {/* Main Step Body */}
       <main className="flex-1 w-full bg-[#070b12] text-slate-100 min-h-[calc(100vh-65px)]">
-        {checkingAuth ? (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
-            <div className="w-10 h-10 border-4 border-[#00E5FF] border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-slate-400 font-semibold text-xs tracking-wider uppercase font-mono">Memuat Sesi Member...</p>
-          </div>
-        ) : (
-          <>
-            {/* Step 1: Pilih Outlet (also default fallback if no outlet selected) */}
-            {(currentStep === 'outlet' || (!selectedOutlet && currentStep !== 'profile' && currentStep !== 'confirmation')) && (
-              <OutletSelector
-                onSelectOutlet={(outlet) => {
-                  setSelectedOutlet(outlet);
-                  setCurrentStep('menu');
-                }}
-                onClose={onClose}
-              />
-            )}
+        <ErrorBoundary
+          fallbackTitle="Terjadi Kendala pada Pemesanan"
+          fallbackMessage="Silakan klik tombol di bawah untuk kembali ke langkah pemilihan outlet."
+          onReset={() => setCurrentStep('outlet')}
+        >
+          {checkingAuth ? (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+              <div className="w-10 h-10 border-4 border-[#00E5FF] border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-slate-400 font-semibold text-xs tracking-wider uppercase font-mono">Memuat Sesi Member...</p>
+            </div>
+          ) : (
+            <>
+              {/* Step 1: Pilih Outlet (also default fallback if no outlet selected) */}
+              {(currentStep === 'outlet' || (!selectedOutlet && currentStep !== 'profile' && currentStep !== 'confirmation')) && (
+                <OutletSelector
+                  onSelectOutlet={(outlet) => {
+                    setSelectedOutlet(outlet);
+                    setCurrentStep('menu');
+                  }}
+                  onClose={onClose}
+                />
+              )}
 
-            {/* Step 2: Menu */}
-            {currentStep === 'menu' && selectedOutlet && (
-              <OrderMenu
-                outlet={selectedOutlet}
-                cart={cart}
-                onAddToCart={handleAddToCart}
-                onUpdateCartQuantity={handleUpdateQuantity}
-                onOpenCart={() => setIsCartOpen(true)}
-                onChangeOutlet={() => setCurrentStep('outlet')}
-                preSelectedProduct={pendingCustomizeItem}
-                onClearPreSelectedProduct={() => setPendingCustomizeItem(null)}
-              />
-            )}
+              {/* Step 2: Menu */}
+              {currentStep === 'menu' && selectedOutlet && (
+                <OrderMenu
+                  outlet={selectedOutlet}
+                  cart={cart}
+                  onAddToCart={handleAddToCart}
+                  onUpdateCartQuantity={handleUpdateQuantity}
+                  onOpenCart={() => setIsCartOpen(true)}
+                  onChangeOutlet={() => setCurrentStep('outlet')}
+                  preSelectedProduct={pendingCustomizeItem}
+                  onClearPreSelectedProduct={() => setPendingCustomizeItem(null)}
+                />
+              )}
 
-            {/* Step 3: Checkout */}
-            {currentStep === 'checkout' && selectedOutlet && (
-              <OrderCheckout
-                outlet={selectedOutlet}
-                cart={cart}
-                generalNote={generalNote}
-                onBackToCart={() => setIsCartOpen(true)}
-                onSubmitOrder={handleSubmitOrder}
-                isSubmitting={isSubmitting}
-                customerProfile={customerProfile}
-              />
-            )}
+              {/* Step 3: Checkout */}
+              {currentStep === 'checkout' && selectedOutlet && (
+                <OrderCheckout
+                  outlet={selectedOutlet}
+                  cart={cart}
+                  generalNote={generalNote}
+                  onBackToCart={() => setIsCartOpen(true)}
+                  onSubmitOrder={handleSubmitOrder}
+                  isSubmitting={isSubmitting}
+                  customerProfile={customerProfile}
+                />
+              )}
 
-            {/* Step: Profile / Auth */}
-            {currentStep === 'profile' && (
-              <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
-                {customerProfile ? (
-                  <CustomerProfileTab
-                    profile={customerProfile}
-                    onLogout={async () => {
-                      try {
-                        await logoutCustomer();
-                        setCustomerProfile(null);
-                        setCurrentStep('profile');
-                      } catch (err) {
-                        console.warn('Logout error:', err);
-                        setCustomerProfile(null);
-                        setCurrentStep('profile');
-                      }
-                    }}
-                    onProfileUpdate={(updated) => {
-                      setCustomerProfile((prev) => prev ? { ...prev, ...updated } : null);
-                    }}
-                  />
-                ) : (
-                  <div className="py-6">
-                    <CustomerAuthForm
-                      onAuthSuccess={(profile) => {
-                        setCustomerProfile(profile);
-                        setCurrentStep('outlet');
+              {/* Step: Profile / Auth */}
+              {currentStep === 'profile' && (
+                <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+                  {customerProfile ? (
+                    <CustomerProfileTab
+                      profile={customerProfile}
+                      onLogout={async () => {
+                        try {
+                          await logoutCustomer();
+                          setCustomerProfile(null);
+                          setCurrentStep('profile');
+                        } catch (err) {
+                          console.error('[Customer Logout Error]:', err);
+                          setCustomerProfile(null);
+                          setCurrentStep('profile');
+                        }
+                      }}
+                      onProfileUpdate={(updated) => {
+                        setCustomerProfile((prev) => (prev ? { ...prev, ...updated } : null));
                       }}
                     />
-                  </div>
-                )}
-              </div>
-            )}
+                  ) : (
+                    <div className="py-6">
+                      <CustomerAuthForm
+                        onAuthSuccess={(profile) => {
+                          setCustomerProfile(profile);
+                          setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
-            {/* Step: Confirmation */}
-            {currentStep === 'confirmation' && completedOrder && (
-              <OrderConfirmation
-                order={completedOrder}
-                outlet={selectedOutlet || ({ id: completedOrder.outletId, name: completedOrder.outletName || 'Leton Coffee' } as any)}
-                onOrderAgain={handleOrderAgain}
-                onBackToHome={onClose}
-              />
-            )}
-          </>
-        )}
+              {/* Step: Confirmation */}
+              {currentStep === 'confirmation' && completedOrder && (
+                <OrderConfirmation
+                  order={completedOrder}
+                  outlet={selectedOutlet || ({ id: completedOrder.outletId, name: completedOrder.outletName || 'Leton Coffee' } as any)}
+                  onOrderAgain={handleOrderAgain}
+                  onBackToHome={onClose}
+                />
+              )}
+            </>
+          )}
+        </ErrorBoundary>
       </main>
 
       {/* Cart Drawer */}

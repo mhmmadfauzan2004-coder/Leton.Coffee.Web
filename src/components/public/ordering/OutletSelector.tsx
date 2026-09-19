@@ -24,11 +24,11 @@ export const OutletSelector: React.FC<OutletSelectorProps> = ({ onSelectOutlet }
     let dynamicAddress = outlet.address;
     let dynamicHours = outlet.hours;
 
-    if (outlet.id === 'sudirman' && data.branches[0]) {
+    if (outlet.id === 'sudirman' && data?.branches?.[0]) {
       dynamicImage = data.branches[0].bgImage || outlet.image;
       dynamicAddress = data.branches[0].address || outlet.address;
       dynamicHours = data.branches[0].openingHours || outlet.hours;
-    } else if (outlet.id === 'kelakap_7' && data.branches[1]) {
+    } else if (outlet.id === 'kelakap_7' && data?.branches?.[1]) {
       dynamicImage = data.branches[1].bgImage || outlet.image;
       dynamicAddress = data.branches[1].address || outlet.address;
       dynamicHours = data.branches[1].openingHours || outlet.hours;
@@ -39,7 +39,7 @@ export const OutletSelector: React.FC<OutletSelectorProps> = ({ onSelectOutlet }
       image: dynamicImage,
       address: dynamicAddress,
       hours: dynamicHours,
-      whatsapp: data.contactSettings?.whatsapp || outlet.whatsapp,
+      whatsapp: data?.contactSettings?.whatsapp || outlet.whatsapp,
     };
   });
 

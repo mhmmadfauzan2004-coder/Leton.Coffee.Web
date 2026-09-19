@@ -16,8 +16,8 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
   const [searchQuery, setSearchQuery] = useState('');
 
   // Form Edit Profile
-  const [namaLengkap, setNamaLengkap] = useState(profile.namaLengkap);
-  const [tanggalLahir, setTanggalLahir] = useState(profile.tanggalLahir);
+  const [namaLengkap, setNamaLengkap] = useState(profile?.namaLengkap || '');
+  const [tanggalLahir, setTanggalLahir] = useState(profile?.tanggalLahir || '');
 
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -88,28 +88,38 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
   useEffect(() => {
     loadOrders();
 
-    // Setup secure realtime subscription to listen to status changes for this authenticated user only
-    const client = getSupabase();
-    const channel = client
-      .channel(`customer_orders_realtime_${profile.userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'orders',
-          filter: `customer_id=eq.${profile.userId}`,
-        },
-        () => {
-          loadOrders();
-        }
-      )
-      .subscribe();
+    const targetUserId = profile?.userId || profile?.id;
+    if (!targetUserId) return;
 
-    return () => {
-      client.removeChannel(channel);
-    };
-  }, [profile.userId]);
+    try {
+      const client = getSupabase();
+      const channel = client
+        .channel(`customer_orders_realtime_${targetUserId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'orders',
+            filter: `customer_id=eq.${targetUserId}`,
+          },
+          () => {
+            loadOrders();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        try {
+          client.removeChannel(channel);
+        } catch (err) {
+          console.warn('Error removing channel:', err);
+        }
+      };
+    } catch (err) {
+      console.warn('Realtime subscription error:', err);
+    }
+  }, [profile?.userId, profile?.id]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -229,11 +239,13 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
             <div className="flex items-center justify-between">
               <span className="font-medium text-[#667085]">Tanggal Lahir:</span>
               <span className="font-semibold text-[#172033]">
-                {new Date(profile.tanggalLahir).toLocaleDateString('id-ID', {
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric',
-                })}
+                {profile?.tanggalLahir && !isNaN(new Date(profile.tanggalLahir).getTime())
+                  ? new Date(profile.tanggalLahir).toLocaleDateString('id-ID', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })
+                  : profile?.tanggalLahir || '-'}
               </span>
             </div>
           </div>

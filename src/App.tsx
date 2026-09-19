@@ -17,6 +17,7 @@ import { MessageCircle, Lock, ShoppingBag } from 'lucide-react';
 import { createWhatsAppLink } from './utils/formatters';
 import { motion, AnimatePresence } from 'motion/react';
 import { MenuItem } from './types';
+import { getSupabase } from './utils/supabase';
 
 const AppContent: React.FC = () => {
   const { data, auth, isLoading, isInitialReady, completeLoading } = useContent();
@@ -73,8 +74,14 @@ const AppContent: React.FC = () => {
     window.history.pushState(null, '', '/#home');
   };
 
-  const openOrdering = (item?: MenuItem) => {
+  const openOrdering = async (item?: MenuItem) => {
     setOrderingMenuItem(item || null);
+    try {
+      const client = getSupabase();
+      await client.auth.getSession();
+    } catch (err) {
+      console.warn('Error checking session in openOrdering:', err);
+    }
     setIsOrderingOpen(true);
   };
 

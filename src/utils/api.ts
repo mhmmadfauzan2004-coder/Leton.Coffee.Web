@@ -23,9 +23,10 @@ export function getApiUrl(path: string): string {
  * Resolves an image URL so uploaded assets hosted on the backend server
  * are correctly displayed when the frontend is hosted on a separate domain (e.g. Cloudflare Pages).
  */
-export function resolveMediaUrl(url: string | null | undefined): string {
-  if (!url) return '';
+export function resolveMediaUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
   const trimmed = url.trim();
+  if (!trimmed) return undefined;
   if (
     trimmed.startsWith('http://') ||
     trimmed.startsWith('https://') ||

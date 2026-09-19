@@ -70,17 +70,27 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [pendingCustomizeItem, setPendingCustomizeItem] = useState<MenuItem | null>(null);
   const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
   const modalContainerRef = useRef<HTMLDivElement>(null);
 
   // Sync active customer profile session on mount and when modal opens
   useEffect(() => {
     if (isOpen) {
+      setCheckingAuth(true);
       const syncProfile = async () => {
         try {
           const profile = await getCurrentCustomerProfile();
           setCustomerProfile(profile);
+          if (!profile) {
+            setCurrentStep('profile');
+          } else {
+            setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+          }
         } catch (err) {
           console.warn('Error syncing customer profile:', err);
+          setCurrentStep('profile');
+        } finally {
+          setCheckingAuth(false);
         }
       };
       syncProfile();
@@ -136,10 +146,10 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
 
   // Initialize step based on outlet
   useEffect(() => {
-    if (selectedOutlet && currentStep === 'outlet') {
+    if (selectedOutlet && currentStep === 'outlet' && !checkingAuth && customerProfile) {
       setCurrentStep('menu');
     }
-  }, [selectedOutlet]);
+  }, [selectedOutlet, currentStep, checkingAuth, customerProfile]);
 
   // If a menu item was clicked from the public page, set it to customize
   useEffect(() => {
@@ -441,83 +451,92 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
 
       {/* Main Step Body */}
       <main className="flex-1 w-full bg-[#F8FBFF]">
-        {currentStep === 'outlet' && (
-          <OutletSelector
-            onSelectOutlet={(outlet) => {
-              setSelectedOutlet(outlet);
-              setCurrentStep('menu');
-            }}
-            onClose={onClose}
-          />
-        )}
-
-        {currentStep === 'menu' && selectedOutlet && (
-          <OrderMenu
-            outlet={selectedOutlet}
-            cart={cart}
-            onAddToCart={handleAddToCart}
-            onUpdateCartQuantity={handleUpdateQuantity}
-            onOpenCart={() => setIsCartOpen(true)}
-            onChangeOutlet={() => setCurrentStep('outlet')}
-            preSelectedProduct={pendingCustomizeItem}
-            onClearPreSelectedProduct={() => setPendingCustomizeItem(null)}
-          />
-        )}
-
-        {currentStep === 'checkout' && selectedOutlet && (
-          <OrderCheckout
-            outlet={selectedOutlet}
-            cart={cart}
-            generalNote={generalNote}
-            onBackToCart={() => setIsCartOpen(true)}
-            onSubmitOrder={handleSubmitOrder}
-            isSubmitting={isSubmitting}
-            customerProfile={customerProfile}
-          />
-        )}
-
-        {currentStep === 'profile' && (
-          <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
-            {customerProfile ? (
-              <CustomerProfileTab
-                profile={customerProfile}
-                onLogout={async () => {
-                  try {
-                    const client = getSupabase();
-                    await client.auth.signOut();
-                    setCustomerProfile(null);
-                    setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
-                  } catch (err) {
-                    console.warn('Logout error:', err);
-                  }
+        {checkingAuth ? (
+          <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+            <div className="w-10 h-10 border-4 border-[#00E5FF] border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-slate-500 font-semibold text-xs tracking-wider uppercase">Memuat Sesi Member...</p>
+          </div>
+        ) : (
+          <>
+            {currentStep === 'outlet' && (
+              <OutletSelector
+                onSelectOutlet={(outlet) => {
+                  setSelectedOutlet(outlet);
+                  setCurrentStep('menu');
                 }}
-                onProfileUpdate={(updated) => {
-                  setCustomerProfile((prev) => prev ? { ...prev, ...updated } : null);
-                }}
+                onClose={onClose}
               />
-            ) : (
-              <div className="py-6">
-                <CustomerAuthForm
-                  onAuthSuccess={(profile) => {
-                    setCustomerProfile(profile);
-                    setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
-                  }}
-                  onCancel={() => {
-                    setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
-                  }}
-                />
+            )}
+
+            {currentStep === 'menu' && selectedOutlet && (
+              <OrderMenu
+                outlet={selectedOutlet}
+                cart={cart}
+                onAddToCart={handleAddToCart}
+                onUpdateCartQuantity={handleUpdateQuantity}
+                onOpenCart={() => setIsCartOpen(true)}
+                onChangeOutlet={() => setCurrentStep('outlet')}
+                preSelectedProduct={pendingCustomizeItem}
+                onClearPreSelectedProduct={() => setPendingCustomizeItem(null)}
+              />
+            )}
+
+            {currentStep === 'checkout' && selectedOutlet && (
+              <OrderCheckout
+                outlet={selectedOutlet}
+                cart={cart}
+                generalNote={generalNote}
+                onBackToCart={() => setIsCartOpen(true)}
+                onSubmitOrder={handleSubmitOrder}
+                isSubmitting={isSubmitting}
+                customerProfile={customerProfile}
+              />
+            )}
+
+            {currentStep === 'profile' && (
+              <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+                {customerProfile ? (
+                  <CustomerProfileTab
+                    profile={customerProfile}
+                    onLogout={async () => {
+                      try {
+                        const client = getSupabase();
+                        await client.auth.signOut();
+                        setCustomerProfile(null);
+                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                      } catch (err) {
+                        console.warn('Logout error:', err);
+                      }
+                    }}
+                    onProfileUpdate={(updated) => {
+                      setCustomerProfile((prev) => prev ? { ...prev, ...updated } : null);
+                    }}
+                  />
+                ) : (
+                  <div className="py-6">
+                    <CustomerAuthForm
+                      onAuthSuccess={(profile) => {
+                        setCustomerProfile(profile);
+                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                      }}
+                      onCancel={() => {
+                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        )}
 
-        {currentStep === 'confirmation' && completedOrder && selectedOutlet && (
-          <OrderConfirmation
-            order={completedOrder}
-            outlet={selectedOutlet}
-            onOrderAgain={handleOrderAgain}
-            onBackToHome={onClose}
-          />
+            {currentStep === 'confirmation' && completedOrder && selectedOutlet && (
+              <OrderConfirmation
+                order={completedOrder}
+                outlet={selectedOutlet}
+                onOrderAgain={handleOrderAgain}
+                onBackToHome={onClose}
+              />
+            )}
+          </>
         )}
       </main>
 

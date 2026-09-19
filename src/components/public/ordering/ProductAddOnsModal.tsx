@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { MenuItem, AddOnOption, CustomizationOption, ProductSizeOption } from '../../../types';
+import { MenuItem, AddOnOption, CustomizationOption, ProductSizeOption, SelectedCustomOption } from '../../../types';
 import { useContent } from '../../../context/ContentContext';
 import {
   DEFAULT_SIZES,
@@ -25,11 +25,13 @@ interface ProductAddOnsModalProps {
     topping: AddOnOption,
     syrup: AddOnOption,
     quantity: number,
-    note?: string
+    note?: string,
+    customOptions?: SelectedCustomOption[]
   ) => void;
   initialSize?: AddOnOption;
   initialTopping?: AddOnOption;
   initialSyrup?: AddOnOption;
+  initialCustomOptions?: SelectedCustomOption[];
   initialQuantity?: number;
   initialNote?: string;
 }
@@ -42,6 +44,7 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
   initialSize,
   initialTopping,
   initialSyrup,
+  initialCustomOptions,
   initialQuantity = 1,
   initialNote = '',
 }) => {
@@ -96,6 +99,17 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
     return list.map((s) => ({ id: s.id, name: s.name, price: s.price }));
   }, [product, masterSyrups]);
 
+  // Dynamic Customization Groups enabled for this specific product
+  const activeCustomGroups = useMemo(() => {
+    if (!product || !Array.isArray(data.customizationGroups)) return [];
+    return data.customizationGroups.filter((group) => {
+      if (!group.options || group.options.length === 0) return false;
+      if (!product.customizations || product.customizations.length === 0) return true;
+      const setting = product.customizations.find((c) => c.groupId === group.id);
+      return setting ? setting.enabled !== false : true;
+    });
+  }, [product, data.customizationGroups]);
+
   const hasSizeOption = product?.hasSize !== false && availableSizes.length > 0;
   const hasToppingOption = product?.hasTopping !== false && availableToppings.length > 0;
   const hasSyrupOption = product?.hasSyrup !== false && availableSyrups.length > 0;
@@ -104,6 +118,7 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
   const [selectedSize, setSelectedSize] = useState<AddOnOption>(DEFAULT_SIZE);
   const [selectedTopping, setSelectedTopping] = useState<AddOnOption>(DEFAULT_TOPPING);
   const [selectedSyrup, setSelectedSyrup] = useState<AddOnOption>(DEFAULT_SYRUP);
+  const [selectedCustoms, setSelectedCustoms] = useState<Record<string, SelectedCustomOption>>({});
   const [quantity, setQuantity] = useState<number>(1);
   const [note, setNote] = useState<string>('');
 
@@ -135,6 +150,25 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
         setSelectedSyrup(noSyr || availableSyrups[0] || DEFAULT_SYRUP);
       }
 
+      // 4. Dynamic Customizations
+      const initialCustomsMap: Record<string, SelectedCustomOption> = {};
+      activeCustomGroups.forEach((group) => {
+        const foundInitial = initialCustomOptions?.find((c) => c.groupId === group.id);
+        if (foundInitial) {
+          initialCustomsMap[group.id] = foundInitial;
+        } else if (group.options && group.options.length > 0) {
+          const defaultOpt = group.options.find((o) => o.price === 0) || group.options[0];
+          initialCustomsMap[group.id] = {
+            groupId: group.id,
+            groupName: group.name,
+            optionId: defaultOpt.id,
+            optionName: defaultOpt.name,
+            price: defaultOpt.price,
+          };
+        }
+      });
+      setSelectedCustoms(initialCustomsMap);
+
       setQuantity(initialQuantity > 0 ? initialQuantity : 1);
       setNote(initialNote || '');
     }
@@ -144,11 +178,13 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
     initialSize,
     initialTopping,
     initialSyrup,
+    initialCustomOptions,
     initialQuantity,
     initialNote,
     availableSizes,
     availableToppings,
     availableSyrups,
+    activeCustomGroups,
   ]);
 
   const unitPrice = useMemo(() => {
@@ -156,8 +192,18 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
     const s = hasSizeOption ? selectedSize : { name: 'Regular', price: 0 };
     const t = hasToppingOption ? selectedTopping : { name: 'No Topping', price: 0 };
     const sy = hasSyrupOption ? selectedSyrup : { name: 'No Syrup', price: 0 };
-    return calculateItemUnitPrice(product.price, s, t, sy);
-  }, [product, hasSizeOption, selectedSize, hasToppingOption, selectedTopping, hasSyrupOption, selectedSyrup]);
+    const customs = Object.values(selectedCustoms);
+    return calculateItemUnitPrice(product.price, s, t, sy, customs);
+  }, [
+    product,
+    hasSizeOption,
+    selectedSize,
+    hasToppingOption,
+    selectedTopping,
+    hasSyrupOption,
+    selectedSyrup,
+    selectedCustoms,
+  ]);
 
   const totalPrice = useMemo(() => {
     return unitPrice * quantity;
@@ -169,8 +215,17 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
     const finalSize = hasSizeOption ? selectedSize : { name: 'Regular', price: 0 };
     const finalTopping = hasToppingOption ? selectedTopping : { name: 'No Topping', price: 0 };
     const finalSyrup = hasSyrupOption ? selectedSyrup : { name: 'No Syrup', price: 0 };
+    const finalCustoms = Object.values(selectedCustoms);
 
-    onConfirm(product, finalSize, finalTopping, finalSyrup, quantity, note.trim() || undefined);
+    onConfirm(
+      product,
+      finalSize,
+      finalTopping,
+      finalSyrup,
+      quantity,
+      note.trim() || undefined,
+      finalCustoms
+    );
     onClose();
   };
 
@@ -411,6 +466,83 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
               </div>
             )}
 
+            {/* DYNAMIC CUSTOMIZATION GROUPS SECTIONS */}
+            {activeCustomGroups.map((group, groupIdx) => {
+              const selectedOpt = selectedCustoms[group.id];
+              const sectionLetter = String.fromCharCode(68 + groupIdx); // D, E, F...
+
+              return (
+                <div key={group.id} className="space-y-3 pt-2 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-display font-black text-xs sm:text-sm text-white uppercase tracking-wider flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-[#00E5FF]" />
+                        <span>{sectionLetter}. {group.name.toUpperCase()}</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Pilih {group.name} sesuai selera.
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-mono text-[#00E5FF] bg-[#00E5FF]/10 px-2 py-0.5 rounded-md border border-[#00E5FF]/20">
+                      PILIH 1
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {group.options.map((opt) => {
+                      const isSelected = selectedOpt?.optionId === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustoms((prev) => ({
+                              ...prev,
+                              [group.id]: {
+                                groupId: group.id,
+                                groupName: group.name,
+                                optionId: opt.id,
+                                optionName: opt.name,
+                                price: opt.price,
+                              },
+                            }));
+                          }}
+                          className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#00E5FF]/10 border-[#00E5FF] ring-1 ring-[#00E5FF]/50 shadow-md shadow-[#00E5FF]/15 text-white'
+                              : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-all ${
+                                isSelected ? 'border-[#00E5FF] bg-[#00E5FF]' : 'border-slate-600 bg-slate-950'
+                              }`}
+                            >
+                              {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+                            </div>
+                            <span className="text-xs font-medium truncate">{opt.name}</span>
+                          </div>
+
+                          <span
+                            className={`text-xs font-mono font-bold whitespace-nowrap ${
+                              opt.price === 0
+                                ? 'text-slate-400'
+                                : isSelected
+                                ? 'text-[#00E5FF]'
+                                : 'text-slate-300'
+                            }`}
+                          >
+                            {opt.price === 0 ? '+Rp0' : `+${formatRupiah(opt.price)}`}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
             {/* SPECIAL NOTE SECTION */}
             <div className="space-y-2 pt-2 border-t border-slate-800/80">
               <div className="flex items-center gap-2 text-xs font-display font-bold text-slate-300 uppercase tracking-wider">
@@ -445,6 +577,13 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
                   {hasSyrupOption && selectedSyrup.price > 0 && (
                     <span className="text-[#818CF8]">+{formatRupiah(selectedSyrup.price)}</span>
                   )}
+                  {Object.values(selectedCustoms)
+                    .filter((c) => c.price > 0)
+                    .map((c) => (
+                      <span key={c.groupId} className="text-[#00E5FF]">
+                        +{formatRupiah(c.price)}
+                      </span>
+                    ))}
                   <span className="text-slate-500">=</span>
                   <span className="text-white font-bold">{formatRupiah(unitPrice)}</span>
                 </div>

@@ -1,4 +1,4 @@
-import { AddOnOption, CustomizationOption, ProductSizeOption } from '../types';
+import { AddOnOption, CustomizationOption, ProductSizeOption, SelectedCustomOption } from '../types';
 
 export const DEFAULT_SIZES: ProductSizeOption[] = [
   { name: 'Regular', price: 0 },
@@ -43,23 +43,32 @@ export function calculateItemUnitPrice(
   basePrice: number,
   size?: AddOnOption | null,
   topping?: AddOnOption | null,
-  syrup?: AddOnOption | null
+  syrup?: AddOnOption | null,
+  customOptions?: SelectedCustomOption[] | null
 ): number {
   const sizePrice = size?.price || 0;
   const topPrice = topping?.price || 0;
   const syrPrice = syrup?.price || 0;
-  return basePrice + sizePrice + topPrice + syrPrice;
+  const customPrices = Array.isArray(customOptions)
+    ? customOptions.reduce((sum, c) => sum + (c.price || 0), 0)
+    : 0;
+  return basePrice + sizePrice + topPrice + syrPrice + customPrices;
 }
 
 export function generateCartItemId(
   productId: string,
   sizeName?: string,
   toppingName?: string,
-  syrupName?: string
+  syrupName?: string,
+  customOptions?: SelectedCustomOption[] | null
 ): string {
   const safeSize = (sizeName || 'Regular').trim().toLowerCase().replace(/\s+/g, '-');
   const safeTop = (toppingName || 'No Topping').trim().toLowerCase().replace(/\s+/g, '-');
   const safeSyr = (syrupName || 'No Syrup').trim().toLowerCase().replace(/\s+/g, '-');
-  return `${productId}__sz_${safeSize}__top_${safeTop}__syr_${safeSyr}`;
+  let customKey = '';
+  if (Array.isArray(customOptions) && customOptions.length > 0) {
+    customKey = '__c_' + customOptions.map(c => `${c.groupId}_${c.optionId}`).sort().join('_');
+  }
+  return `${productId}__sz_${safeSize}__top_${safeTop}__syr_${safeSyr}${customKey}`;
 }
 

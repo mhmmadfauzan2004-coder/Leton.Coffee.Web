@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { LetonData, AuthState, AdminRole, MenuItem, MenuCategory, CustomizationOption, ProductSizeOption } from '../types';
+import { LetonData, AuthState, AdminRole, MenuItem, MenuCategory, CustomizationOption, ProductSizeOption, CustomizationGroup } from '../types';
 import { initialLetonData } from '../data/initialData';
 import {
   saveSingleMenuItemGranular,
@@ -58,6 +58,8 @@ interface ContentContextType {
   saveCustomOption: (type: 'topping' | 'syrup', option: CustomizationOption) => Promise<boolean>;
   deleteCustomOption: (type: 'topping' | 'syrup', optionId: string) => Promise<boolean>;
   saveMasterSizes: (sizes: ProductSizeOption[]) => Promise<boolean>;
+  saveCustomizationGroup: (group: CustomizationGroup) => Promise<boolean>;
+  deleteCustomizationGroup: (groupId: string) => Promise<boolean>;
   uploadImage: (file: File, fileNamePrefix?: string) => Promise<string | null>;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -509,6 +511,36 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const saveCustomizationGroup = async (group: CustomizationGroup): Promise<boolean> => {
+    try {
+      const groups = data.customizationGroups || [];
+      const idx = groups.findIndex((g) => g.id === group.id);
+      let nextGroups = [...groups];
+      if (idx >= 0) {
+        nextGroups[idx] = group;
+      } else {
+        nextGroups.push(group);
+      }
+      const nextData = { ...data, customizationGroups: nextGroups };
+      return await saveData(nextData);
+    } catch (err: any) {
+      showToast('Gagal menyimpan kustomisasi: ' + err.message, 'error');
+      return false;
+    }
+  };
+
+  const deleteCustomizationGroup = async (groupId: string): Promise<boolean> => {
+    try {
+      const groups = data.customizationGroups || [];
+      const nextGroups = groups.filter((g) => g.id !== groupId);
+      const nextData = { ...data, customizationGroups: nextGroups };
+      return await saveData(nextData);
+    } catch (err: any) {
+      showToast('Gagal menghapus kustomisasi: ' + err.message, 'error');
+      return false;
+    }
+  };
+
   // Upload image directly and exclusively to Supabase Storage Bucket ('leton-images')
   const uploadImage = async (file: File, fileNamePrefix: string = 'menu'): Promise<string | null> => {
     try {
@@ -797,6 +829,8 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         saveCustomOption,
         deleteCustomOption,
         saveMasterSizes,
+        saveCustomizationGroup,
+        deleteCustomizationGroup,
         uploadImage,
         login,
         logout,

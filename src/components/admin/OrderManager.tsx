@@ -837,7 +837,8 @@ export const OrderManager: React.FC = () => {
                       const sizePrice = it.size?.price || 0;
                       const topPrice = it.topping?.price || 0;
                       const syrPrice = it.syrup?.price || 0;
-                      const unitPrice = it.unitPrice || (it.price + sizePrice + topPrice + syrPrice);
+                      const customsPrice = (it.customOptions || []).reduce((sum, c) => sum + (c.price || 0), 0);
+                      const unitPrice = it.unitPrice || (it.price + sizePrice + topPrice + syrPrice + customsPrice);
                       const itemSubtotal = unitPrice * it.quantity;
                       const hasSize = it.size && it.size.name;
                       const hasTopping = it.topping && it.topping.name !== 'No Topping';
@@ -893,6 +894,16 @@ export const OrderManager: React.FC = () => {
                               <div className="text-[10px] font-mono text-slate-500 pl-1">
                                 Syrup: No Syrup (Rp0)
                               </div>
+                            )}
+
+                            {/* Dynamic Customization Options */}
+                            {it.customOptions && it.customOptions.length > 0 && (
+                              it.customOptions.map((co) => (
+                                <div key={co.groupId} className="text-[11px] font-mono text-[#00E5FF] flex items-center justify-between pl-1">
+                                  <span>{co.groupName}: {co.optionName}</span>
+                                  <span>{co.price > 0 ? `+${formatRupiah(co.price)}` : 'Rp0'}</span>
+                                </div>
+                              ))
                             )}
 
                             {it.note && (

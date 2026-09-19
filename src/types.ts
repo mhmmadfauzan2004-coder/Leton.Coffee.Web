@@ -70,6 +70,27 @@ export interface CustomizationOption {
   order: number;
 }
 
+export interface CustomOptionItem {
+  id: string;
+  name: string;
+  price: number;
+  isActive?: boolean;
+  order?: number;
+}
+
+export interface CustomizationGroup {
+  id: string;
+  name: string;
+  options: CustomOptionItem[];
+  order?: number;
+}
+
+export interface MenuItemCustomizationSetting {
+  groupId: string;
+  enabled: boolean;
+  selectedOptionIds?: string[];
+}
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -88,6 +109,7 @@ export interface MenuItem {
   availableToppingIds?: string[];
   hasSyrup?: boolean;
   availableSyrupIds?: string[];
+  customizations?: MenuItemCustomizationSetting[];
 }
 
 export interface AboutFact {
@@ -151,6 +173,7 @@ export interface LetonData {
   masterToppings?: CustomizationOption[];
   masterSyrups?: CustomizationOption[];
   masterSizes?: ProductSizeOption[];
+  customizationGroups?: CustomizationGroup[];
   baristasContent?: BaristasSectionContent;
   baristas: BaristaItem[];
   aboutContent: AboutContent;
@@ -207,6 +230,14 @@ export interface AddOnOption {
   price: number;
 }
 
+export interface SelectedCustomOption {
+  groupId: string;
+  groupName: string;
+  optionId: string;
+  optionName: string;
+  price: number;
+}
+
 export interface OrderItem {
   id: string;
   productId: string;
@@ -219,6 +250,7 @@ export interface OrderItem {
   size?: AddOnOption;
   topping?: AddOnOption;
   syrup?: AddOnOption;
+  customOptions?: SelectedCustomOption[];
 }
 
 export interface CustomerOrder {
@@ -264,4 +296,5 @@ export interface CartItem {
   size?: AddOnOption;
   topping?: AddOnOption;
   syrup?: AddOnOption;
+  customOptions?: SelectedCustomOption[];
 }

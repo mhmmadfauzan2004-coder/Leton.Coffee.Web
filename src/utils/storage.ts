@@ -170,6 +170,7 @@ export function sanitizeLoadedData(raw: any): LetonData {
               availableToppingIds: Array.isArray(m?.availableToppingIds) ? m.availableToppingIds : fallbackItem?.availableToppingIds,
               hasSyrup: typeof m?.hasSyrup === 'boolean' ? m.hasSyrup : (fallbackItem?.hasSyrup ?? true),
               availableSyrupIds: Array.isArray(m?.availableSyrupIds) ? m.availableSyrupIds : fallbackItem?.availableSyrupIds,
+              customizations: Array.isArray(m?.customizations) ? m.customizations : (fallbackItem?.customizations || []),
             };
           })
         : initialLetonData.menuItems,
@@ -185,6 +186,10 @@ export function sanitizeLoadedData(raw: any): LetonData {
       Array.isArray(raw.masterSizes) && raw.masterSizes.length > 0
         ? raw.masterSizes
         : (initialLetonData.masterSizes || DEFAULT_SIZES),
+    customizationGroups:
+      Array.isArray(raw.customizationGroups)
+        ? raw.customizationGroups
+        : (initialLetonData.customizationGroups || []),
     baristas:
       Array.isArray(raw.baristas) && raw.baristas.length > 0
         ? raw.baristas.map((b: any, idx: number) => {

@@ -8,6 +8,7 @@ import {
   PaymentMethod,
   AddOnOption,
   CustomerProfile,
+  SelectedCustomOption,
 } from '../../../types';
 import { OutletSelector } from './OutletSelector';
 import { OrderMenu } from './OrderMenu';
@@ -169,9 +170,10 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
     topping: AddOnOption = DEFAULT_TOPPING,
     syrup: AddOnOption = DEFAULT_SYRUP,
     quantity: number = 1,
-    note?: string
+    note?: string,
+    customOptions?: SelectedCustomOption[]
   ) => {
-    const cartItemId = generateCartItemId(product.id, size.name, topping.name, syrup.name);
+    const cartItemId = generateCartItemId(product.id, size.name, topping.name, syrup.name, customOptions);
     setCart((prev) => {
       const existingIndex = prev.findIndex(
         (item) =>
@@ -180,7 +182,8 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
               item.product.id,
               item.size?.name,
               item.topping?.name,
-              item.syrup?.name
+              item.syrup?.name,
+              item.customOptions
             )) === cartItemId
       );
       if (existingIndex >= 0) {
@@ -201,6 +204,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
             size,
             topping,
             syrup,
+            customOptions,
             note,
           },
         ];
@@ -218,7 +222,8 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
               item.product.id,
               item.size?.name,
               item.topping?.name,
-              item.syrup?.name
+              item.syrup?.name,
+              item.customOptions
             );
           if (id === cartItemId || item.product.id === cartItemId) {
             const newQty = item.quantity + delta;
@@ -239,7 +244,8 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
             item.product.id,
             item.size?.name,
             item.topping?.name,
-            item.syrup?.name
+            item.syrup?.name,
+            item.customOptions
           );
         return id !== cartItemId && item.product.id !== cartItemId;
       })
@@ -255,7 +261,8 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
             item.product.id,
             item.size?.name,
             item.topping?.name,
-            item.syrup?.name
+            item.syrup?.name,
+            item.customOptions
           );
         return id === cartItemId || item.product.id === cartItemId ? { ...item, note } : item;
       })
@@ -278,7 +285,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
     try {
       const orderNumber = generateOrderNumber();
       const totalAmount = cart.reduce((acc, item) => {
-        const unit = calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup);
+        const unit = calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup, item.customOptions);
         return acc + unit * item.quantity;
       }, 0);
 
@@ -300,7 +307,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
           const size = item.size || DEFAULT_SIZE;
           const topping = item.topping || DEFAULT_TOPPING;
           const syrup = item.syrup || DEFAULT_SYRUP;
-          const unitPrice = calculateItemUnitPrice(item.product.price, size, topping, syrup);
+          const unitPrice = calculateItemUnitPrice(item.product.price, size, topping, syrup, item.customOptions);
           return {
             id: `item-${Date.now()}-${item.product.id}-${Math.random().toString(36).slice(2, 6)}`,
             productId: item.product.id,
@@ -324,6 +331,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
               name: syrup.name,
               price: syrup.price,
             },
+            customOptions: item.customOptions,
           };
         }),
         totalAmount,

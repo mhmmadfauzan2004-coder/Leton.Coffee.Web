@@ -120,7 +120,10 @@ export const OrderConfirmation: React.FC<OrderConfirmationProps> = ({
       const topName = it.topping && it.topping.name !== 'No Topping' ? ` + ${it.topping.name}` : '';
       const syrName = it.syrup && it.syrup.name !== 'No Syrup' ? ` + ${it.syrup.name}` : '';
       const sizeName = it.size?.name ? ` [${it.size.name}]` : '';
-      return `• ${it.quantity}x ${it.name}${sizeName}${topName}${syrName} (${formatRupiah((it.unitPrice || it.price) * it.quantity)})`;
+      const customsName = it.customOptions && it.customOptions.length > 0
+        ? ` (${it.customOptions.map((c) => `${c.groupName}: ${c.optionName}`).join(', ')})`
+        : '';
+      return `• ${it.quantity}x ${it.name}${sizeName}${topName}${syrName}${customsName} (${formatRupiah((it.unitPrice || it.price) * it.quantity)})`;
     })
     .join('\n');
 

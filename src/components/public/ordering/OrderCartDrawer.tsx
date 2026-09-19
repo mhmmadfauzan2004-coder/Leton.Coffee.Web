@@ -47,12 +47,12 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
   const getItemId = (item: CartItem): string => {
     return (
       item.id ||
-      generateCartItemId(item.product.id, item.size?.name, item.topping?.name, item.syrup?.name)
+      generateCartItemId(item.product.id, item.size?.name, item.topping?.name, item.syrup?.name, item.customOptions)
     );
   };
 
   const getItemUnitPrice = (item: CartItem): number => {
-    return calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup);
+    return calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup, item.customOptions);
   };
 
   const subtotal = cart.reduce(
@@ -180,6 +180,17 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
                                 <span className="font-bold">{item.syrup!.name}</span>
                                 <span>(+{formatRupiah(item.syrup!.price)})</span>
                               </div>
+                            )}
+
+                            {item.customOptions && item.customOptions.length > 0 && (
+                              item.customOptions.map((co) => (
+                                <div key={co.groupId} className="text-[#00E5FF] flex items-center gap-1">
+                                  <Sparkles className="w-3 h-3 text-[#00E5FF]" />
+                                  <span className="text-slate-400">{co.groupName}:</span>
+                                  <span className="font-bold">{co.optionName}</span>
+                                  {co.price > 0 && <span>(+{formatRupiah(co.price)})</span>}
+                                </div>
+                              ))
                             )}
                           </div>
 

@@ -78,7 +78,7 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
 
   const subtotal = cart.reduce(
     (acc, item) =>
-      acc + calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup) * item.quantity,
+      acc + calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup, item.customOptions) * item.quantity,
     0
   );
   const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
@@ -379,7 +379,7 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
 
             <div className="flex flex-col gap-3">
               {cart.map((item, idx) => {
-                const unitPrice = calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup);
+                const unitPrice = calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup, item.customOptions);
                 const hasSize = item.size && item.size.name;
                 const hasTopping = item.topping && item.topping.name !== 'No Topping';
                 const hasSyrup = item.syrup && item.syrup.name !== 'No Syrup';
@@ -412,6 +412,13 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
                             <span className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono font-medium">
                               Syr: {item.syrup!.name} (+{formatRupiah(item.syrup!.price)})
                             </span>
+                          )}
+                          {item.customOptions && item.customOptions.length > 0 && (
+                            item.customOptions.map((co) => (
+                              <span key={co.groupId} className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono font-medium">
+                                {co.groupName}: {co.optionName}{co.price > 0 ? ` (+${formatRupiah(co.price)})` : ''}
+                              </span>
+                            ))
                           )}
                         </div>
                         {item.note && (

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useContent } from '../../context/ContentContext';
-import { MenuItem, MenuCategory, CustomizationOption, ProductSizeOption } from '../../types';
+import { MenuItem, MenuCategory, CustomizationOption, ProductSizeOption, CustomizationGroup, CustomOptionItem } from '../../types';
 import { initialLetonData } from '../../data/initialData';
 import { DEFAULT_SIZES, DEFAULT_MASTER_TOPPINGS, DEFAULT_MASTER_SYRUPS } from '../../data/addOnsData';
 import { ImageUploadField } from './ImageUploadField';
@@ -22,6 +22,7 @@ import {
   Droplet,
   Layers,
   Loader2,
+  Settings,
 } from 'lucide-react';
 
 export const MenuManager: React.FC = () => {
@@ -35,15 +36,18 @@ export const MenuManager: React.FC = () => {
     saveCustomOption,
     deleteCustomOption,
     saveMasterSizes,
+    saveCustomizationGroup,
+    deleteCustomizationGroup,
     showToast,
   } = useContent();
   const { menuCategories, menuItems } = data;
   const masterToppings = data.masterToppings || DEFAULT_MASTER_TOPPINGS;
   const masterSyrups = data.masterSyrups || DEFAULT_MASTER_SYRUPS;
   const masterSizes = data.masterSizes || DEFAULT_SIZES;
+  const customizationGroups = data.customizationGroups || [];
 
-  // Active tab: "items" | "categories" | "toppings" | "syrups" | "sizes"
-  const [activeSubTab, setActiveSubTab] = useState<'items' | 'categories' | 'toppings' | 'syrups' | 'sizes'>('items');
+  // Active sub-tab
+  const [activeSubTab, setActiveSubTab] = useState<string>('items');
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedCatFilter, setSelectedCatFilter] = useState('all');
 
@@ -52,6 +56,7 @@ export const MenuManager: React.FC = () => {
   const [isSavingCat, setIsSavingCat] = useState(false);
   const [isSavingCustom, setIsSavingCustom] = useState(false);
   const [isSavingSizes, setIsSavingSizes] = useState(false);
+  const [isSavingGroup, setIsSavingGroup] = useState(false);
 
   // Master sizes form
   const [sizeForm, setSizeForm] = useState<ProductSizeOption[]>(() => [...masterSizes]);
@@ -100,11 +105,26 @@ export const MenuManager: React.FC = () => {
     order: 1,
   });
 
+  // Dynamic Customization Group Modal state
+  const [isAddGroupModalOpen, setIsAddGroupModalOpen] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<CustomizationGroup | null>(null);
+  const [groupNameInput, setGroupNameInput] = useState('');
+
+  // Dynamic Customization Group Option Modal state
+  const [isGroupOptionModalOpen, setIsGroupOptionModalOpen] = useState(false);
+  const [activeGroupForOption, setActiveGroupForOption] = useState<CustomizationGroup | null>(null);
+  const [editingGroupOption, setEditingGroupOption] = useState<CustomOptionItem | null>(null);
+  const [groupOptionForm, setGroupOptionForm] = useState<{ name: string; price: number }>({
+    name: '',
+    price: 0,
+  });
+
   // Delete confirmation modal state
   const [deleteConfirm, setDeleteConfirm] = useState<{
-    type: 'item' | 'category' | 'topping' | 'syrup' | 'size';
+    type: 'item' | 'category' | 'topping' | 'syrup' | 'size' | 'group' | 'group_option';
     id: string;
     name: string;
+    groupId?: string;
   } | null>(null);
 
   // ----------------------------------------
@@ -128,6 +148,10 @@ export const MenuManager: React.FC = () => {
       availableToppingIds: masterToppings.filter((t) => t.isActive).map((t) => t.id),
       hasSyrup: true,
       availableSyrupIds: masterSyrups.filter((s) => s.isActive).map((s) => s.id),
+      customizations: (data.customizationGroups || []).map((g) => ({
+        groupId: g.id,
+        enabled: true,
+      })),
     });
     setIsItemModalOpen(true);
   };
@@ -142,6 +166,10 @@ export const MenuManager: React.FC = () => {
       availableToppingIds: item.availableToppingIds || masterToppings.filter((t) => t.isActive).map((t) => t.id),
       hasSyrup: item.hasSyrup !== false,
       availableSyrupIds: item.availableSyrupIds || masterSyrups.filter((s) => s.isActive).map((s) => s.id),
+      customizations: item.customizations || (data.customizationGroups || []).map((g) => ({
+        groupId: g.id,
+        enabled: true,
+      })),
     });
     setIsItemModalOpen(true);
   };
@@ -406,6 +434,132 @@ export const MenuManager: React.FC = () => {
   };
 
   // ----------------------------------------
+  // Dynamic Customization Group Handlers
+  // ----------------------------------------
+  const handleOpenAddGroup = () => {
+    setEditingGroup(null);
+    setGroupNameInput('');
+    setIsAddGroupModalOpen(true);
+  };
+
+  const handleOpenEditGroup = (group: CustomizationGroup) => {
+    setEditingGroup(group);
+    setGroupNameInput(group.name);
+    setIsAddGroupModalOpen(true);
+  };
+
+  const handleSaveGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = groupNameInput.trim();
+    if (!cleanName) {
+      showToast('Nama Customization wajib diisi.', 'error');
+      return;
+    }
+
+    setIsSavingGroup(true);
+    try {
+      const groupId = editingGroup ? editingGroup.id : `group_${Date.now()}`;
+      const existingOptions = editingGroup ? editingGroup.options : [];
+      const newGroup: CustomizationGroup = {
+        id: groupId,
+        name: cleanName,
+        options: existingOptions,
+      };
+
+      const success = await saveCustomizationGroup(newGroup);
+      if (success) {
+        showToast(`Customization "${cleanName}" berhasil disimpan!`, 'success');
+        setIsAddGroupModalOpen(false);
+        setActiveSubTab(`custom_group_${groupId}`);
+      }
+    } catch (err: any) {
+      showToast('Gagal menyimpan customization: ' + (err.message || 'Error tidak diketahui'), 'error');
+    } finally {
+      setIsSavingGroup(false);
+    }
+  };
+
+  const handleDeleteGroup = (groupId: string, groupName: string) => {
+    setDeleteConfirm({
+      type: 'group',
+      id: groupId,
+      name: groupName,
+    });
+  };
+
+  const handleOpenAddGroupOption = (group: CustomizationGroup) => {
+    setActiveGroupForOption(group);
+    setEditingGroupOption(null);
+    setGroupOptionForm({ name: '', price: 0 });
+    setIsGroupOptionModalOpen(true);
+  };
+
+  const handleOpenEditGroupOption = (group: CustomizationGroup, opt: CustomOptionItem) => {
+    setActiveGroupForOption(group);
+    setEditingGroupOption(opt);
+    setGroupOptionForm({ name: opt.name, price: opt.price });
+    setIsGroupOptionModalOpen(true);
+  };
+
+  const handleSaveGroupOption = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeGroupForOption) return;
+
+    const cleanName = groupOptionForm.name.trim();
+    if (!cleanName) {
+      showToast('Nama Pilihan wajib diisi.', 'error');
+      return;
+    }
+
+    setIsSavingGroup(true);
+    try {
+      const currentOptions = activeGroupForOption.options || [];
+      let updatedOptions: CustomOptionItem[] = [...currentOptions];
+
+      if (editingGroupOption) {
+        updatedOptions = updatedOptions.map((o) =>
+          o.id === editingGroupOption.id ? { ...o, name: cleanName, price: groupOptionForm.price } : o
+        );
+      } else {
+        const newOptId = `opt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        updatedOptions.push({
+          id: newOptId,
+          name: cleanName,
+          price: groupOptionForm.price,
+        });
+      }
+
+      const updatedGroup: CustomizationGroup = {
+        ...activeGroupForOption,
+        options: updatedOptions,
+      };
+
+      const success = await saveCustomizationGroup(updatedGroup);
+      if (success) {
+        showToast(`Pilihan "${cleanName}" (${formatRupiah(groupOptionForm.price)}) berhasil disimpan!`, 'success');
+        setIsGroupOptionModalOpen(false);
+      }
+    } catch (err: any) {
+      showToast('Gagal menyimpan pilihan customization: ' + (err.message || 'Error tidak diketahui'), 'error');
+    } finally {
+      setIsSavingGroup(false);
+    }
+  };
+
+  const handleDeleteGroupOption = (groupId: string, optionId: string) => {
+    const group = customizationGroups.find((g) => g.id === groupId);
+    const opt = group?.options?.find((o) => o.id === optionId);
+    if (group && opt) {
+      setDeleteConfirm({
+        type: 'group_option',
+        id: optionId,
+        name: opt.name,
+        groupId: groupId,
+      });
+    }
+  };
+
+  // ----------------------------------------
   // Delete Execution
   // ----------------------------------------
   const executeDelete = async () => {
@@ -424,6 +578,22 @@ export const MenuManager: React.FC = () => {
       const success = await saveMasterSizes(nextSizes);
       if (success) {
         showToast(`Size Cup "${deleteConfirm.name}" berhasil dihapus.`, 'info');
+      }
+    } else if (deleteConfirm.type === 'group') {
+      const success = await deleteCustomizationGroup(deleteConfirm.id);
+      if (success) {
+        showToast(`Customization "${deleteConfirm.name}" berhasil dihapus.`, 'info');
+        setActiveSubTab('items');
+      }
+    } else if (deleteConfirm.type === 'group_option' && deleteConfirm.groupId) {
+      const group = customizationGroups.find((g) => g.id === deleteConfirm.groupId);
+      if (group) {
+        const updatedOptions = (group.options || []).filter((o) => o.id !== deleteConfirm.id);
+        const updatedGroup = { ...group, options: updatedOptions };
+        const success = await saveCustomizationGroup(updatedGroup);
+        if (success) {
+          showToast(`Pilihan "${deleteConfirm.name}" berhasil dihapus.`, 'info');
+        }
       }
     }
 
@@ -511,6 +681,35 @@ export const MenuManager: React.FC = () => {
           >
             <Layers className="w-3.5 h-3.5" />
             <span>Size Cup ({masterSizes.length})</span>
+          </button>
+
+          {customizationGroups.map((group) => {
+            const tabKey = `custom_group_${group.id}`;
+            const isActive = activeSubTab === tabKey;
+            return (
+              <button
+                key={group.id}
+                type="button"
+                onClick={() => setActiveSubTab(tabKey)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  isActive
+                    ? 'bg-[#00E5FF] text-black shadow-md'
+                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-[#00E5FF]" />
+                <span>{group.name} ({group.options ? group.options.length : 0})</span>
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={handleOpenAddGroup}
+            className="px-3.5 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-colors cursor-pointer flex items-center gap-1.5 bg-[#00E5FF]/15 hover:bg-[#00E5FF]/25 border border-[#00E5FF]/40 text-[#00E5FF]"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ TAMBAH CUSTOMIZATION</span>
           </button>
         </div>
       </div>
@@ -963,6 +1162,109 @@ export const MenuManager: React.FC = () => {
         </div>
       )}
 
+      {/* SUBTAB DYNAMIC: CUSTOMIZATION GROUPS */}
+      {customizationGroups.map((group) => {
+        if (activeSubTab !== `custom_group_${group.id}`) return null;
+
+        return (
+          <div key={group.id} className="space-y-6 animate-fadeIn">
+            {/* Header for group */}
+            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#00E5FF]/10 text-[#00E5FF] text-[10px] font-mono font-bold uppercase tracking-wider mb-1">
+                  <Sparkles className="w-3 h-3 text-[#00E5FF]" />
+                  <span>KUSTOMISASI DINAMIS</span>
+                </div>
+                <h3 className="font-display font-black text-lg text-white uppercase tracking-tight">
+                  {group.name}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Kelola pilihan dan harga tambahan untuk {group.name}.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenEditGroup(group)}
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Edit Nama</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteGroup(group.id, group.name)}
+                  className="px-3 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 border border-rose-500/30 text-rose-300 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus Customization</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddGroupOption(group)}
+                  className="px-4 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-1.5 cursor-pointer shadow-md shadow-[#00E5FF]/20 transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Tambah Pilihan</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Options List */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden">
+              {(!group.options || group.options.length === 0) ? (
+                <div className="p-12 text-center text-slate-500">
+                  <Sparkles className="w-10 h-10 mx-auto mb-2 opacity-50 text-[#00E5FF]" />
+                  <p className="text-sm font-medium">Belum ada pilihan untuk customization ini.</p>
+                  <p className="text-xs mt-1">Klik "+ Tambah Pilihan" untuk menambahkan opsi baru (misal: Normal Rp0, Extra Sugar Rp2.000).</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/80">
+                  {group.options.map((opt) => (
+                    <div
+                      key={opt.id}
+                      className="p-4 sm:p-5 flex items-center justify-between gap-4 hover:bg-slate-800/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center text-[#00E5FF] font-bold font-mono text-sm">
+                          {opt.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-sm text-white">{opt.name}</h4>
+                          <p className="font-mono text-xs text-[#00E5FF] font-bold mt-0.5">
+                            {opt.price === 0 ? 'Rp0 (Gratis)' : `+${formatRupiah(opt.price)}`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditGroupOption(group, opt)}
+                          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-mono font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteGroupOption(group.id, opt.id)}
+                          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 text-xs font-mono font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Hapus</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
       {/* ------------------------------------------- */}
       {/* MODAL: ADD / EDIT MENU ITEM                 */}
       {/* ------------------------------------------- */}
@@ -1280,6 +1582,96 @@ export const MenuManager: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                {/* Dynamic Customization Groups */}
+                {customizationGroups.map((group) => {
+                  const currentSetting = itemForm.customizations?.find((c) => c.groupId === group.id);
+                  const isGroupEnabled = currentSetting ? currentSetting.enabled !== false : false;
+
+                  return (
+                    <div key={group.id} className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            id={`item-has-custom-${group.id}`}
+                            checked={isGroupEnabled}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              const existingCustoms = itemForm.customizations || [];
+                              const idx = existingCustoms.findIndex((c) => c.groupId === group.id);
+                              let updated = [...existingCustoms];
+                              if (idx >= 0) {
+                                updated[idx] = { ...updated[idx], enabled: checked };
+                              } else {
+                                updated.push({ groupId: group.id, enabled: checked });
+                              }
+                              setItemForm({ ...itemForm, customizations: updated });
+                            }}
+                            className="w-4 h-4 rounded text-cyan-400 bg-slate-950 border-slate-800 focus:ring-0"
+                          />
+                          <label
+                            htmlFor={`item-has-custom-${group.id}`}
+                            className="text-xs text-white font-bold cursor-pointer"
+                          >
+                            Produk Menggunakan {group.name}
+                          </label>
+                        </div>
+                      </div>
+
+                      {isGroupEnabled && (
+                        <div className="pt-2 border-t border-slate-800/80 space-y-2.5">
+                          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                            {group.options && group.options.length > 0 ? (
+                              group.options.map((opt) => (
+                                <div
+                                  key={opt.id}
+                                  className="flex items-center justify-between p-2 rounded-lg bg-slate-950 border border-slate-800/80 text-xs"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-white">{opt.name}</span>
+                                    <span className="font-mono text-cyan-400 font-bold">
+                                      {opt.price === 0 ? 'Rp0' : formatRupiah(opt.price)}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditGroupOption(group, opt)}
+                                      className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Edit2 className="w-3 h-3" />
+                                      <span>Edit</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteGroupOption(group.id, opt.id)}
+                                      className="px-2 py-1 rounded bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                      <span>Hapus</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-slate-500 italic p-1">Belum ada pilihan untuk {group.name}.</p>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenAddGroupOption(group)}
+                            className="px-3 py-1.5 rounded-lg bg-[#00E5FF]/10 hover:bg-[#00E5FF]/20 border border-[#00E5FF]/30 text-[#00E5FF] text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>+ Tambah Pilihan {group.name}</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="flex items-center gap-3 pt-2">
@@ -1570,6 +1962,161 @@ export const MenuManager: React.FC = () => {
                     <>
                       <Save className="w-4 h-4" />
                       <span>Simpan Size Cup</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------- */}
+      {/* MODAL: ADD / EDIT DYNAMIC CUSTOMIZATION GROUP */}
+      {/* ------------------------------------------- */}
+      {isAddGroupModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <h3 className="font-display font-black text-xl text-white uppercase tracking-tight">
+                {editingGroup ? 'EDIT CUSTOMIZATION' : 'TAMBAH CUSTOMIZATION BARU'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsAddGroupModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveGroup} className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
+                  Nama Customization
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={groupNameInput}
+                  onChange={(e) => setGroupNameInput(e.target.value)}
+                  placeholder="Contoh: Level Gula, Suhu, Ice Level, Ekstra Shot"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Customization baru ini akan otomatis muncul di form Tambah/Edit Menu untuk setiap produk.
+                </p>
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddGroupModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingGroup}
+                  className="px-6 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] disabled:opacity-50 text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer shadow-lg shadow-[#00E5FF]/20"
+                >
+                  {isSavingGroup ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Simpan Customization</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------- */}
+      {/* MODAL: ADD / EDIT GROUP OPTION              */}
+      {/* ------------------------------------------- */}
+      {isGroupOptionModalOpen && activeGroupForOption && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <h3 className="font-display font-black text-xl text-white uppercase tracking-tight">
+                {editingGroupOption
+                  ? `EDIT PILIHAN ${activeGroupForOption.name.toUpperCase()}`
+                  : `TAMBAH PILIHAN ${activeGroupForOption.name.toUpperCase()}`}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsGroupOptionModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveGroupOption} className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
+                  Nama Pilihan
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={groupOptionForm.name}
+                  onChange={(e) => setGroupOptionForm({ ...groupOptionForm, name: e.target.value })}
+                  placeholder="Contoh: Normal, Less Sugar, Extra Sugar"
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono font-semibold tracking-wider text-slate-300 uppercase mb-2">
+                  Harga Tambahan (IDR)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  step={1000}
+                  value={groupOptionForm.price}
+                  onChange={(e) =>
+                    setGroupOptionForm({ ...groupOptionForm, price: parseInt(e.target.value) || 0 })
+                  }
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Isi 0 untuk pilihan tanpa biaya tambahan (misal: Normal, Less Sugar).
+                </p>
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsGroupOptionModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingGroup}
+                  className="px-6 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#3cf0ff] disabled:opacity-50 text-slate-950 font-display font-bold text-xs tracking-wider uppercase flex items-center gap-2 cursor-pointer shadow-lg shadow-[#00E5FF]/20"
+                >
+                  {isSavingGroup ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Simpan Pilihan</span>
                     </>
                   )}
                 </button>

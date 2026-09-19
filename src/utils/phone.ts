@@ -46,23 +46,4 @@ export function isValidIndonesianPhone(phone: string): boolean {
   return normalized.startsWith('+628') && normalized.length >= 12 && normalized.length <= 16;
 }
 
-/**
- * Generates a stable, unique internal email address for Supabase Email + Password Auth.
- * Format: cust<digits_hp>@letoncoffee.com (strictly no underscores, no spaces, digits only).
- * Never shown to or requested from the customer.
- */
-export function generateCustomerInternalEmail(phone: string): string {
-  const digits = (phone || '').replace(/[^0-9]/g, '');
-  const cleanDigits = digits.startsWith('0') ? '62' + digits.slice(1) : digits;
-  return `cust${cleanDigits}@letoncoffee.com`;
-}
 
-/**
- * Legacy internal email generator with underscore (cust_<digits_hp>@letoncoffee.com).
- * Used as fallback for existing test accounts if needed.
- */
-export function generateLegacyCustomerInternalEmail(phone: string): string {
-  const digits = (phone || '').replace(/[^0-9]/g, '');
-  const cleanDigits = digits.startsWith('0') ? '62' + digits.slice(1) : digits;
-  return `cust_${cleanDigits}@letoncoffee.com`;
-}

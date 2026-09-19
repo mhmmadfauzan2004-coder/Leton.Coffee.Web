@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CustomerProfile, CustomerOrder } from '../../../types';
-import { getSupabase, updateCustomerProfile } from '../../../utils/supabase';
+import { getSupabase, updateCustomerProfile, getCustomerSessionToken } from '../../../utils/supabase';
 import { User, Calendar, History, Save, LogOut, RefreshCw, Clock, Coffee, AlertCircle, CheckCircle, Search } from 'lucide-react';
 
 interface CustomerProfileTabProps {
@@ -22,29 +22,44 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Fetch customer orders from Supabase (Primary public.orders table)
+  // Fetch customer orders from Supabase (Primary public.orders table / RPC)
   const loadOrders = async () => {
     setLoadingOrders(true);
     try {
       const client = getSupabase();
-      const { data, error } = await client
-        .from('orders')
-        .select('*')
-        .eq('user_id', profile.userId)
-        .order('created_at', { ascending: false });
+      const token = getCustomerSessionToken();
+      let ordersData: any[] | null = null;
 
-      if (error) {
-        console.warn('Error fetching customer orders:', error.message);
-        // Fallback: local history strictly for this authenticated userId
-        const localHist = localStorage.getItem('leton_orders_history');
-        if (localHist) {
-          const parsed: CustomerOrder[] = JSON.parse(localHist);
-          const filtered = parsed.filter(o => o.userId === profile.userId);
-          setOrders(filtered);
+      // 1. Try secure session RPC
+      if (token) {
+        try {
+          const { data: rpcOrders, error: rpcErr } = await client.rpc('customer_get_my_orders', {
+            p_token: token,
+          });
+          if (!rpcErr && Array.isArray(rpcOrders)) {
+            ordersData = rpcOrders;
+          }
+        } catch {}
+      }
+
+      // 2. Direct query fallback
+      if (!ordersData) {
+        const { data, error } = await client
+          .from('orders')
+          .select('*')
+          .eq('user_id', profile.userId)
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          ordersData = data;
+        } else if (error) {
+          console.warn('Error fetching customer orders:', error.message);
         }
-      } else if (data) {
+      }
+
+      if (ordersData) {
         // Map database table fields to CamelCase TypeScript CustomerOrder properties
-        const mappedOrders: CustomerOrder[] = data.map((o: any) => ({
+        const mappedOrders: CustomerOrder[] = ordersData.map((o: any) => ({
           id: o.id,
           orderNumber: o.order_number || o.orderNumber || 'LTN-????',
           outletId: o.outlet_id || o.outletId || '',

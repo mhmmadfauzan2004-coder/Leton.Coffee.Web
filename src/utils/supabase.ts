@@ -3,9 +3,15 @@ import { LetonData, CustomerProfile } from '../types';
 import { initialLetonData } from '../data/initialData';
 import { sanitizeLoadedData } from './storage';
 import { stripHeavyBase64Images } from './safeStorage';
-import { normalizeIndonesianPhone, isValidIndonesianPhone, generateCustomerInternalEmail, generateLegacyCustomerInternalEmail } from './phone';
+import {
+  normalizeIndonesianPhone,
+  isValidIndonesianPhone,
+} from './phone';
 
-export { normalizeIndonesianPhone, isValidIndonesianPhone, generateCustomerInternalEmail, generateLegacyCustomerInternalEmail };
+export {
+  normalizeIndonesianPhone,
+  isValidIndonesianPhone,
+};
 
 // 1. Supabase Credentials Configuration
 export const getSupabaseUrl = (): string => {
@@ -408,15 +414,23 @@ export async function updateSupabaseAuthPassword(newPassword: string): Promise<{
 }
 
 /**
- * 8. Customer Authentication & Profiles (Direct Supabase Auth from Client)
- * Eliminates Express/Cloud Run/external API dependency for customer authentication.
- * Uses native Supabase Auth with Phone + Password and public.profiles persistence.
+ * 8. Customer Authentication & Profiles (Standalone Customer Auth)
+ * Completely separate from Admin/Outlet Supabase Auth.
+ * Uses secure server-side session tokens, bcrypt password hashing, and PostgreSQL tables (customers, customer_sessions).
+ * No fake emails, no SMS/OTP, no phone auth services.
  */
+export const CUSTOMER_TOKEN_KEY = 'leton_customer_token';
+export const CUSTOMER_PROFILE_KEY = 'leton_customer_profile';
+
+export function getCustomerSessionToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(CUSTOMER_TOKEN_KEY);
+}
 
 /**
- * Register a new customer directly via Supabase Email + Password Auth internally.
- * Generates a stable and unique internal email identity based on customer phone,
- * registers the user with Supabase Auth, and stores profile in public.profiles.
+ * Register a new customer with Nama Lengkap, Nomor HP, Tanggal Lahir, and Password.
+ * Password is cryptographically hashed with bcrypt on the server-side.
+ * Never generates or uses fake emails.
  */
 export async function registerCustomer(
   namaLengkap: string,
@@ -425,16 +439,15 @@ export async function registerCustomer(
   password: string
 ): Promise<{ success: boolean; profile?: CustomerProfile; error?: string }> {
   try {
-    const client = getSupabase();
     const cleanNama = (namaLengkap || '').trim();
-    const normalizedPhone = normalizeIndonesianPhone(nomorHp);
+    const cleanPhoneNumber = (nomorHp || '').replace(/[^0-9]/g, '');
 
-    // 1. Basic validation
-    if (!cleanNama) {
-      return { success: false, error: 'Nama Lengkap wajib diisi.' };
+    // Basic client-side validation
+    if (!cleanNama || cleanNama.length < 2) {
+      return { success: false, error: 'Nama Lengkap wajib diisi (minimal 2 karakter).' };
     }
-    if (!normalizedPhone || !isValidIndonesianPhone(nomorHp)) {
-      return { success: false, error: 'Nomor HP tidak valid.' };
+    if (!cleanPhoneNumber || cleanPhoneNumber.length < 9) {
+      return { success: false, error: 'Nomor Handphone minimal 9 digit angka.' };
     }
     if (!tanggalLahir) {
       return { success: false, error: 'Tanggal Lahir wajib diisi.' };
@@ -443,414 +456,246 @@ export async function registerCustomer(
       return { success: false, error: 'Password harus minimal 6 karakter.' };
     }
 
-    // 2. Uniqueness check for Full Name via secure RPC check_customer_name_exists or single row check
-    let nameAlreadyUsed = false;
-    try {
-      const { data: rpcNameExists, error: rpcErr } = await client.rpc('check_customer_name_exists', {
-        p_nama: cleanNama,
-      });
-      if (!rpcErr && typeof rpcNameExists === 'boolean') {
-        nameAlreadyUsed = rpcNameExists;
-      }
-    } catch {}
+    const client = getSupabase();
 
-    if (!nameAlreadyUsed) {
-      try {
-        const { data: existingName } = await client
-          .from('profiles')
-          .select('id')
-          .ilike('nama_lengkap', cleanNama)
-          .limit(1)
-          .maybeSingle();
-
-        if (existingName) {
-          nameAlreadyUsed = true;
-        }
-      } catch {}
-    }
-
-    if (nameAlreadyUsed) {
-      return { success: false, error: 'Nama sudah digunakan.' };
-    }
-
-    // 3. Uniqueness check for Phone in public.profiles
-    const rawDigits = (nomorHp || '').replace(/[^0-9]/g, '');
-    let phoneAlreadyUsed = false;
-    try {
-      const { data: rpcPhoneExists, error: rpcPhoneErr } = await client.rpc('check_customer_phone_exists', {
-        p_phone: normalizedPhone,
-      });
-      if (!rpcPhoneErr && typeof rpcPhoneExists === 'boolean') {
-        phoneAlreadyUsed = rpcPhoneExists;
-      }
-    } catch {}
-
-    if (!phoneAlreadyUsed) {
-      try {
-        const { data: existingPhone } = await client
-          .from('profiles')
-          .select('id')
-          .or(`nomor_hp.eq.${normalizedPhone},nomor_hp.eq.${rawDigits}`)
-          .limit(1)
-          .maybeSingle();
-
-        if (existingPhone) {
-          phoneAlreadyUsed = true;
-        }
-      } catch {}
-    }
-
-    if (phoneAlreadyUsed) {
-      return { success: false, error: 'Nomor HP sudah digunakan.' };
-    }
-
-    // 4. Generate stable, unique internal email identity for Supabase Email + Password Auth
-    // Never shown to or requested from the customer; uses standard domain compatible with Supabase
-    const internalEmail = generateCustomerInternalEmail(normalizedPhone);
-
-    // 5. Supabase Auth signup directly from client using internal email and password
-    const { data: signUpData, error: signUpError } = await client.auth.signUp({
-      email: internalEmail,
-      password: password,
-      options: {
-        data: {
-          nama_lengkap: cleanNama,
-          nomor_hp: normalizedPhone,
-          tanggal_lahir: tanggalLahir,
-        },
-      },
+    // Call secure PostgreSQL function (SECURITY DEFINER)
+    const { data, error } = await client.rpc('customer_register', {
+      p_nama: cleanNama,
+      p_phone: cleanPhoneNumber,
+      p_birth_date: tanggalLahir,
+      p_password: password,
     });
 
-    if (signUpError || !signUpData.user) {
-      const errMsg = (signUpError?.message || '').toLowerCase();
-      if (errMsg.includes('already') || errMsg.includes('registered') || errMsg.includes('exists')) {
-        return { success: false, error: 'Nomor HP sudah digunakan.' };
-      }
-      return { success: false, error: signUpError?.message || 'Gagal membuat akun.' };
+    if (error) {
+      console.error('[Customer Register RPC Error]:', error);
+      return {
+        success: false,
+        error: error.message || 'Pendaftaran gagal. Silakan periksa kembali data Anda.',
+      };
     }
 
-    const userId = signUpData.user.id;
-
-    // 6. Store customer profile in public.profiles linked to auth.users(id)
-    const profilePayload: Record<string, any> = {
-      user_id: userId,
-      nama_lengkap: cleanNama,
-      nomor_hp: normalizedPhone,
-      tanggal_lahir: tanggalLahir,
-      email_internal: internalEmail,
-    };
-
-    let insertedRow: any = null;
-    const { data: insertData, error: insertErr } = await client
-      .from('profiles')
-      .insert(profilePayload)
-      .select()
-      .single();
-
-    if (insertErr) {
-      // Check for unique key constraint violations
-      const msg = (insertErr.message + ' ' + (insertErr.details || '')).toLowerCase();
-      if (insertErr.code === '23505' || msg.includes('duplicate') || msg.includes('unique')) {
-        if (msg.includes('nama_lengkap')) {
-          return { success: false, error: 'Nama sudah digunakan.' };
-        }
-        if (msg.includes('nomor_hp') || msg.includes('phone') || msg.includes('email')) {
-          return { success: false, error: 'Nomor HP sudah digunakan.' };
-        }
-      }
-      console.error('[Supabase Register] Profile insert error:', insertErr);
-      return { success: false, error: 'Gagal membuat akun.' };
-    } else {
-      insertedRow = insertData;
+    if (!data || !data.success) {
+      return {
+        success: false,
+        error: data?.error || 'Pendaftaran gagal. Silakan periksa kembali data Anda.',
+      };
     }
 
-    // 7. Ensure active session on client via Email + Password sign-in
-    if (!signUpData.session) {
-      const { error: signInErr } = await client.auth.signInWithPassword({
-        email: internalEmail,
-        password: password,
-      });
-      if (signInErr) {
-        console.warn('Auto sign-in after register note:', signInErr.message);
-        if (signInErr.message?.toLowerCase().includes('email not confirmed')) {
-          console.warn('Supabase Auth Info: "Confirm email" is active in Supabase dashboard. Disable "Confirm email" in Auth -> Providers -> Email or run the SQL trigger.');
-        }
+    const customer = data.customer;
+    const sessionToken = data.token;
+
+    // Persist session token and profile safely
+    if (typeof window !== 'undefined') {
+      if (sessionToken) {
+        localStorage.setItem(CUSTOMER_TOKEN_KEY, sessionToken);
+      }
+      if (customer) {
+        localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(customer));
       }
     }
 
     const profile: CustomerProfile = {
-      id: insertedRow?.id || userId,
-      userId: userId,
-      namaLengkap: cleanNama,
-      nomorHp: normalizedPhone,
-      tanggalLahir: tanggalLahir,
-      createdAt: insertedRow?.created_at || new Date().toISOString(),
-      updatedAt: insertedRow?.updated_at || new Date().toISOString(),
+      id: customer.id,
+      userId: customer.userId || customer.id,
+      namaLengkap: customer.namaLengkap,
+      nomorHp: customer.nomorHp,
+      tanggalLahir: customer.tanggalLahir,
+      createdAt: customer.createdAt || new Date().toISOString(),
+      updatedAt: customer.updatedAt || new Date().toISOString(),
     };
 
     return { success: true, profile };
   } catch (err: any) {
-    console.error('[Supabase Register] Exception:', err);
-    return { success: false, error: err?.message || 'Gagal membuat akun.' };
+    console.error('[Customer Register] Exception:', err);
+    return { success: false, error: err?.message || 'Terjadi kesalahan sistem saat mendaftar.' };
   }
 }
 
 /**
- * Login customer directly via Supabase Auth using Email + Password under the hood.
- * Looks up internal email identity by nama_lengkap using a secure database mechanism (RPC),
- * and authenticates via signInWithPassword({ email: internalEmail, password }).
- * Supports both new format (cust<phone>@letoncoffee.com) and legacy format (cust_<phone>@letoncoffee.com).
- * 
- * Keamanan:
- * - Menggunakan database RPC `get_customer_email_by_name` (SECURITY DEFINER)
- * - Hanya menerima nama yang dicari dan mengembalikan string email internal khusus nama tersebut
- * - Data pelanggan lain TIDAK PERNAH terekspos ke browser
+ * Customer Login using Nama Lengkap and Password.
+ * Generates and returns a secure server-side session token upon bcrypt verification.
  */
 export async function loginCustomer(
-  namaLengkap: string,
+  inputNamaOrPhone: string,
   password: string
 ): Promise<{ success: boolean; profile?: CustomerProfile; error?: string }> {
   try {
-    const client = getSupabase();
-    const cleanNama = (namaLengkap || '').trim();
+    const rawInput = (inputNamaOrPhone || '').trim();
 
-    if (!cleanNama) {
+    if (!rawInput) {
       return { success: false, error: 'Nama Lengkap wajib diisi.' };
     }
     if (!password) {
       return { success: false, error: 'Password wajib diisi.' };
     }
 
-    // 1. Secure lookup: find internal email identity belonging to this exact full name
-    let foundEmail: string | null = null;
-    let foundPhoneFallback: string | null = null;
+    const client = getSupabase();
 
-    // A. Primary: call secure RPC get_customer_email_by_name
-    try {
-      const { data: rpcEmail, error: rpcErr } = await client.rpc('get_customer_email_by_name', {
-        p_nama: cleanNama,
-      });
-      if (!rpcErr && typeof rpcEmail === 'string' && rpcEmail.trim()) {
-        foundEmail = rpcEmail.trim();
-      }
-    } catch (rpcEx) {
-      console.warn('[Supabase Login] RPC email lookup exception:', rpcEx);
-    }
-
-    // B. Secondary RPC: if old get_customer_phone_by_name is deployed
-    if (!foundEmail) {
-      try {
-        const { data: rpcPhone, error: rpcPhoneErr } = await client.rpc('get_customer_phone_by_name', {
-          p_nama: cleanNama,
-        });
-        if (!rpcPhoneErr && typeof rpcPhone === 'string' && rpcPhone.trim()) {
-          foundPhoneFallback = rpcPhone.trim();
-          foundEmail = generateCustomerInternalEmail(rpcPhone.trim());
-        }
-      } catch {}
-    }
-
-    // C. Fallback direct lookup for this specific name only
-    if (!foundEmail) {
-      try {
-        const { data: row } = await client
-          .from('profiles')
-          .select('email_internal, nomor_hp')
-          .ilike('nama_lengkap', cleanNama)
-          .limit(1)
-          .maybeSingle();
-
-        if (row?.email_internal && row.email_internal.trim()) {
-          foundEmail = row.email_internal.trim();
-        } else if (row?.nomor_hp) {
-          foundPhoneFallback = row.nomor_hp;
-          foundEmail = generateCustomerInternalEmail(row.nomor_hp);
-        }
-      } catch (fbErr) {
-        console.warn('[Supabase Login] Direct lookup fallback note:', fbErr);
-      }
-    }
-
-    if (!foundEmail) {
-      return { success: false, error: 'Nama tidak ditemukan.' };
-    }
-
-    // 2. Direct Supabase Auth Email + Password sign-in from client
-    let { data: signInData, error: signInError } = await client.auth.signInWithPassword({
-      email: foundEmail,
-      password: password,
+    // Call secure PostgreSQL function (SECURITY DEFINER)
+    const { data, error } = await client.rpc('customer_login', {
+      p_nama: rawInput,
+      p_password: password,
     });
 
-    // 2a. Fallback: If failed, try alternative internal email format (cust_ vs cust) for backward compatibility
-    if (signInError || !signInData?.user) {
-      let altEmail: string | null = null;
-      if (foundEmail.startsWith('cust_')) {
-        altEmail = foundEmail.replace('cust_', 'cust');
-      } else if (foundEmail.startsWith('cust')) {
-        altEmail = foundEmail.replace('cust', 'cust_');
-      }
-
-      if (altEmail) {
-        const { data: altSignIn, error: altErr } = await client.auth.signInWithPassword({
-          email: altEmail,
-          password: password,
-        });
-        if (!altErr && altSignIn?.user) {
-          signInData = altSignIn;
-          signInError = null;
-
-          // Migrate user account to the modern format without underscore (cust<digits>@letoncoffee.com)
-          const modernEmail = generateCustomerInternalEmail(foundPhoneFallback || foundEmail);
-          try {
-            await client.auth.updateUser({ email: modernEmail });
-            await client.from('profiles').update({ email_internal: modernEmail }).eq('user_id', altSignIn.user.id);
-          } catch {}
-        }
-      }
+    if (error) {
+      console.error('[Customer Login RPC Error]:', error);
+      return { success: false, error: 'Nama Lengkap atau Password salah.' };
     }
 
-    // 2b. Fallback: Check if user was registered with legacy phone auth
-    if (signInError || !signInData?.user) {
-      if (foundPhoneFallback) {
-        const normalizedPhone = normalizeIndonesianPhone(foundPhoneFallback);
-        const { data: phoneSignInData, error: phoneSignInError } = await client.auth.signInWithPassword({
-          phone: normalizedPhone,
-          password: password,
-        });
-
-        if (!phoneSignInError && phoneSignInData?.user) {
-          signInData = phoneSignInData;
-          signInError = null;
-
-          // Seamlessly upgrade legacy phone user to modern email auth
-          const modernEmail = generateCustomerInternalEmail(normalizedPhone);
-          try {
-            await client.auth.updateUser({ email: modernEmail });
-            await client.from('profiles').update({ email_internal: modernEmail }).eq('user_id', phoneSignInData.user.id);
-          } catch {}
-        }
-      }
+    if (!data || !data.success) {
+      return {
+        success: false,
+        error: data?.error || 'Nama Lengkap atau Password salah.',
+      };
     }
 
-    if (signInError || !signInData?.user) {
-      const msg = (signInError?.message || '').toLowerCase();
-      if (msg.includes('invalid') || msg.includes('credentials') || msg.includes('password') || msg.includes('grant')) {
-        return { success: false, error: 'Password salah.' };
-      }
-      if (msg.includes('email not confirmed')) {
-        return { success: false, error: 'Email belum diverifikasi di Supabase. Nonaktifkan "Confirm email" di Dashboard Supabase Auth -> Providers -> Email.' };
-      }
-      return { success: false, error: 'Gagal login.' };
-    }
+    const customer = data.customer;
+    const sessionToken = data.token;
 
-    // 3. Fetch customer profile for authenticated user
-    const { data: profileRow } = await client
-      .from('profiles')
-      .select('*')
-      .eq('user_id', signInData.user.id)
-      .maybeSingle();
+    if (typeof window !== 'undefined') {
+      if (sessionToken) {
+        localStorage.setItem(CUSTOMER_TOKEN_KEY, sessionToken);
+      }
+      if (customer) {
+        localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(customer));
+      }
+    }
 
     const profile: CustomerProfile = {
-      id: profileRow?.id || signInData.user.id,
-      userId: signInData.user.id,
-      namaLengkap: profileRow?.nama_lengkap || cleanNama,
-      nomorHp: profileRow?.nomor_hp ? normalizeIndonesianPhone(profileRow.nomor_hp) : '',
-      tanggalLahir: profileRow?.tanggal_lahir || '',
-      createdAt: profileRow?.created_at || new Date().toISOString(),
-      updatedAt: profileRow?.updated_at || new Date().toISOString(),
+      id: customer.id,
+      userId: customer.userId || customer.id,
+      namaLengkap: customer.namaLengkap,
+      nomorHp: customer.nomorHp,
+      tanggalLahir: customer.tanggalLahir,
+      createdAt: customer.createdAt || new Date().toISOString(),
+      updatedAt: customer.updatedAt || new Date().toISOString(),
     };
 
     return { success: true, profile };
   } catch (err: any) {
-    console.error('[Supabase Login] Exception:', err);
-    return { success: false, error: 'Gagal login.' };
+    console.error('[Customer Login] Exception:', err);
+    return { success: false, error: 'Nama Lengkap atau Password salah.' };
   }
 }
 
 /**
- * Retrieve current customer profile from active Supabase Auth session.
+ * Retrieve current customer profile from active server-side session token.
+ * Token is verified on the server against public.customer_sessions.
  */
 export async function getCurrentCustomerProfile(): Promise<CustomerProfile | null> {
+  if (typeof window === 'undefined') return null;
+
+  const token = localStorage.getItem(CUSTOMER_TOKEN_KEY);
+  if (!token) return null;
+
   try {
     const client = getSupabase();
-    const { data: { user } } = await client.auth.getUser();
-    if (!user) return null;
+    const { data, error } = await client.rpc('customer_get_session', {
+      p_token: token,
+    });
 
-    const { data: profileRow, error } = await client
-      .from('profiles')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    if (error || !data || !data.success || !data.customer) {
+      // Session expired or invalid
+      localStorage.removeItem(CUSTOMER_TOKEN_KEY);
+      localStorage.removeItem(CUSTOMER_PROFILE_KEY);
+      return null;
+    }
 
-    if (error || !profileRow) return null;
+    const customer = data.customer;
+    localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(customer));
 
     return {
-      id: profileRow.id,
-      userId: profileRow.user_id,
-      namaLengkap: profileRow.nama_lengkap,
-      nomorHp: normalizeIndonesianPhone(profileRow.nomor_hp),
-      tanggalLahir: profileRow.tanggal_lahir,
-      createdAt: profileRow.created_at,
-      updatedAt: profileRow.updated_at,
+      id: customer.id,
+      userId: customer.userId || customer.id,
+      namaLengkap: customer.namaLengkap,
+      nomorHp: customer.nomorHp,
+      tanggalLahir: customer.tanggalLahir,
+      createdAt: customer.createdAt || new Date().toISOString(),
+      updatedAt: customer.updatedAt || new Date().toISOString(),
     };
   } catch {
+    // In case of transient offline, fallback to cached profile if available
+    try {
+      const cached = localStorage.getItem(CUSTOMER_PROFILE_KEY);
+      if (cached) {
+        return JSON.parse(cached) as CustomerProfile;
+      }
+    } catch {}
     return null;
   }
 }
 
 /**
- * Sign out customer session directly via Supabase Auth.
+ * Sign out customer by revoking the server-side session token.
  */
 export async function logoutCustomer(): Promise<void> {
-  try {
-    const client = getSupabase();
-    await client.auth.signOut();
-  } catch (err) {
-    console.warn('logoutCustomer error:', err);
+  if (typeof window === 'undefined') return;
+
+  const token = localStorage.getItem(CUSTOMER_TOKEN_KEY);
+  if (token) {
+    try {
+      const client = getSupabase();
+      await client.rpc('customer_logout', { p_token: token });
+    } catch (err) {
+      console.warn('Customer logout RPC notice:', err);
+    }
   }
+
+  localStorage.removeItem(CUSTOMER_TOKEN_KEY);
+  localStorage.removeItem(CUSTOMER_PROFILE_KEY);
 }
 
 /**
- * Update customer profile in public.profiles.
+ * Update customer profile (Nama Lengkap & Tanggal Lahir) via server-side session.
  */
 export async function updateCustomerProfile(
   namaLengkap: string,
   tanggalLahir: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; profile?: CustomerProfile }> {
+  if (typeof window === 'undefined') return { success: false, error: 'Browser environment required.' };
+
+  const token = localStorage.getItem(CUSTOMER_TOKEN_KEY);
+  if (!token) {
+    return { success: false, error: 'Silakan masuk terlebih dahulu.' };
+  }
+
+  const cleanNama = (namaLengkap || '').trim();
+  if (!cleanNama) {
+    return { success: false, error: 'Nama Lengkap wajib diisi.' };
+  }
+
   try {
     const client = getSupabase();
-    const { data: { user } } = await client.auth.getUser();
-    if (!user) return { success: false, error: 'Silakan masuk terlebih dahulu.' };
-
-    const cleanNama = namaLengkap.trim();
-    if (!cleanNama) return { success: false, error: 'Nama lengkap wajib diisi.' };
-
-    // Check if name is taken by other user
-    const { data: otherUser } = await client
-      .from('profiles')
-      .select('id')
-      .eq('nama_lengkap', cleanNama)
-      .neq('user_id', user.id)
-      .maybeSingle();
-
-    if (otherUser) {
-      return { success: false, error: 'Nama sudah digunakan.' };
-    }
-
-    const { error } = await client
-      .from('profiles')
-      .update({
-        nama_lengkap: cleanNama,
-        tanggal_lahir: tanggalLahir,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', user.id);
+    const { data, error } = await client.rpc('customer_update_profile', {
+      p_token: token,
+      p_nama: cleanNama,
+      p_birth_date: tanggalLahir,
+    });
 
     if (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message || 'Gagal mengubah profil.' };
     }
 
-    return { success: true };
+    if (!data || !data.success) {
+      return { success: false, error: data?.error || 'Gagal mengubah profil.' };
+    }
+
+    const customer = data.customer;
+    if (customer) {
+      localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(customer));
+    }
+
+    const profile: CustomerProfile = {
+      id: customer.id,
+      userId: customer.userId || customer.id,
+      namaLengkap: customer.namaLengkap,
+      nomorHp: customer.nomorHp,
+      tanggalLahir: customer.tanggalLahir,
+      createdAt: customer.createdAt || new Date().toISOString(),
+      updatedAt: customer.updatedAt || new Date().toISOString(),
+    };
+
+    return { success: true, profile };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Gagal mengubah profil.' };
   }

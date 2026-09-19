@@ -422,6 +422,145 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ success: true });
 });
 
+// ==========================================
+// 8b. CUSTOMER AUTHENTICATION (Standalone Server Session)
+// No fake emails, no Supabase Email/Phone Auth, secure bcrypt + session tokens.
+// ==========================================
+
+// Register Customer
+app.post('/api/customer/register', async (req, res) => {
+  try {
+    const { namaLengkap, nomorHp, tanggalLahir, password } = req.body;
+    const cleanNama = (namaLengkap || '').trim();
+    const cleanPhone = (nomorHp || '').replace(/[^0-9]/g, '');
+
+    if (!cleanNama || cleanNama.length < 2) {
+      return res.status(400).json({ success: false, error: 'Nama Lengkap wajib diisi (minimal 2 karakter).' });
+    }
+    if (!cleanPhone || cleanPhone.length < 9) {
+      return res.status(400).json({ success: false, error: 'Nomor Handphone minimal 9 digit angka.' });
+    }
+    if (!tanggalLahir) {
+      return res.status(400).json({ success: false, error: 'Tanggal Lahir wajib diisi.' });
+    }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password harus minimal 6 karakter.' });
+    }
+
+    const { data, error } = await supabase.rpc('customer_register', {
+      p_nama: cleanNama,
+      p_phone: cleanPhone,
+      p_birth_date: tanggalLahir,
+      p_password: password,
+    });
+
+    if (error) {
+      console.error('[API customer_register RPC error]:', error);
+      return res.status(400).json({ success: false, error: error.message || 'Pendaftaran gagal.' });
+    }
+
+    if (!data || !data.success) {
+      return res.status(400).json({ success: false, error: data?.error || 'Pendaftaran gagal.' });
+    }
+
+    return res.json(data);
+  } catch (err: any) {
+    console.error('[API customer/register exception]:', err);
+    return res.status(500).json({ success: false, error: 'Terjadi kesalahan sistem saat mendaftar.' });
+  }
+});
+
+// Login Customer (Nama Lengkap & Password)
+app.post('/api/customer/login', async (req, res) => {
+  try {
+    const { namaLengkap, password } = req.body;
+    const cleanNama = (namaLengkap || '').trim();
+
+    if (!cleanNama || !password) {
+      return res.status(400).json({ success: false, error: 'Nama Lengkap dan Password wajib diisi.' });
+    }
+
+    const { data, error } = await supabase.rpc('customer_login', {
+      p_nama: cleanNama,
+      p_password: password,
+    });
+
+    if (error) {
+      console.error('[API customer_login RPC error]:', error);
+      return res.status(401).json({ success: false, error: 'Nama Lengkap atau Password salah.' });
+    }
+
+    if (!data || !data.success) {
+      return res.status(401).json({ success: false, error: data?.error || 'Nama Lengkap atau Password salah.' });
+    }
+
+    return res.json(data);
+  } catch (err: any) {
+    console.error('[API customer/login exception]:', err);
+    return res.status(500).json({ success: false, error: 'Terjadi kesalahan sistem saat masuk.' });
+  }
+});
+
+// Get Current Customer Profile
+app.get('/api/customer/me', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, error: 'Silakan masuk terlebih dahulu.' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const { data, error } = await supabase.rpc('customer_get_session', {
+      p_token: token,
+    });
+
+    if (error || !data || !data.success) {
+      return res.status(401).json({ success: false, error: 'Sesi kedaluwarsa atau tidak valid.' });
+    }
+
+    return res.json(data);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: 'Gagal memverifikasi sesi pelanggan.' });
+  }
+});
+
+// Logout Customer
+app.post('/api/customer/logout', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      await supabase.rpc('customer_logout', { p_token: token });
+    }
+    return res.json({ success: true });
+  } catch {
+    return res.json({ success: true });
+  }
+});
+
+// Get Customer Orders
+app.get('/api/customer/orders', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, error: 'Silakan masuk terlebih dahulu.' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const { data, error } = await supabase.rpc('customer_get_my_orders', {
+      p_token: token,
+    });
+
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+
+    return res.json({ success: true, orders: data || [] });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: 'Gagal memuat pesanan.' });
+  }
+});
+
 // 9. Upload image endpoint (Protected) - supports both /api/upload and /api/upload-image
 const handleImageUpload = (req: express.Request, res: express.Response) => {
   if (!verifyAuthHeader(req)) {

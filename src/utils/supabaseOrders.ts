@@ -492,18 +492,17 @@ export async function createNewOrder(
   try {
     const client = getSupabase();
 
-    // Associate public.orders.user_id with authenticated user.id if logged in, otherwise null for guests
-    let effectiveUserId = orderData.userId || null;
-    if (!effectiveUserId) {
-      try {
-        const { data: { user } } = await client.auth.getUser();
-        if (user?.id) {
-          effectiveUserId = user.id;
-          orderData.userId = user.id;
-        }
-      } catch {}
-    }
+    // Customer standalone uses public.orders.customer_id. Do NOT put customer ID into user_id!
+    // user_id is reserved exclusively for Supabase Auth (Admin/Outlet).
+    let effectiveUserId: string | null = null;
+    try {
+      const { data: { user } } = await client.auth.getUser();
+      if (user?.id) {
+        effectiveUserId = user.id;
+      }
+    } catch {}
 
+    const effectiveCustomerId = orderData.customerId || null;
     const effectivePhone = orderData.customerPhone ? normalizeIndonesianPhone(orderData.customerPhone) : null;
 
     const payload = {
@@ -513,7 +512,8 @@ export async function createNewOrder(
       outlet_name: orderData.outletName,
       customer_name: orderData.customerName,
       customer_phone: effectivePhone,
-      user_id: effectiveUserId, // Associates the order with customer profile if authenticated, null for guests
+      customer_id: effectiveCustomerId, // Associates order directly with public.customers.id
+      user_id: effectiveUserId, // Associates with Supabase Auth if logged in as Admin/Outlet, NULL for customer
       order_type: orderData.orderType,
       table_number: orderData.tableNumber || null,
       items: orderData.items,
@@ -637,6 +637,8 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
           outletName: row.outlet_name || row.outletName || '',
           customerName: row.customer_name || row.customerName || '',
           customerPhone: row.customer_phone || row.customerPhone || '',
+          customerId: row.customer_id || row.customerId || undefined,
+          userId: row.user_id || row.userId || undefined,
           orderType: row.order_type || row.orderType || 'DINE IN',
           tableNumber: row.table_number || row.tableNumber || '',
           items: Array.isArray(row.items) ? row.items : [],
@@ -960,6 +962,7 @@ export async function fetchSingleOrder(orderIdOrNumber: string): Promise<Custome
         outletName: data.outlet_name || data.outletName || '',
         customerName: data.customer_name || data.customerName || '',
         customerPhone: data.customer_phone || data.customerPhone || '',
+        customerId: data.customer_id || data.customerId || undefined,
         userId: data.user_id || data.userId || undefined,
         orderType: data.order_type || data.orderType || 'DINE IN',
         tableNumber: data.table_number || data.tableNumber || '',

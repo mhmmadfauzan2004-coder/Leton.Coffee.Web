@@ -227,7 +227,8 @@ export interface CustomerOrder {
   outletName: string;
   customerName: string;
   customerPhone?: string;
-  userId?: string; // Links new orders to a customer account (auth.users.id)
+  customerId?: string; // Links order to standalone customer (public.customers.id)
+  userId?: string; // Links orders to auth.users.id (Admin / Outlet / Supabase Auth only)
   orderType: OrderType;
   tableNumber?: string;
   items: OrderItem[];

@@ -298,7 +298,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
         outletName: selectedOutlet.name,
         customerName: details.customerName,
         customerPhone: details.customerPhone,
-        userId: customerProfile?.userId || undefined, // Associates the order with the logged-in member
+        customerId: customerProfile?.id || customerProfile?.userId || undefined, // Associates order with standalone customer
         orderType: details.orderType,
         tableNumber: details.orderType === 'DINE IN' ? details.tableNumber : undefined,
         items: cart.map((item) => {

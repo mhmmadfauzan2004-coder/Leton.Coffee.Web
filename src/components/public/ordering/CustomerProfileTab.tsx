@@ -36,18 +36,21 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
           const { data: rpcOrders, error: rpcErr } = await client.rpc('customer_get_my_orders', {
             p_token: token,
           });
-          if (!rpcErr && Array.isArray(rpcOrders)) {
-            ordersData = rpcOrders;
+          const list = Array.isArray(rpcOrders)
+            ? rpcOrders
+            : (rpcOrders?.orders && Array.isArray(rpcOrders.orders) ? rpcOrders.orders : null);
+          if (!rpcErr && list) {
+            ordersData = list;
           }
         } catch {}
       }
 
-      // 2. Direct query fallback
+      // 2. Direct query fallback using customer_id
       if (!ordersData) {
         const { data, error } = await client
           .from('orders')
           .select('*')
-          .eq('user_id', profile.userId)
+          .eq('customer_id', profile.userId)
           .order('created_at', { ascending: false });
 
         if (!error && data) {
@@ -66,6 +69,7 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
           outletName: o.outlet_name || o.outletName || '',
           customerName: o.customer_name || o.customerName || '',
           customerPhone: o.customer_phone || o.customerPhone || '',
+          customerId: o.customer_id || o.customerId,
           userId: o.user_id || o.userId,
           orderType: o.order_type || o.orderType || 'DINE IN',
           tableNumber: o.table_number || o.tableNumber || '',
@@ -104,7 +108,7 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
           event: '*',
           schema: 'public',
           table: 'orders',
-          filter: `user_id=eq.${profile.userId}`,
+          filter: `customer_id=eq.${profile.userId}`,
         },
         () => {
           loadOrders();

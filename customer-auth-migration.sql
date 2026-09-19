@@ -1,17 +1,21 @@
 -- ==============================================================================
--- LETON COFFEE - CUSTOMER AUTHENTICATION MIGRATION (NO FAKE EMAIL / STANDALONE AUTH)
+-- LETON COFFEE - PURE NON-DESTRUCTIVE CUSTOMER AUTH MIGRATION
 -- ==============================================================================
--- 1. Pgcrypto extension untuk hashing bcrypt yang aman
--- 2. Tabel public.customers untuk menyimpan data customer & password hash
--- 3. Tabel public.customer_sessions untuk mengelola server-side token session
--- 4. RPC Functions (SECURITY DEFINER) untuk Register, Login, Session, Profile, & Orders
--- 5. Row Level Security (RLS) policies
+-- ATURAN KETAT:
+-- 1. TIDAK ADA DROP TABLE
+-- 2. TIDAK ADA DROP COLUMN
+-- 3. TIDAK ADA DROP FOREIGN KEY
+-- 4. TIDAK ADA PENGUBAHAN CONSTRAINT EXISTING
+-- 5. TIDAK MENYENTUH public.profiles
+-- 6. TIDAK MENGUBAH orders.user_id
+-- 7. TIDAK MENYENTUH public.order_items
+-- 8. TIDAK MENGUBAH Admin Auth atau Outlet Auth
 -- ==============================================================================
 
--- 1. EXTENSION PGCRYPTO
+-- 1. EXTENSION PGCRYPTO (Untuk Bcrypt Hashing)
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- 2. TABEL CUSTOMERS (SEPARATE FROM AUTH.USERS)
+-- 2. TABEL STANDALONE CUSTOMERS (Hanya untuk member/pelanggan)
 CREATE TABLE IF NOT EXISTS public.customers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nama_lengkap TEXT NOT NULL,
@@ -26,7 +30,7 @@ CREATE TABLE IF NOT EXISTS public.customers (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_nama_lower ON public.customers (LOWER(TRIM(nama_lengkap)));
 CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_nomor_hp ON public.customers (nomor_hp);
 
--- 3. TABEL CUSTOMER SESSIONS (SERVER-SIDE SECURE SESSIONS)
+-- 3. TABEL CUSTOMER SESSIONS (Server-Side Secure Session Token)
 CREATE TABLE IF NOT EXISTS public.customer_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   customer_id UUID NOT NULL REFERENCES public.customers(id) ON DELETE CASCADE,
@@ -38,60 +42,16 @@ CREATE TABLE IF NOT EXISTS public.customer_sessions (
 CREATE INDEX IF NOT EXISTS idx_customer_sessions_token ON public.customer_sessions (token);
 CREATE INDEX IF NOT EXISTS idx_customer_sessions_customer_id ON public.customer_sessions (customer_id);
 
--- 4. NON-DESTRUCTIVE ADJUSTMENT TO EXISTING PROFILES & ORDERS
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID,
-  nama_lengkap TEXT,
-  full_name TEXT,
-  nomor_hp TEXT,
-  phone_number TEXT,
-  tanggal_lahir DATE,
-  birth_date DATE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Ensure profiles user_id is nullable if existing table had NOT NULL
-DO $$
-BEGIN
-  ALTER TABLE public.profiles ALTER COLUMN user_id DROP NOT NULL;
-EXCEPTION WHEN OTHERS THEN
-END $$;
-
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS nama_lengkap TEXT;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS full_name TEXT;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS nomor_hp TEXT;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone_number TEXT;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS tanggal_lahir DATE;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS birth_date DATE;
-
--- Ensure orders has user_id and customer_id without restrictive foreign key to auth.users
-ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS user_id UUID;
+-- 4. TAMBAHKAN HANYA KOLOM customer_id PADA TABEL orders
+-- (user_id dan foreign key existing sama sekali tidak disentuh)
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_id UUID;
-ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_name TEXT;
-ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_phone TEXT;
+CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON public.orders (customer_id);
 
-DO $$
-DECLARE
-  r RECORD;
-BEGIN
-  FOR r IN (
-    SELECT constraint_name 
-    FROM information_schema.table_constraints 
-    WHERE table_name = 'orders' AND constraint_type = 'FOREIGN KEY' AND constraint_name LIKE '%user_id%'
-  ) LOOP
-    EXECUTE 'ALTER TABLE public.orders DROP CONSTRAINT ' || quote_ident(r.constraint_name);
-  END LOOP;
-END $$;
-
--- 5. ROW LEVEL SECURITY (RLS)
+-- 5. ROW LEVEL SECURITY (RLS) UNTUK TABEL CUSTOMER
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customer_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 
--- Deny direct anon/browser access to customers and sessions table (all access must go through SECURITY DEFINER RPC)
+-- Mencegah akses langsung via REST client browser ke tabel raw (wajib melalui RPC SECURITY DEFINER)
 DROP POLICY IF EXISTS "Deny direct anon access customers" ON public.customers;
 CREATE POLICY "Deny direct anon access customers" ON public.customers
 FOR ALL TO anon, authenticated
@@ -102,47 +62,8 @@ CREATE POLICY "Deny direct anon access sessions" ON public.customer_sessions
 FOR ALL TO anon, authenticated
 USING (false);
 
--- Profiles RLS
-DROP POLICY IF EXISTS "Profiles Select Policy" ON public.profiles;
-CREATE POLICY "Profiles Select Policy" ON public.profiles
-FOR SELECT TO anon, authenticated
-USING (
-  (current_setting('request.headers', true)::json->>'x-admin-role' IS NOT NULL) OR
-  (user_id IS NOT NULL AND user_id = auth.uid())
-);
-
-DROP POLICY IF EXISTS "Profiles Insert Policy" ON public.profiles;
-CREATE POLICY "Profiles Insert Policy" ON public.profiles
-FOR INSERT TO anon, authenticated
-WITH CHECK (true);
-
--- Orders RLS
-DROP POLICY IF EXISTS "Orders Select Policy" ON public.orders;
-CREATE POLICY "Orders Select Policy" ON public.orders
-FOR SELECT TO anon, authenticated
-USING (
-  (current_setting('request.headers', true)::json->>'x-admin-role' IS NOT NULL) OR
-  (auth.uid() IS NOT NULL AND user_id = auth.uid()) OR
-  (user_id IS NULL)
-);
-
-DROP POLICY IF EXISTS "Orders Insert Policy" ON public.orders;
-CREATE POLICY "Orders Insert Policy" ON public.orders
-FOR INSERT TO anon, authenticated
-WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Orders Update Policy" ON public.orders;
-CREATE POLICY "Orders Update Policy" ON public.orders
-FOR UPDATE TO anon, authenticated
-USING (
-  (current_setting('request.headers', true)::json->>'x-admin-role' IS NOT NULL)
-)
-WITH CHECK (
-  (current_setting('request.headers', true)::json->>'x-admin-role' IS NOT NULL)
-);
-
 -- ==============================================================================
--- 6. SECURITY DEFINER RPC FUNCTIONS FOR CUSTOMER AUTH
+-- 6. RPC FUNCTIONS (SECURITY DEFINER)
 -- ==============================================================================
 
 -- A. Register Customer
@@ -172,7 +93,7 @@ BEGIN
   END IF;
 
   IF v_clean_phone IS NULL OR LENGTH(v_clean_phone) < 9 THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Nomor Handphone minimal 9 digit.');
+    RETURN jsonb_build_object('success', false, 'error', 'Nomor Handphone minimal 9 digit angka.');
   END IF;
 
   IF p_birth_date IS NULL THEN
@@ -196,30 +117,15 @@ BEGIN
   -- Hash password menggunakan bcrypt pgcrypto
   v_hash := crypt(p_password, gen_salt('bf', 10));
 
-  -- Insert customer
+  -- Insert ke public.customers
   INSERT INTO public.customers (nama_lengkap, nomor_hp, tanggal_lahir, password_hash)
   VALUES (v_clean_nama, v_clean_phone, p_birth_date, v_hash)
   RETURNING id INTO v_customer_id;
 
-  -- Simpan mirror di profiles untuk backward-compatibility
-  BEGIN
-    INSERT INTO public.profiles (id, user_id, nama_lengkap, full_name, nomor_hp, phone_number, tanggal_lahir, birth_date)
-    VALUES (v_customer_id, v_customer_id, v_clean_nama, v_clean_nama, v_clean_phone, v_clean_phone, p_birth_date, p_birth_date)
-    ON CONFLICT (id) DO UPDATE SET
-      nama_lengkap = EXCLUDED.nama_lengkap,
-      full_name = EXCLUDED.full_name,
-      nomor_hp = EXCLUDED.nomor_hp,
-      phone_number = EXCLUDED.phone_number,
-      tanggal_lahir = EXCLUDED.tanggal_lahir,
-      birth_date = EXCLUDED.birth_date,
-      updated_at = NOW();
-  EXCEPTION WHEN OTHERS THEN
-  END;
-
-  -- Buat token sesi 64-karakter kriptografis
+  -- Buat session token 64-karakter kriptografis (32 bytes hex)
   v_session_token := encode(gen_random_bytes(32), 'hex');
 
-  -- Simpan sesi di customer_sessions (berlaku 30 hari)
+  -- Simpan session (berlaku 30 hari)
   INSERT INTO public.customer_sessions (customer_id, token, expires_at)
   VALUES (v_customer_id, v_session_token, NOW() + INTERVAL '30 days');
 
@@ -238,10 +144,10 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.customer_register(TEXT, TEXT, DATE, TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.customer_register(TEXT, TEXT, DATE, TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.customer_register(TEXT, TEXT, DATE, TEXT) TO anon, authenticated, service_role;
 
 
--- B. Login Customer (Menggunakan Nama Lengkap & Password)
+-- B. Login Customer (Nama Lengkap & Password)
 CREATE OR REPLACE FUNCTION public.customer_login(
   p_nama TEXT,
   p_password TEXT
@@ -289,7 +195,7 @@ BEGIN
   -- Generate token sesi baru
   v_session_token := encode(gen_random_bytes(32), 'hex');
 
-  -- Simpan sesi
+  -- Simpan session (berlaku 30 hari)
   INSERT INTO public.customer_sessions (customer_id, token, expires_at)
   VALUES (v_customer.id, v_session_token, NOW() + INTERVAL '30 days');
 
@@ -308,10 +214,10 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.customer_login(TEXT, TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.customer_login(TEXT, TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.customer_login(TEXT, TEXT) TO anon, authenticated, service_role;
 
 
--- C. Get Session Profile (Verifikasi Session Token Server-Side)
+-- C. Get Session Profile (Verifikasi Token Session Server-Side)
 CREATE OR REPLACE FUNCTION public.customer_get_session(
   p_token TEXT
 )
@@ -353,10 +259,10 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.customer_get_session(TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.customer_get_session(TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.customer_get_session(TEXT) TO anon, authenticated, service_role;
 
 
--- D. Logout Customer
+-- D. Logout Customer (Mencabut Token Session)
 CREATE OR REPLACE FUNCTION public.customer_logout(
   p_token TEXT
 )
@@ -372,10 +278,10 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.customer_logout(TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.customer_logout(TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.customer_logout(TEXT) TO anon, authenticated, service_role;
 
 
--- E. Update Customer Profile
+-- E. Update Customer Profile (Nama Lengkap & Tanggal Lahir)
 CREATE OR REPLACE FUNCTION public.customer_update_profile(
   p_token TEXT,
   p_nama TEXT,
@@ -393,7 +299,7 @@ DECLARE
 BEGIN
   v_clean_nama := TRIM(p_nama);
   IF v_clean_nama IS NULL OR LENGTH(v_clean_nama) < 2 THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Nama Lengkap wajib diisi.');
+    RETURN jsonb_build_object('success', false, 'error', 'Nama Lengkap wajib diisi minimal 2 karakter.');
   END IF;
 
   SELECT customer_id INTO v_customer_id
@@ -405,6 +311,7 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Sesi login telah berakhir.');
   END IF;
 
+  -- Pastikan nama tidak bentrok dengan customer lain
   IF EXISTS (
     SELECT 1 FROM public.customers
     WHERE LOWER(TRIM(nama_lengkap)) = LOWER(v_clean_nama) AND id != v_customer_id
@@ -412,23 +319,13 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Nama Lengkap sudah digunakan oleh member lain.');
   END IF;
 
+  -- Update tabel public.customers saja
   UPDATE public.customers
   SET nama_lengkap = v_clean_nama,
       tanggal_lahir = p_birth_date,
       updated_at = NOW()
   WHERE id = v_customer_id
   RETURNING id, nama_lengkap, nomor_hp, tanggal_lahir INTO v_cust;
-
-  BEGIN
-    UPDATE public.profiles
-    SET nama_lengkap = v_clean_nama,
-        full_name = v_clean_nama,
-        tanggal_lahir = p_birth_date,
-        birth_date = p_birth_date,
-        updated_at = NOW()
-    WHERE id = v_customer_id OR user_id = v_customer_id;
-  EXCEPTION WHEN OTHERS THEN
-  END;
 
   RETURN jsonb_build_object(
     'success', true,
@@ -444,10 +341,10 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.customer_update_profile(TEXT, TEXT, DATE) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.customer_update_profile(TEXT, TEXT, DATE) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.customer_update_profile(TEXT, TEXT, DATE) TO anon, authenticated, service_role;
 
 
--- F. Get Customer Orders (Hanya mengambil order milik customer yang bersangkutan)
+-- F. Get Customer Orders (Hanya mengambil orders berdasarkan orders.customer_id = customer.id)
 CREATE OR REPLACE FUNCTION public.customer_get_my_orders(
   p_token TEXT
 )
@@ -466,17 +363,20 @@ BEGIN
   LIMIT 1;
 
   IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Sesi login tidak valid.', 'orders', '[]'::jsonb);
+    RETURN '[]'::jsonb;
   END IF;
 
   SELECT COALESCE(jsonb_agg(to_jsonb(o) ORDER BY o.created_at DESC), '[]'::jsonb)
   INTO v_orders
   FROM public.orders o
-  WHERE o.user_id = v_customer_id OR o.customer_id = v_customer_id;
+  WHERE o.customer_id = v_customer_id;
 
-  RETURN jsonb_build_object('success', true, 'orders', v_orders);
+  RETURN v_orders;
 END;
 $$;
 
 REVOKE ALL ON FUNCTION public.customer_get_my_orders(TEXT) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.customer_get_my_orders(TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.customer_get_my_orders(TEXT) TO anon, authenticated, service_role;
+
+-- 7. REFRESH POSTGREST SCHEMA CACHE SECARA INSTAN
+NOTIFY pgrst, 'reload schema';

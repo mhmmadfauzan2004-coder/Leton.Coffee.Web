@@ -17,7 +17,7 @@ import { OrderConfirmation } from './OrderConfirmation';
 import CustomerAuthForm from './CustomerAuthForm';
 import CustomerProfileTab from './CustomerProfileTab';
 import { createNewOrder, generateOrderNumber } from '../../../utils/supabaseOrders';
-import { getCurrentCustomerProfile, getSupabase } from '../../../utils/supabase';
+import { getCurrentCustomerProfile, getSupabase, logoutCustomer } from '../../../utils/supabase';
 import {
   DEFAULT_SIZE,
   DEFAULT_TOPPING,
@@ -508,8 +508,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                     profile={customerProfile}
                     onLogout={async () => {
                       try {
-                        const client = getSupabase();
-                        await client.auth.signOut();
+                        await logoutCustomer();
                         setCustomerProfile(null);
                         setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
                       } catch (err) {

@@ -45,3 +45,14 @@ export function isValidIndonesianPhone(phone: string): boolean {
   // Indonesian mobile numbers start with +628 and have 11 to 16 characters in E.164
   return normalized.startsWith('+628') && normalized.length >= 12 && normalized.length <= 16;
 }
+
+/**
+ * Generates a stable, unique internal email address for Supabase Email + Password Auth.
+ * Never shown to or requested from the customer.
+ * Uses a universally compatible standard domain format (e.g. cust_6285761519565@letoncoffee.com).
+ */
+export function generateCustomerInternalEmail(phone: string): string {
+  const digits = (phone || '').replace(/[^0-9]/g, '');
+  const cleanDigits = digits.startsWith('0') ? '62' + digits.slice(1) : digits;
+  return `cust_${cleanDigits}@letoncoffee.com`;
+}

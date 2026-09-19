@@ -3,9 +3,9 @@ import { LetonData, CustomerProfile } from '../types';
 import { initialLetonData } from '../data/initialData';
 import { sanitizeLoadedData } from './storage';
 import { stripHeavyBase64Images } from './safeStorage';
-import { normalizeIndonesianPhone, isValidIndonesianPhone } from './phone';
+import { normalizeIndonesianPhone, isValidIndonesianPhone, generateCustomerInternalEmail } from './phone';
 
-export { normalizeIndonesianPhone, isValidIndonesianPhone };
+export { normalizeIndonesianPhone, isValidIndonesianPhone, generateCustomerInternalEmail };
 
 // 1. Supabase Credentials Configuration
 export const getSupabaseUrl = (): string => {
@@ -414,8 +414,9 @@ export async function updateSupabaseAuthPassword(newPassword: string): Promise<{
  */
 
 /**
- * Register a new customer directly via Supabase Auth.
- * Normalizes phone number to E.164 (+628xxxxxxxxxx) and stores profile in public.profiles.
+ * Register a new customer directly via Supabase Email + Password Auth internally.
+ * Generates a stable and unique internal email identity based on customer phone,
+ * registers the user with Supabase Auth, and stores profile in public.profiles.
  */
 export async function registerCustomer(
   namaLengkap: string,
@@ -474,23 +475,50 @@ export async function registerCustomer(
 
     // 3. Uniqueness check for Phone in public.profiles
     const rawDigits = (nomorHp || '').replace(/[^0-9]/g, '');
+    let phoneAlreadyUsed = false;
     try {
-      const { data: existingPhone } = await client
-        .from('profiles')
-        .select('id')
-        .or(`nomor_hp.eq.${normalizedPhone},nomor_hp.eq.${rawDigits}`)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingPhone) {
-        return { success: false, error: 'Nomor HP sudah digunakan.' };
+      const { data: rpcPhoneExists, error: rpcPhoneErr } = await client.rpc('check_customer_phone_exists', {
+        p_phone: normalizedPhone,
+      });
+      if (!rpcPhoneErr && typeof rpcPhoneExists === 'boolean') {
+        phoneAlreadyUsed = rpcPhoneExists;
       }
     } catch {}
 
-    // 4. Supabase Auth signup directly from client using phone and password
+    if (!phoneAlreadyUsed) {
+      try {
+        const { data: existingPhone } = await client
+          .from('profiles')
+          .select('id')
+          .or(`nomor_hp.eq.${normalizedPhone},nomor_hp.eq.${rawDigits}`)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingPhone) {
+          phoneAlreadyUsed = true;
+        }
+      } catch {}
+    }
+
+    if (phoneAlreadyUsed) {
+      return { success: false, error: 'Nomor HP sudah digunakan.' };
+    }
+
+    // 4. Generate stable, unique internal email identity for Supabase Email + Password Auth
+    // Never shown to or requested from the customer; uses standard domain compatible with Supabase
+    const internalEmail = generateCustomerInternalEmail(normalizedPhone);
+
+    // 5. Supabase Auth signup directly from client using internal email and password
     const { data: signUpData, error: signUpError } = await client.auth.signUp({
-      phone: normalizedPhone,
+      email: internalEmail,
       password: password,
+      options: {
+        data: {
+          nama_lengkap: cleanNama,
+          nomor_hp: normalizedPhone,
+          tanggal_lahir: tanggalLahir,
+        },
+      },
     });
 
     if (signUpError || !signUpData.user) {
@@ -503,12 +531,13 @@ export async function registerCustomer(
 
     const userId = signUpData.user.id;
 
-    // 5. Store customer profile in public.profiles linked to auth.users(id)
+    // 6. Store customer profile in public.profiles linked to auth.users(id)
     const profilePayload: Record<string, any> = {
       user_id: userId,
       nama_lengkap: cleanNama,
       nomor_hp: normalizedPhone,
       tanggal_lahir: tanggalLahir,
+      email_internal: internalEmail,
     };
 
     let insertedRow: any = null;
@@ -525,37 +554,20 @@ export async function registerCustomer(
         if (msg.includes('nama_lengkap')) {
           return { success: false, error: 'Nama sudah digunakan.' };
         }
-        if (msg.includes('nomor_hp') || msg.includes('phone')) {
+        if (msg.includes('nomor_hp') || msg.includes('phone') || msg.includes('email')) {
           return { success: false, error: 'Nomor HP sudah digunakan.' };
         }
       }
-
-      // In case the existing database schema strictly enforces NOT NULL on legacy email_internal column
-      if (insertErr.message?.includes('email_internal') || insertErr.details?.includes('email_internal')) {
-        profilePayload.email_internal = `${userId}@internal.leton.id`;
-        const { data: retryData, error: retryErr } = await client
-          .from('profiles')
-          .insert(profilePayload)
-          .select()
-          .single();
-
-        if (retryErr) {
-          console.error('[Supabase Register] Profile insert error:', retryErr);
-          return { success: false, error: 'Gagal membuat akun.' };
-        }
-        insertedRow = retryData;
-      } else {
-        console.error('[Supabase Register] Profile insert error:', insertErr);
-        return { success: false, error: 'Gagal membuat akun.' };
-      }
+      console.error('[Supabase Register] Profile insert error:', insertErr);
+      return { success: false, error: 'Gagal membuat akun.' };
     } else {
       insertedRow = insertData;
     }
 
-    // 6. Ensure active session on client
+    // 7. Ensure active session on client via Email + Password sign-in
     if (!signUpData.session) {
       const { error: signInErr } = await client.auth.signInWithPassword({
-        phone: normalizedPhone,
+        email: internalEmail,
         password: password,
       });
       if (signInErr) {
@@ -581,14 +593,14 @@ export async function registerCustomer(
 }
 
 /**
- * Login customer directly via Supabase Auth.
- * Looks up phone number by nama_lengkap using a secure database mechanism,
- * normalizes it, and authenticates via signInWithPassword.
+ * Login customer directly via Supabase Auth using Email + Password under the hood.
+ * Looks up internal email identity by nama_lengkap using a secure database mechanism (RPC),
+ * and authenticates via signInWithPassword({ email: internalEmail, password }).
  * 
  * Keamanan:
- * - Menggunakan database RPC `get_customer_phone_by_name` (SECURITY DEFINER)
- * - Hanya menerima nama yang sedang dicari dan hanya mengembalikan nomor HP nama tersebut
- * - Data nomor HP pelanggan lain TIDAK PERNAH dikirim atau diekspos ke client/browser
+ * - Menggunakan database RPC `get_customer_email_by_name` (SECURITY DEFINER)
+ * - Hanya menerima nama yang dicari dan mengembalikan string email internal khusus nama tersebut
+ * - Data pelanggan lain TIDAK PERNAH terekspos ke browser
  */
 export async function loginCustomer(
   namaLengkap: string,
@@ -605,70 +617,108 @@ export async function loginCustomer(
       return { success: false, error: 'Password wajib diisi.' };
     }
 
-    // 1. Secure lookup: find phone number belonging to this exact full name
-    // Menggunakan RPC get_customer_phone_by_name dengan SECURITY DEFINER
-    // Mekanisme ini hanya mencari dan mengembalikan string nomor HP untuk nama yang sedang diinput
-    let foundPhone: string | null = null;
+    // 1. Secure lookup: find internal email identity belonging to this exact full name
+    let foundEmail: string | null = null;
+    let foundPhoneFallback: string | null = null;
 
+    // A. Primary: call secure RPC get_customer_email_by_name
     try {
-      const { data: rpcPhone, error: rpcErr } = await client.rpc('get_customer_phone_by_name', {
+      const { data: rpcEmail, error: rpcErr } = await client.rpc('get_customer_email_by_name', {
         p_nama: cleanNama,
       });
-      if (!rpcErr && typeof rpcPhone === 'string' && rpcPhone.trim()) {
-        foundPhone = rpcPhone.trim();
+      if (!rpcErr && typeof rpcEmail === 'string' && rpcEmail.trim()) {
+        foundEmail = rpcEmail.trim();
       }
     } catch (rpcEx) {
-      console.warn('[Supabase Login] RPC lookup exception:', rpcEx);
+      console.warn('[Supabase Login] RPC email lookup exception:', rpcEx);
     }
 
-    // Fallback aman: jika RPC belum di-run di SQL Editor, query dibatasi spesifik hanya untuk nama yang dicari
-    if (!foundPhone) {
+    // B. Secondary RPC: if old get_customer_phone_by_name is deployed
+    if (!foundEmail) {
+      try {
+        const { data: rpcPhone, error: rpcPhoneErr } = await client.rpc('get_customer_phone_by_name', {
+          p_nama: cleanNama,
+        });
+        if (!rpcPhoneErr && typeof rpcPhone === 'string' && rpcPhone.trim()) {
+          foundPhoneFallback = rpcPhone.trim();
+          foundEmail = generateCustomerInternalEmail(rpcPhone.trim());
+        }
+      } catch {}
+    }
+
+    // C. Fallback direct lookup for this specific name only
+    if (!foundEmail) {
       try {
         const { data: row } = await client
           .from('profiles')
-          .select('nomor_hp')
-          .eq('nama_lengkap', cleanNama)
+          .select('email_internal, nomor_hp')
+          .ilike('nama_lengkap', cleanNama)
           .limit(1)
           .maybeSingle();
 
-        if (row?.nomor_hp) {
-          foundPhone = row.nomor_hp;
-        } else {
-          const { data: ilikeRow } = await client
-            .from('profiles')
-            .select('nomor_hp')
-            .ilike('nama_lengkap', cleanNama)
-            .limit(1)
-            .maybeSingle();
-
-          if (ilikeRow?.nomor_hp) {
-            foundPhone = ilikeRow.nomor_hp;
-          }
+        if (row?.email_internal && row.email_internal.trim()) {
+          foundEmail = row.email_internal.trim();
+        } else if (row?.nomor_hp) {
+          foundPhoneFallback = row.nomor_hp;
+          foundEmail = generateCustomerInternalEmail(row.nomor_hp);
         }
       } catch (fbErr) {
         console.warn('[Supabase Login] Direct lookup fallback note:', fbErr);
       }
     }
 
-    if (!foundPhone) {
+    if (!foundEmail) {
       return { success: false, error: 'Nama tidak ditemukan.' };
     }
 
-    const normalizedPhone = normalizeIndonesianPhone(foundPhone);
-    if (!normalizedPhone) {
-      return { success: false, error: 'Nomor HP tidak valid.' };
-    }
-
-    // 2. Direct Supabase Auth Phone + Password sign-in from client
+    // 2. Direct Supabase Auth Email + Password sign-in from client
     const { data: signInData, error: signInError } = await client.auth.signInWithPassword({
-      phone: normalizedPhone,
+      email: foundEmail,
       password: password,
     });
 
     if (signInError || !signInData.user) {
+      // If sign-in failed, check if user was registered with phone previously (graceful migration fallback)
+      if (foundPhoneFallback) {
+        const normalizedPhone = normalizeIndonesianPhone(foundPhoneFallback);
+        const { data: phoneSignInData, error: phoneSignInError } = await client.auth.signInWithPassword({
+          phone: normalizedPhone,
+          password: password,
+        });
+
+        if (!phoneSignInError && phoneSignInData.user) {
+          // Successfully logged in via legacy phone auth!
+          // We can update auth user email to foundEmail so subsequent logins use email directly:
+          try {
+            await client.auth.updateUser({ email: foundEmail });
+          } catch {}
+
+          const { data: profileRow } = await client
+            .from('profiles')
+            .select('*')
+            .eq('user_id', phoneSignInData.user.id)
+            .maybeSingle();
+
+          const profile: CustomerProfile = {
+            id: profileRow?.id || phoneSignInData.user.id,
+            userId: phoneSignInData.user.id,
+            namaLengkap: profileRow?.nama_lengkap || cleanNama,
+            nomorHp: profileRow?.nomor_hp ? normalizeIndonesianPhone(profileRow.nomor_hp) : normalizedPhone,
+            tanggalLahir: profileRow?.tanggal_lahir || '',
+            createdAt: profileRow?.created_at || new Date().toISOString(),
+            updatedAt: profileRow?.updated_at || new Date().toISOString(),
+          };
+
+          return { success: true, profile };
+        }
+      }
+
       const msg = (signInError?.message || '').toLowerCase();
-      if (msg.includes('invalid') || msg.includes('credentials') || msg.includes('password')) {
+      if (msg.includes('invalid') || msg.includes('credentials') || msg.includes('password') || msg.includes('grant')) {
         return { success: false, error: 'Password salah.' };
+      }
+      if (msg.includes('email not confirmed')) {
+        return { success: false, error: 'Akun sedang menunggu konfirmasi. Silakan hubungi admin.' };
       }
       return { success: false, error: 'Gagal login.' };
     }
@@ -684,7 +734,7 @@ export async function loginCustomer(
       id: profileRow?.id || signInData.user.id,
       userId: signInData.user.id,
       namaLengkap: profileRow?.nama_lengkap || cleanNama,
-      nomorHp: profileRow?.nomor_hp ? normalizeIndonesianPhone(profileRow.nomor_hp) : normalizedPhone,
+      nomorHp: profileRow?.nomor_hp ? normalizeIndonesianPhone(profileRow.nomor_hp) : '',
       tanggalLahir: profileRow?.tanggal_lahir || '',
       createdAt: profileRow?.created_at || new Date().toISOString(),
       updatedAt: profileRow?.updated_at || new Date().toISOString(),

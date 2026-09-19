@@ -152,3 +152,73 @@ $$;
 REVOKE ALL ON FUNCTION public.check_customer_name_exists(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.check_customer_name_exists(TEXT) TO anon, authenticated;
 
+-- Function to safely verify if phone exists during registration without exposing profiles
+CREATE OR REPLACE FUNCTION public.check_customer_phone_exists(p_phone TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_clean_digits TEXT;
+BEGIN
+  IF p_phone IS NULL OR TRIM(p_phone) = '' THEN
+    RETURN FALSE;
+  END IF;
+
+  v_clean_digits := regexp_replace(p_phone, '[^0-9]', '', 'g');
+
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE regexp_replace(nomor_hp, '[^0-9]', '', 'g') = v_clean_digits
+       OR nomor_hp = p_phone
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.check_customer_phone_exists(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.check_customer_phone_exists(TEXT) TO anon, authenticated;
+
+-- Function to safely fetch internal email for customer login via Supabase Email + Password Auth
+-- Menjamin data akun internal dicari secara atomic tanpa membocorkan data pelanggan lain
+CREATE OR REPLACE FUNCTION public.get_customer_email_by_name(p_nama TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_email TEXT;
+  v_phone TEXT;
+BEGIN
+  IF p_nama IS NULL OR TRIM(p_nama) = '' THEN
+    RETURN NULL;
+  END IF;
+
+  -- 1. Cek kolom email_internal di tabel profiles
+  SELECT email_internal INTO v_email
+  FROM public.profiles 
+  WHERE LOWER(TRIM(nama_lengkap)) = LOWER(TRIM(p_nama)) 
+  LIMIT 1;
+
+  IF v_email IS NOT NULL AND TRIM(v_email) <> '' THEN
+    RETURN TRIM(v_email);
+  END IF;
+
+  -- 2. Fallback jika data lama belum memiliki email_internal: generate dari nomor_hp
+  SELECT nomor_hp INTO v_phone
+  FROM public.profiles 
+  WHERE LOWER(TRIM(nama_lengkap)) = LOWER(TRIM(p_nama)) 
+  LIMIT 1;
+
+  IF v_phone IS NOT NULL AND TRIM(v_phone) <> '' THEN
+    RETURN 'cust_' || regexp_replace(v_phone, '[^0-9]', '', 'g') || '@letoncoffee.com';
+  END IF;
+
+  RETURN NULL;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_customer_email_by_name(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_customer_email_by_name(TEXT) TO anon, authenticated;
+

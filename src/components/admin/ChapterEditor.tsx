@@ -47,11 +47,15 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
         setForm({
           ...branch,
           bgOverlay: typeof branch.bgOverlay === 'number' ? branch.bgOverlay : 45,
+          galleryImages: (branch.galleryImages || []).filter((img) => typeof img === 'string' && img.trim().length > 0),
         });
       } else {
         setForm((prev) => ({
           ...prev,
-          bgImage: branch.bgImage || prev.bgImage,
+          bgImage: branch.bgImage !== undefined ? branch.bgImage : prev.bgImage,
+          galleryImages: branch.galleryImages
+            ? branch.galleryImages.filter((img) => typeof img === 'string' && img.trim().length > 0)
+            : prev.galleryImages,
         }));
       }
     }
@@ -83,8 +87,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
       });
 
       if (saveOk) {
-        setSaveStatusMsg('Foto berhasil tersimpan di database!');
-        showToast(`Foto ${form.chapterName} berhasil diperbarui dan tersimpan!`, 'success');
+        setSaveStatusMsg('Foto utama berhasil tersimpan di database!');
+        showToast(`Foto utama ${form.chapterName} berhasil diperbarui dan tersimpan!`, 'success');
 
         if (oldUrl && oldUrl !== newUrl && isSupabaseConfigured()) {
           deleteImageFromSupabase(oldUrl).catch(() => {});
@@ -96,6 +100,47 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
       console.error('Error saving chapter photo to DB:', err);
       setSaveStatusMsg('Terjadi kesalahan saat menyimpan foto.');
       showToast('Gagal menyimpan foto ke database: ' + (err?.message || 'Error'), 'error');
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setSaveStatusMsg(null), 4000);
+    }
+  };
+
+  const handleGalleryImagesChange = async (updated: string[]) => {
+    const cleaned = updated.filter((img) => typeof img === 'string' && img.trim().length > 0);
+    const updatedForm = { ...form, galleryImages: cleaned, id: branchId };
+    setForm(updatedForm);
+
+    setIsSaving(true);
+    setSaveStatusMsg('Menyimpan galeri foto ke database...');
+    try {
+      let found = false;
+      const updatedBranches = (data.branches || []).map((b) => {
+        if (b.id === branchId) {
+          found = true;
+          return { ...b, ...updatedForm, id: branchId };
+        }
+        return b;
+      });
+      if (!found) {
+        updatedBranches.push({ ...updatedForm, id: branchId });
+      }
+
+      const saveOk = await saveData({
+        ...data,
+        branches: updatedBranches,
+      });
+
+      if (saveOk) {
+        setSaveStatusMsg('Galeri foto berhasil tersimpan di database!');
+        showToast(`Galeri foto ${form.chapterName} berhasil diperbarui dan tersimpan!`, 'success');
+      } else {
+        setSaveStatusMsg('Gagal menyimpan galeri foto ke database.');
+      }
+    } catch (err: any) {
+      console.error('Error saving chapter gallery to DB:', err);
+      setSaveStatusMsg('Terjadi kesalahan saat menyimpan galeri foto.');
+      showToast('Gagal menyimpan galeri foto ke database: ' + (err?.message || 'Error'), 'error');
     } finally {
       setIsSaving(false);
       setTimeout(() => setSaveStatusMsg(null), 4000);
@@ -393,10 +438,10 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ branchId, title })
       <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-md">
         <GalleryManager
           label={`GALERI FOTO SWIPE (${form.chapterName} — ${form.branchName || 'CABANG'})`}
-          images={form.galleryImages || []}
+          images={(form.galleryImages || []).filter((img) => typeof img === 'string' && img.trim().length > 0)}
           filePrefix={galleryPrefix}
-          onChange={(updated) => setForm({ ...form, galleryImages: updated })}
-          description="Foto-foto yang diunggah di sini otomatis tampil dalam format swipe gallery horizontal interaktif di halaman cabang ini."
+          onChange={handleGalleryImagesChange}
+          description="Foto-foto yang diunggah di sini otomatis diunggah ke Supabase Storage (prefix: chapter_6_gallery) dan langsung tersimpan di database."
         />
       </div>
 

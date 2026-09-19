@@ -16,11 +16,18 @@ export const LetGoCardsGallery: React.FC<LetGoCardsGalleryProps> = ({
   images = [],
   sectionLabel = "LET'GO",
 }) => {
-  // Use provided images if available and non-empty, otherwise default placeholders
-  const rawList = Array.isArray(images) && images.length > 0 ? images : DEFAULT_LET_GO_IMAGES;
-  const validImages = rawList.filter((img) => typeof img === 'string' && img.trim().length > 0);
+  // Filter valid non-empty image URLs
+  const validImages = (Array.isArray(images) ? images : []).filter(
+    (img) => typeof img === 'string' && img.trim().length > 0
+  );
 
-  const displayImages = validImages.length > 0 ? validImages : DEFAULT_LET_GO_IMAGES;
+  // Fallback to default Let'Go images ONLY if section is LET'GO and no custom images provided
+  const isLetGoSection = sectionLabel.toUpperCase().includes("LET'GO");
+  const fallbackImages = isLetGoSection
+    ? DEFAULT_LET_GO_IMAGES.filter((img) => typeof img === 'string' && img.trim().length > 0)
+    : [];
+
+  const displayImages = validImages.length > 0 ? validImages : fallbackImages;
   const total = displayImages.length;
 
   const [activeIndex, setActiveIndex] = useState(0);

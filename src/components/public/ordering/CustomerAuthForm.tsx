@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { loginCustomer, registerCustomer } from '../../../utils/supabase';
+import { loginCustomer, registerCustomer, isValidIndonesianPhone } from '../../../utils/supabase';
 import { CustomerProfile } from '../../../types';
 import { Phone, User, Calendar, Lock, AlertCircle, CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
 
@@ -76,13 +76,12 @@ export default function CustomerAuthForm({ onAuthSuccess }: CustomerAuthFormProp
     }
 
     // 2. Validasi Nomor HP
-    const cleanedPhone = nomorHp.replace(/[^0-9]/g, '');
-    if (!cleanedPhone) {
+    if (!nomorHp.trim()) {
       setErrorMsg('Nomor HP wajib diisi.');
       return;
     }
-    if (cleanedPhone.length < 9 || cleanedPhone.length > 15) {
-      setErrorMsg('Nomor HP tidak valid (harus 9-15 digit angka).');
+    if (!isValidIndonesianPhone(nomorHp)) {
+      setErrorMsg('Nomor HP tidak valid.');
       return;
     }
 
@@ -110,7 +109,7 @@ export default function CustomerAuthForm({ onAuthSuccess }: CustomerAuthFormProp
 
     // 5. Validasi Konfirmasi Password
     if (password !== confirmPassword) {
-      setErrorMsg('Konfirmasi password tidak cocok dengan password.');
+      setErrorMsg('Password dan konfirmasi password tidak sama.');
       return;
     }
 

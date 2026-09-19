@@ -90,3 +90,20 @@ USING (
 WITH CHECK (
   (current_setting('request.headers', true)::json->>'x-admin-role' IS NOT NULL)
 );
+
+-- ==============================================================================
+-- 5. SECURE LOOKUP FUNCTION FOR CUSTOMER LOGIN (NAMA LENGKAP -> NOMOR HP)
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION public.get_customer_phone_by_name(p_nama TEXT)
+RETURNS TEXT
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT nomor_hp FROM public.profiles 
+  WHERE LOWER(TRIM(nama_lengkap)) = LOWER(TRIM(p_nama)) 
+  LIMIT 1;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_customer_phone_by_name(TEXT) TO anon, authenticated;
+

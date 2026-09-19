@@ -3,14 +3,11 @@
  * Supports split deployment: Frontend (Cloudflare Pages) & Backend (Express Node.js).
  */
 
-// Base API URL from environment variable or automatic backend fallback for split-domain deployment (e.g. Cloudflare Pages)
-const DEFAULT_BACKEND_URL = 'https://ais-dev-gfncvyyhq4omamytu5kgc4-866159737618.asia-southeast1.run.app';
-
+// Base API URL from environment variables VITE_API_URL or VITE_API_BASE_URL for production split-domain deployment (e.g. Cloudflare Pages)
 export const API_BASE_URL = (
   import.meta.env.VITE_API_URL || 
-  (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && !window.location.origin.includes('run.app')
-    ? DEFAULT_BACKEND_URL
-    : '')
+  import.meta.env.VITE_API_BASE_URL || 
+  ''
 ).replace(/\/+$/, '');
 
 /**

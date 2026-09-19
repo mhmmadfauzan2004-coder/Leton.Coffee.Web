@@ -26,15 +26,27 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-// CORS configuration supporting external frontend hosting (Cloudflare Pages, Vercel, Netlify, etc.) with credentials support
+// Request logging middleware for tracking method, path, origin, and response status
+app.use((req, res, next) => {
+  const origin = req.headers.origin || '';
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[API_LOG] ${req.method} ${req.originalUrl || req.url} | Origin: ${origin || 'none'} | Status: ${res.statusCode} | Duration: ${duration}ms`);
+  });
+  next();
+});
+
+// CORS configuration supporting external frontend hosting (Cloudflare Pages https://leton-coffee-web.pages.dev) with credentials support
 app.use(
   cors({
-    origin: (_origin, callback) => {
+    origin: (origin, callback) => {
       callback(null, true);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With', 'X-Accel-Buffering'],
     credentials: true,
+    optionsSuccessStatus: 200,
   })
 );
 app.options('*', cors());
@@ -262,171 +274,6 @@ function broadcastUpdate(data: LetonData) {
 // 1. Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
-});
-
-// Helper to normalize Indonesian phone number to E.164 (+628xxxxxxxxxx)
-function normalizeIndonesianPhone(phone: string): string {
-  let digits = (phone || '').trim().replace(/[^0-9]/g, '');
-  if (digits.startsWith('0')) {
-    digits = '62' + digits.slice(1);
-  } else if (!digits.startsWith('62')) {
-    digits = '62' + digits;
-  }
-  return '+' + digits;
-}
-
-// Customer Authentication - Register Endpoint
-app.post('/api/pelanggan/daftar', async (req, res) => {
-  try {
-    const { namaLengkap, nomorHp, tanggalLahir, password } = req.body;
-    
-    // Clean and normalize inputs
-    const cleanNama = (namaLengkap || '').trim();
-    const rawPhoneDigits = (nomorHp || '').replace(/[^0-9]/g, '');
-    const normalizedPhone = normalizeIndonesianPhone(nomorHp);
-
-    if (!cleanNama) return res.status(400).json({ error: 'Nama lengkap wajib diisi.' });
-    if (!rawPhoneDigits) return res.status(400).json({ error: 'Nomor HP wajib diisi.' });
-    if (!tanggalLahir) return res.status(400).json({ error: 'Tanggal lahir wajib diisi.' });
-    if (!password) return res.status(400).json({ error: 'Password wajib diisi.' });
-
-    // Check if name is already taken in profiles
-    const { data: existingName } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('nama_lengkap', cleanNama)
-      .maybeSingle();
-
-    if (existingName) {
-      return res.status(400).json({ error: 'Nama lengkap sudah terdaftar. Silakan pilih nama lain.' });
-    }
-
-    // Check if phone is already taken in profiles (check both normalized and raw digits)
-    const { data: existingPhone } = await supabase
-      .from('profiles')
-      .select('id')
-      .or(`nomor_hp.eq.${normalizedPhone},nomor_hp.eq.${rawPhoneDigits}`)
-      .maybeSingle();
-
-    if (existingPhone) {
-      return res.status(400).json({ error: 'Nomor HP ini sudah terdaftar. Silakan gunakan nomor lain.' });
-    }
-
-    // Sign up using Supabase Phone + Password Auth with normalized phone (+628xxxxxxxxxx)
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      phone: normalizedPhone,
-      password: password,
-    });
-
-    if (signUpError || !signUpData.user) {
-      return res.status(400).json({ error: signUpError?.message || 'Gagal mendaftarkan akun dengan nomor HP tersebut.' });
-    }
-
-    // Insert profile data with normalized phone (+628xxxxxxxxxx)
-    const profilePayload = {
-      user_id: signUpData.user.id,
-      nama_lengkap: cleanNama,
-      nomor_hp: normalizedPhone,
-      tanggal_lahir: tanggalLahir,
-    };
-
-    const { data: insertProfile, error: profileError } = await supabase
-      .from('profiles')
-      .insert(profilePayload)
-      .select()
-      .single();
-
-    if (profileError) {
-      console.error('Error inserting profile on backend:', profileError);
-      return res.status(500).json({ error: 'Akun berhasil dibuat tetapi gagal menginisialisasi data profil.' });
-    }
-
-    // Sign in to obtain session tokens (access_token, refresh_token)
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      phone: normalizedPhone,
-      password: password,
-    });
-
-    if (signInError || !signInData.session) {
-      return res.status(400).json({ error: signInError?.message || 'Gagal membuat sesi login baru.' });
-    }
-
-    return res.json({
-      success: true,
-      session: {
-        access_token: signInData.session.access_token,
-        refresh_token: signInData.session.refresh_token,
-      },
-      profile: {
-        id: insertProfile.id,
-        userId: insertProfile.user_id,
-        namaLengkap: insertProfile.nama_lengkap,
-        nomorHp: insertProfile.nomor_hp,
-        tanggalLahir: insertProfile.tanggal_lahir,
-        createdAt: insertProfile.created_at,
-        updatedAt: insertProfile.updated_at,
-      }
-    });
-
-  } catch (err: any) {
-    console.error('Customer backend registration error:', err);
-    return res.status(500).json({ error: err?.message || 'Terjadi kesalahan sistem saat mendaftar.' });
-  }
-});
-
-// Customer Authentication - Login Endpoint
-app.post('/api/pelanggan/login', async (req, res) => {
-  try {
-    const { namaLengkap, password } = req.body;
-    const cleanNama = (namaLengkap || '').trim();
-
-    if (!cleanNama) return res.status(400).json({ error: 'Nama lengkap wajib diisi.' });
-    if (!password) return res.status(400).json({ error: 'Password wajib diisi.' });
-
-    // Lookup profile Row for phone matching
-    const { data: profileRow, error: profileErr } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('nama_lengkap', cleanNama)
-      .maybeSingle();
-
-    if (profileErr || !profileRow || !profileRow.nomor_hp) {
-      return res.status(400).json({ error: 'Nama Lengkap tidak terdaftar atau password salah.' });
-    }
-
-    const normalizedPhone = normalizeIndonesianPhone(profileRow.nomor_hp);
-
-    // Sign in on backend using normalized phone and password
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      phone: normalizedPhone,
-      password: password,
-    });
-
-    if (signInError || !signInData.session) {
-      return res.status(400).json({ error: 'Nama Lengkap atau Password salah.' });
-    }
-
-    return res.json({
-      success: true,
-      session: {
-        access_token: signInData.session.access_token,
-        refresh_token: signInData.session.refresh_token,
-      },
-      profile: {
-        id: profileRow.id,
-        userId: profileRow.user_id,
-        namaLengkap: profileRow.nama_lengkap,
-        nomorHp: profileRow.nomor_hp,
-        tanggalLahir: profileRow.tanggal_lahir,
-        createdAt: profileRow.created_at,
-        updatedAt: profileRow.updated_at,
-      }
-    });
-
-  } catch (err: any) {
-    console.error('Customer backend login error:', err);
-    return res.status(500).json({ error: err?.message || 'Terjadi kesalahan sistem saat masuk.' });
-  }
 });
 
 // 2. Realtime SSE Stream Endpoint (supports /api/events and /api/content/events)

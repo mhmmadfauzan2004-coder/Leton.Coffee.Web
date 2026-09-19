@@ -1,5 +1,6 @@
 import { CustomerOrder, OrderStatus, PaymentStatus } from '../types';
 import { getSupabase, isSupabaseConfigured } from './supabase';
+import { normalizeIndonesianPhone } from './phone';
 import { matchesOutlet } from '../data/adminAccounts';
 import { getApiUrl } from './api';
 import { safeSetItem, safeGetItem, stripHeavyBase64Images } from './safeStorage';
@@ -490,14 +491,29 @@ export async function createNewOrder(
   // 1. Try Supabase Insert into 'orders' table
   try {
     const client = getSupabase();
+
+    // Associate public.orders.user_id with authenticated user.id if logged in, otherwise null for guests
+    let effectiveUserId = orderData.userId || null;
+    if (!effectiveUserId) {
+      try {
+        const { data: { user } } = await client.auth.getUser();
+        if (user?.id) {
+          effectiveUserId = user.id;
+          orderData.userId = user.id;
+        }
+      } catch {}
+    }
+
+    const effectivePhone = orderData.customerPhone ? normalizeIndonesianPhone(orderData.customerPhone) : null;
+
     const payload = {
       id: orderData.id,
       order_number: orderData.orderNumber,
       outlet_id: orderData.outletId,
       outlet_name: orderData.outletName,
       customer_name: orderData.customerName,
-      customer_phone: orderData.customerPhone || null,
-      user_id: orderData.userId || null, // Associates the order with a customer profile if logged in
+      customer_phone: effectivePhone,
+      user_id: effectiveUserId, // Associates the order with customer profile if authenticated, null for guests
       order_type: orderData.orderType,
       table_number: orderData.tableNumber || null,
       items: orderData.items,

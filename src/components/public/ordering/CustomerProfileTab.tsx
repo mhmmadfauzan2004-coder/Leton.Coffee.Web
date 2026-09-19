@@ -35,11 +35,11 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
 
       if (error) {
         console.warn('Error fetching customer orders:', error.message);
-        // Fallback: local history
+        // Fallback: local history strictly for this authenticated userId
         const localHist = localStorage.getItem('leton_orders_history');
         if (localHist) {
           const parsed: CustomerOrder[] = JSON.parse(localHist);
-          const filtered = parsed.filter(o => o.userId === profile.userId || o.customerPhone === profile.nomorHp || o.customerName === profile.namaLengkap);
+          const filtered = parsed.filter(o => o.userId === profile.userId);
           setOrders(filtered);
         }
       } else if (data) {
@@ -79,25 +79,20 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
   useEffect(() => {
     loadOrders();
 
-    // Setup secure realtime subscription to listen to status changes in public.orders table
+    // Setup secure realtime subscription to listen to status changes for this authenticated user only
     const client = getSupabase();
     const channel = client
-      .channel('customer_orders_realtime')
+      .channel(`customer_orders_realtime_${profile.userId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'orders',
+          filter: `user_id=eq.${profile.userId}`,
         },
-        (payload: any) => {
-          // Security: Only trigger re-load if the updated order belongs to the current logged-in customer profile
-          const payloadUserId = payload.new?.user_id || payload.old?.user_id;
-          const payloadOrderId = payload.new?.id || payload.old?.id;
-          
-          if (payloadUserId === profile.userId || (payloadOrderId && orders.some(o => o.id === payloadOrderId))) {
-            loadOrders();
-          }
+        () => {
+          loadOrders();
         }
       )
       .subscribe();
@@ -105,7 +100,7 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
     return () => {
       client.removeChannel(channel);
     };
-  }, [profile.userId, profile.nomorHp, orders.length]);
+  }, [profile.userId]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();

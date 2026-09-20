@@ -43,17 +43,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
   onClose,
   preSelectedMenuItem,
 }) => {
-  const [selectedOutlet, setSelectedOutlet] = useState<OrderOutlet | null>(() => {
-    const saved = localStorage.getItem('leton_selected_outlet');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  });
+  const [selectedOutlet, setSelectedOutlet] = useState<OrderOutlet | null>(null);
 
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('leton_ordering_cart');
@@ -597,7 +587,9 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                           type="button"
                           onClick={() => {
                             setCustomerProfile(null);
-                            setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                            setSelectedOutlet(null);
+                            localStorage.removeItem('leton_selected_outlet');
+                            setCurrentStep('outlet');
                           }}
                           className="w-full p-4 sm:p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700 hover:bg-slate-850 transition-all text-left flex items-center justify-between group cursor-pointer hover:-translate-y-0.5"
                         >
@@ -626,11 +618,15 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                       onBackToChoice={() => setMemberChoiceStep('choice')}
                       onSkipWithoutMember={() => {
                         setCustomerProfile(null);
-                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                        setSelectedOutlet(null);
+                        localStorage.removeItem('leton_selected_outlet');
+                        setCurrentStep('outlet');
                       }}
                       onAuthSuccess={(profile) => {
                         setCustomerProfile(profile);
-                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                        setSelectedOutlet(null);
+                        localStorage.removeItem('leton_selected_outlet');
+                        setCurrentStep('outlet');
                       }}
                     />
                   )}
@@ -641,11 +637,15 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                       onBackToChoice={() => setMemberChoiceStep('choice')}
                       onSkipWithoutMember={() => {
                         setCustomerProfile(null);
-                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                        setSelectedOutlet(null);
+                        localStorage.removeItem('leton_selected_outlet');
+                        setCurrentStep('outlet');
                       }}
                       onAuthSuccess={(profile) => {
                         setCustomerProfile(profile);
-                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                        setSelectedOutlet(null);
+                        localStorage.removeItem('leton_selected_outlet');
+                        setCurrentStep('outlet');
                       }}
                     />
                   )}

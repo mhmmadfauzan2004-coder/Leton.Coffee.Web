@@ -561,6 +561,31 @@ app.get('/api/customer/orders', async (req, res) => {
   }
 });
 
+// Admin: Get all registered customers from Supabase (Super Admin only)
+app.get('/api/admin/customers', async (req, res) => {
+  const role = req.headers['x-admin-role'] as string | undefined;
+  if (role !== 'super_admin') {
+    return res.status(403).json({ error: 'Akses Ditolak: Hanya Super Admin / Admin Pusat yang dapat melihat Data Customer.' });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('id, nama_lengkap, nomor_hp, tanggal_lahir, created_at, updated_at')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('[API admin/customers Supabase error]:', error.message);
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.json({ success: true, customers: data || [] });
+  } catch (err: any) {
+    console.error('[API admin/customers exception]:', err);
+    return res.status(500).json({ error: 'Gagal mengambil data customer dari database' });
+  }
+});
+
 // 9. Upload image endpoint (Protected) - supports both /api/upload and /api/upload-image
 const handleImageUpload = (req: express.Request, res: express.Response) => {
   if (!verifyAuthHeader(req)) {

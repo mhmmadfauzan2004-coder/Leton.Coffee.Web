@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   RefreshCw,
   Users,
+  UserCheck,
   Database,
   Radio,
   CheckCircle2,
@@ -182,6 +183,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
   }
 
   const quickActions = [
+    {
+      title: 'DATA CUSTOMER TERDAFTAR',
+      description: 'Lihat seluruh daftar pelanggan Leton Coffee, nomor WhatsApp, dan tanggal bergabung.',
+      tab: 'customers',
+      icon: UserCheck,
+      color: 'text-sky-400',
+    },
     {
       title: 'LAPORAN SALES & OMSET OUTLET',
       description: 'Pantau total penjualan semua outlet, breakdown Sudirman & Kelakap 7, dan audit bukti QRIS.',

@@ -16,6 +16,7 @@ import { OrderManager } from './OrderManager';
 import { StockManager } from './StockManager';
 import { SalesReportManager } from './SalesReportManager';
 import { LoyaltyManager } from './LoyaltyManager';
+import { CustomerManager } from './CustomerManager';
 import {
   LayoutDashboard,
   Home,
@@ -24,6 +25,7 @@ import {
   Store,
   UtensilsCrossed,
   Users,
+  UserCheck,
   Info,
   Images,
   Phone,
@@ -68,6 +70,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
     { id: 'dashboard', label: 'DASHBOARD', icon: LayoutDashboard },
     { id: 'sales', label: 'LAPORAN SALES', icon: TrendingUp },
     { id: 'orders', label: 'AUDIT PESANAN', icon: ShoppingBag },
+    { id: 'customers', label: 'DATA CUSTOMER', icon: UserCheck },
     { id: 'stock', label: 'KONTROL STOK', icon: Boxes },
     { id: 'menu', label: 'MENU & KATEGORI', icon: UtensilsCrossed },
     { id: 'loyalty', label: 'LOYALTY / POINT', icon: Gift },
@@ -417,6 +420,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
             <DashboardOverview onNavigateTab={(tab) => setActiveTab(tab)} />
           )}
           {activeTab === 'sales' && !isOutletAdmin && <SalesReportManager />}
+          {activeTab === 'customers' && !isOutletAdmin && <CustomerManager />}
           {activeTab === 'loyalty' && !isOutletAdmin && <LoyaltyManager />}
           {activeTab === 'orders' && <OrderManager />}
           {activeTab === 'stock' && <StockManager />}

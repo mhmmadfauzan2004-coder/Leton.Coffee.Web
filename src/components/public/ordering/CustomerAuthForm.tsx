@@ -1,17 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { loginCustomer, registerCustomer } from '../../../utils/supabase';
 import { CustomerProfile } from '../../../types';
-import { Phone, User, Calendar, Lock, AlertCircle, CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
+import { Phone, User, Calendar, Lock, AlertCircle, CheckCircle2, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
 
 interface CustomerAuthFormProps {
   onAuthSuccess: (profile: CustomerProfile) => void;
+  initialMode?: 'login' | 'register';
+  onBackToChoice?: () => void;
+  onSkipWithoutMember?: () => void;
 }
 
-export default function CustomerAuthForm({ onAuthSuccess }: CustomerAuthFormProps) {
-  const [isRegisterMode, setIsRegisterMode] = useState(false);
+export default function CustomerAuthForm({
+  onAuthSuccess,
+  initialMode = 'login',
+  onBackToChoice,
+  onSkipWithoutMember,
+}: CustomerAuthFormProps) {
+  const [isRegisterMode, setIsRegisterMode] = useState(initialMode === 'register');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Sync mode if initialMode prop changes
+  useEffect(() => {
+    setIsRegisterMode(initialMode === 'register');
+  }, [initialMode]);
 
   // Register Form States
   const [namaLengkap, setNamaLengkap] = useState('');
@@ -148,6 +161,31 @@ export default function CustomerAuthForm({ onAuthSuccess }: CustomerAuthFormProp
 
   return (
     <div id="customer-auth-container" className="w-full max-w-md mx-auto bg-white p-6 rounded-2xl border border-[#E4E7EC] shadow-sm">
+      {(onBackToChoice || onSkipWithoutMember) && (
+        <div className="flex items-center justify-between mb-5 pb-3 border-b border-[#F2F4F7]">
+          {onBackToChoice ? (
+            <button
+              type="button"
+              onClick={onBackToChoice}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#667085] hover:text-[#172033] transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Kembali ke Pilihan Akses</span>
+            </button>
+          ) : <div />}
+
+          {onSkipWithoutMember && (
+            <button
+              type="button"
+              onClick={onSkipWithoutMember}
+              className="text-xs font-bold text-[#0284C7] hover:underline cursor-pointer"
+            >
+              Lanjut Tanpa Member &rarr;
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Header Form */}
       <div className="text-center mb-6">
         <h3 className="text-xl font-bold text-[#172033]">

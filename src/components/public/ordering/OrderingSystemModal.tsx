@@ -18,6 +18,7 @@ import { OrderConfirmation } from './OrderConfirmation';
 import CustomerAuthForm from './CustomerAuthForm';
 import CustomerProfileTab from './CustomerProfileTab';
 import { createNewOrder, generateOrderNumber } from '../../../utils/supabaseOrders';
+import { findOrCreateCustomerMember } from '../../../utils/supabaseCustomers';
 import { getCurrentCustomerProfile, getSupabase, logoutCustomer } from '../../../utils/supabase';
 import { getCustomerLoyalty } from '../../../utils/supabaseLoyalty';
 import {
@@ -27,7 +28,7 @@ import {
   generateCartItemId,
   calculateItemUnitPrice,
 } from '../../../data/addOnsData';
-import { X, ArrowLeft, ShoppingBag, User } from 'lucide-react';
+import { X, ArrowLeft, ArrowRight, ShoppingBag, User, UserPlus, LogIn, UserCheck, Award } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { ErrorBoundary } from '../../common/ErrorBoundary';
 
@@ -68,7 +69,10 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
 
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [generalNote, setGeneralNote] = useState<string>('');
-  const [currentStep, setCurrentStep] = useState<'outlet' | 'menu' | 'checkout' | 'confirmation' | 'profile'>('outlet');
+  const [currentStep, setCurrentStep] = useState<
+    'member_choice' | 'outlet' | 'menu' | 'checkout' | 'confirmation' | 'profile'
+  >('member_choice');
+  const [memberChoiceStep, setMemberChoiceStep] = useState<'choice' | 'register' | 'login'>('choice');
   const [completedOrder, setCompletedOrder] = useState<CustomerOrder | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [pendingCustomizeItem, setPendingCustomizeItem] = useState<MenuItem | null>(null);
@@ -84,15 +88,19 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
         try {
           const profile = await getCurrentCustomerProfile();
           setCustomerProfile(profile);
-          if (!profile) {
-            setCurrentStep('profile');
-          } else {
+          if (profile) {
+            // Logged in as member -> proceed directly to menu / outlet
             setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+          } else {
+            // Not logged in -> show HALAMAN MEMBER choice screen
+            setCurrentStep('member_choice');
+            setMemberChoiceStep('choice');
           }
         } catch (err) {
           console.warn('Error syncing customer profile:', err);
           setCustomerProfile(null);
-          setCurrentStep('profile');
+          setCurrentStep('member_choice');
+          setMemberChoiceStep('choice');
         } finally {
           setCheckingAuth(false);
         }
@@ -147,13 +155,6 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
       localStorage.setItem('leton_selected_outlet', JSON.stringify(selectedOutlet));
     }
   }, [selectedOutlet]);
-
-  // Enforce auth requirement: if not logged in, must be on profile (auth) step
-  useEffect(() => {
-    if (!checkingAuth && !customerProfile && currentStep !== 'profile' && currentStep !== 'confirmation') {
-      setCurrentStep('profile');
-    }
-  }, [checkingAuth, customerProfile, currentStep]);
 
   // If a menu item was clicked from the public page, set it to customize
   useEffect(() => {
@@ -279,6 +280,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
     paymentMethod: PaymentMethod;
     paymentReceiptUrl?: string;
     paymentReceiptPath?: string;
+    isMemberChoice?: boolean;
   }) => {
     if (!selectedOutlet) return;
     setIsSubmitting(true);
@@ -289,6 +291,17 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
         const unit = calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup, item.customOptions);
         return acc + unit * item.quantity;
       }, 0);
+
+      // Determine customerId based on logged-in member or "Jadi Member" choice
+      let resolvedCustomerId: string | undefined = customerProfile?.id || customerProfile?.userId || undefined;
+
+      if (!resolvedCustomerId && details.isMemberChoice !== false) {
+        // Customer selected "Jadi Member" - save/link in Supabase existing customers table
+        const member = await findOrCreateCustomerMember(details.customerName, details.customerPhone);
+        if (member && member.id) {
+          resolvedCustomerId = member.id;
+        }
+      }
 
       // Determine initial payment status based on chosen payment method
       const initialPaymentStatus =
@@ -301,7 +314,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
         outletName: selectedOutlet.name,
         customerName: details.customerName,
         customerPhone: details.customerPhone,
-        customerId: customerProfile?.id || customerProfile?.userId || undefined, // Associates order with standalone customer
+        customerId: resolvedCustomerId,
         orderType: details.orderType,
         tableNumber: details.orderType === 'DINE IN' ? details.tableNumber : undefined,
         items: cart.map((item) => {
@@ -390,18 +403,30 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
           {currentStep !== 'confirmation' && (
             <button
               onClick={() => {
-                if (currentStep === 'profile') {
+                if (currentStep === 'member_choice') {
+                  if (memberChoiceStep !== 'choice') {
+                    setMemberChoiceStep('choice');
+                  } else {
+                    onClose();
+                  }
+                } else if (currentStep === 'profile') {
                   if (customerProfile) {
                     setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
                   } else {
-                    onClose();
+                    setCurrentStep('member_choice');
+                    setMemberChoiceStep('choice');
                   }
                 } else if (currentStep === 'checkout') {
                   setCurrentStep('menu');
                 } else if (currentStep === 'menu') {
                   setCurrentStep('outlet');
                 } else if (currentStep === 'outlet') {
-                  onClose();
+                  if (!customerProfile) {
+                    setCurrentStep('member_choice');
+                    setMemberChoiceStep('choice');
+                  } else {
+                    onClose();
+                  }
                 }
               }}
               className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
@@ -432,7 +457,8 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
           <button
             onClick={() => {
               if (!customerProfile) {
-                setCurrentStep('profile');
+                setCurrentStep('member_choice');
+                setMemberChoiceStep('choice');
                 return;
               }
               if (currentStep === 'profile') {
@@ -442,13 +468,13 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
               }
             }}
             className={`p-2 sm:px-3.5 sm:py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer tracking-wide ${
-              currentStep === 'profile'
+              currentStep === 'profile' || currentStep === 'member_choice'
                 ? 'bg-[#C39A6B] text-white border-[#C39A6B] hover:bg-[#B38A5B]'
                 : customerProfile
                 ? 'bg-amber-500/10 border-[#C39A6B]/30 text-[#C39A6B] hover:bg-amber-500/20'
                 : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
             }`}
-            title={customerProfile?.namaLengkap ? `Akun: ${customerProfile.namaLengkap}` : 'Masuk Member'}
+            title={customerProfile?.namaLengkap ? `Akun: ${customerProfile.namaLengkap}` : 'Akses Member'}
           >
             <User className={`w-4 h-4 ${customerProfile ? 'text-[#C39A6B]' : ''}`} />
             <span className="hidden sm:inline font-semibold">
@@ -496,8 +522,138 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
             </div>
           ) : (
             <>
+              {/* Step 0: Halaman Member (Daftar, Login, Lanjut Tanpa Member) */}
+              {currentStep === 'member_choice' && (
+                <div className="max-w-xl mx-auto px-4 py-8 sm:py-12 animate-fadeIn">
+                  {memberChoiceStep === 'choice' && (
+                    <div className="space-y-6">
+                      <div className="text-center mb-6 sm:mb-8">
+                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#C39A6B] to-[#966E43] text-white flex items-center justify-center mx-auto mb-4 shadow-xl shadow-amber-950/30 border border-amber-300/30">
+                          <UserCheck className="w-8 h-8" />
+                        </div>
+                        <span className="inline-block px-3.5 py-1 rounded-full bg-amber-500/10 border border-[#C39A6B]/30 text-[#C39A6B] text-[11px] font-mono font-bold tracking-widest uppercase mb-2">
+                          AKSES PEMESANAN ONLINE
+                        </span>
+                        <h2 className="font-display font-black text-2xl sm:text-3xl text-white uppercase tracking-tight">
+                          HALAMAN MEMBER
+                        </h2>
+                        <p className="mt-2 text-slate-300 text-xs sm:text-sm max-w-sm mx-auto leading-relaxed">
+                          Silakan pilih opsi akses pemesanan Anda sebelum melanjutkan ke pemilihan outlet.
+                        </p>
+                      </div>
+
+                      <div className="space-y-3.5">
+                        {/* 1. DAFTAR MEMBER */}
+                        <button
+                          type="button"
+                          onClick={() => setMemberChoiceStep('register')}
+                          className="w-full p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-850 border border-amber-500/40 hover:border-amber-400 hover:bg-slate-800 transition-all text-left flex items-center justify-between group cursor-pointer shadow-lg shadow-amber-950/10 hover:-translate-y-0.5"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-[#C39A6B] text-white flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
+                              <UserPlus className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-display font-black text-base text-white group-hover:text-[#C39A6B] transition-colors">
+                                  DAFTAR MEMBER
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold uppercase">
+                                  Rekomendasi
+                                </span>
+                              </div>
+                              <p className="text-slate-400 text-xs mt-0.5">
+                                Daftar akun baru untuk kumpulkan poin loyalty &amp; promo khusus.
+                              </p>
+                            </div>
+                          </div>
+                          <ArrowRight className="w-5 h-5 text-amber-400 group-hover:translate-x-1 transition-transform shrink-0" />
+                        </button>
+
+                        {/* 2. LOGIN MEMBER */}
+                        <button
+                          type="button"
+                          onClick={() => setMemberChoiceStep('login')}
+                          className="w-full p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-850 transition-all text-left flex items-center justify-between group cursor-pointer shadow-lg hover:-translate-y-0.5"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center shrink-0 group-hover:bg-[#00E5FF] group-hover:text-slate-950 transition-all">
+                              <LogIn className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <span className="font-display font-black text-base text-white group-hover:text-[#00E5FF] transition-colors block">
+                                LOGIN MEMBER
+                              </span>
+                              <p className="text-slate-400 text-xs mt-0.5">
+                                Sudah memiliki akun member Leton? Masuk di sini.
+                              </p>
+                            </div>
+                          </div>
+                          <ArrowRight className="w-5 h-5 text-slate-500 group-hover:text-[#00E5FF] group-hover:translate-x-1 transition-all shrink-0" />
+                        </button>
+
+                        {/* 3. LANJUT TANPA MEMBER */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomerProfile(null);
+                            setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                          }}
+                          className="w-full p-4 sm:p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700 hover:bg-slate-850 transition-all text-left flex items-center justify-between group cursor-pointer hover:-translate-y-0.5"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-slate-800/80 text-slate-400 flex items-center justify-center shrink-0">
+                              <ShoppingBag className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <span className="font-display font-bold text-sm text-slate-200 group-hover:text-white transition-colors block">
+                                LANJUT TANPA MEMBER
+                              </span>
+                              <p className="text-slate-400 text-xs mt-0.5">
+                                Pesan langsung tanpa mendaftar akun (Tidak mendapatkan poin loyalty).
+                              </p>
+                            </div>
+                          </div>
+                          <ArrowRight className="w-5 h-5 text-slate-500 group-hover:translate-x-1 transition-transform shrink-0" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {memberChoiceStep === 'register' && (
+                    <CustomerAuthForm
+                      initialMode="register"
+                      onBackToChoice={() => setMemberChoiceStep('choice')}
+                      onSkipWithoutMember={() => {
+                        setCustomerProfile(null);
+                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                      }}
+                      onAuthSuccess={(profile) => {
+                        setCustomerProfile(profile);
+                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                      }}
+                    />
+                  )}
+
+                  {memberChoiceStep === 'login' && (
+                    <CustomerAuthForm
+                      initialMode="login"
+                      onBackToChoice={() => setMemberChoiceStep('choice')}
+                      onSkipWithoutMember={() => {
+                        setCustomerProfile(null);
+                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                      }}
+                      onAuthSuccess={(profile) => {
+                        setCustomerProfile(profile);
+                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+
               {/* Step 1: Pilih Outlet (also default fallback if no outlet selected) */}
-              {(currentStep === 'outlet' || (!selectedOutlet && currentStep !== 'profile' && currentStep !== 'confirmation')) && (
+              {(currentStep === 'outlet' || (!selectedOutlet && currentStep !== 'profile' && currentStep !== 'confirmation' && currentStep !== 'member_choice')) && (
                 <OutletSelector
                   onSelectOutlet={(outlet) => {
                     setSelectedOutlet(outlet);

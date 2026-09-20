@@ -1,5 +1,6 @@
 import { CustomerOrder, OrderStatus, PaymentStatus } from '../types';
 import { getSupabase, isSupabaseConfigured, getCustomerSessionToken, fetchContentFromSupabase } from './supabase';
+import { processOrderPointsEarning } from './supabaseLoyalty';
 import { isMenuItemAvailableForOutlet } from './supabaseStock';
 import { normalizeIndonesianPhone } from './phone';
 import { matchesOutlet } from '../data/adminAccounts';
@@ -1187,12 +1188,26 @@ export async function updateOrderStatus(
         console.warn('[Supabase Broadcast Warning]:', bcErr);
       }
 
-      // Award loyalty points securely if PAID or COMPLETED
-      if (newPaymentStatus === 'PAID' || newOrderStatus === 'COMPLETED') {
+      // Award loyalty points securely if order status is READY, COMPLETED, or payment is PAID
+      if (newOrderStatus === 'READY' || newOrderStatus === 'COMPLETED' || newPaymentStatus === 'PAID') {
         try {
-          await client.rpc('process_order_points_earning', { p_order_id: orderId });
+          const { data: rpcRes, error: rpcErr } = await client.rpc('process_order_points_earning', { p_order_id: orderId });
+          if (rpcErr || (rpcRes && typeof rpcRes === 'object' && rpcRes.success === false)) {
+            const existingOrder = await fetchSingleOrder(orderId);
+            if (existingOrder) {
+              await processOrderPointsEarning(existingOrder);
+            }
+          }
         } catch (ptsErr) {
           console.warn('[Order Points Earning Error in updateOrderStatus]:', ptsErr);
+          try {
+            const existingOrder = await fetchSingleOrder(orderId);
+            if (existingOrder) {
+              await processOrderPointsEarning(existingOrder);
+            }
+          } catch (fbErr) {
+            console.warn('[Fallback Points Earning Failed]:', fbErr);
+          }
         }
       }
     }
@@ -1687,4 +1702,62 @@ export function subscribeToSingleOrder(
       }
     }
   };
+}
+
+/**
+ * Fetch all orders for a specific customer (for Admin Pusat -> Data Customer detail view)
+ */
+export async function fetchCustomerOrdersForAdmin(
+  customerId: string,
+  customerPhone?: string,
+  customerName?: string
+): Promise<CustomerOrder[]> {
+  try {
+    const client = getSupabase('super_admin');
+    const { data, error } = await client
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error && Array.isArray(data)) {
+      const cleanPhone = (customerPhone || '').replace(/[^0-9]/g, '');
+      const cleanName = (customerName || '').toLowerCase().trim();
+
+      const matchedRows = data.filter((row: any) => {
+        const rowCustId = String(row.customer_id || row.customerId || '');
+        const rowPhone = String(row.customer_phone || row.customerPhone || '').replace(/[^0-9]/g, '');
+        const rowName = String(row.customer_name || row.customerName || '').toLowerCase().trim();
+
+        if (customerId && rowCustId === customerId) return true;
+        if (cleanPhone && cleanPhone.length >= 8 && rowPhone.includes(cleanPhone)) return true;
+        if (cleanName && cleanName.length > 0 && rowName === cleanName) return true;
+        return false;
+      });
+
+      return matchedRows.map((row: any) => ({
+        id: row.id,
+        orderNumber: row.order_number || row.orderNumber || 'LTN-????',
+        outletId: row.outlet_id || row.outletId || '',
+        outletName: row.outlet_name || row.outletName || '',
+        customerName: row.customer_name || row.customerName || '',
+        customerPhone: row.customer_phone || row.customerPhone || '',
+        customerId: row.customer_id || row.customerId || undefined,
+        orderType: row.order_type || row.orderType || 'DINE IN',
+        tableNumber: row.table_number || row.tableNumber || '',
+        items: Array.isArray(row.items) ? row.items : [],
+        totalAmount: Number(row.total_amount || row.totalAmount || 0),
+        paymentMethod: row.payment_method || row.paymentMethod || 'QRIS',
+        paymentStatus: row.payment_status || row.paymentStatus || 'WAITING PAYMENT',
+        paymentReceiptUrl: row.payment_receipt_url || row.paymentReceiptUrl,
+        paymentReceiptPath: row.payment_receipt_path || row.paymentReceiptPath,
+        rejectionReason: row.rejection_reason || row.rejectionReason,
+        orderStatus: row.order_status || row.orderStatus || 'NEW',
+        customerNote: row.customer_note || row.customerNote || '',
+        createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+      }));
+    }
+  } catch (err) {
+    console.warn('[fetchCustomerOrdersForAdmin exception]:', err);
+  }
+  return [];
 }

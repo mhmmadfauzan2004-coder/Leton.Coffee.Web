@@ -5,6 +5,8 @@ import {
   subscribeToCustomersRealtime,
   RegisteredCustomer,
 } from '../../utils/supabaseCustomers';
+import { fetchCustomerOrdersForAdmin } from '../../utils/supabaseOrders';
+import { CustomerOrder } from '../../types';
 import {
   Users,
   Search,
@@ -17,6 +19,13 @@ import {
   Lock,
   Radio,
   MessageCircle,
+  ShoppingBag,
+  Clock,
+  X,
+  ChevronRight,
+  Receipt,
+  Store,
+  Award,
 } from 'lucide-react';
 
 export const CustomerManager: React.FC = () => {
@@ -27,6 +36,11 @@ export const CustomerManager: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [copiedPhoneId, setCopiedPhoneId] = useState<string | null>(null);
+
+  // Customer Detail Modal State
+  const [selectedCustomer, setSelectedCustomer] = useState<RegisteredCustomer | null>(null);
+  const [customerOrders, setCustomerOrders] = useState<CustomerOrder[]>([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState<boolean>(false);
 
   // Load customer data directly from Supabase
   const loadCustomers = async () => {
@@ -64,6 +78,24 @@ export const CustomerManager: React.FC = () => {
     setTimeout(() => {
       setCopiedPhoneId(null);
     }, 2000);
+  };
+
+  // Open member detail modal & fetch order history
+  const handleOpenCustomerDetail = async (customer: RegisteredCustomer) => {
+    setSelectedCustomer(customer);
+    setIsLoadingOrders(true);
+    try {
+      const orders = await fetchCustomerOrdersForAdmin(
+        customer.id,
+        customer.nomorHp,
+        customer.namaLengkap
+      );
+      setCustomerOrders(orders);
+    } catch (err) {
+      console.warn('[handleOpenCustomerDetail] Error:', err);
+    } finally {
+      setIsLoadingOrders(false);
+    }
   };
 
   // Format date helper (Indonesian locale)
@@ -274,22 +306,25 @@ export const CustomerManager: React.FC = () => {
 
                         {/* Customer Name */}
                         <td className="py-4 px-6">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-[#0284C7] text-white flex items-center justify-center font-display font-black text-sm shrink-0 shadow-sm">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCustomerDetail(customer)}
+                            className="flex items-center gap-3 text-left group/btn cursor-pointer focus:outline-none"
+                            title="Klik untuk melihat detail & riwayat pesanan"
+                          >
+                            <div className="w-9 h-9 rounded-xl bg-[#0284C7] group-hover/btn:bg-[#0369A1] text-white flex items-center justify-center font-display font-black text-sm shrink-0 shadow-sm transition-colors">
                               {initial}
                             </div>
                             <div className="min-w-0">
-                              <span className="font-bold text-[#172033] block truncate text-sm">
+                              <span className="font-bold text-[#172033] group-hover/btn:text-[#0284C7] block truncate text-sm transition-colors underline-offset-2 group-hover/btn:underline">
                                 {customer.namaLengkap}
                               </span>
-                              {customer.tanggalLahir && (
-                                <span className="text-[10px] text-[#64748B] flex items-center gap-1 mt-0.5">
-                                  <Calendar className="w-3 h-3 text-[#94A3B8]" />
-                                  Lahir: {customer.tanggalLahir}
-                                </span>
-                              )}
+                              <span className="text-[10px] text-[#0284C7] font-semibold flex items-center gap-1 mt-0.5">
+                                <Receipt className="w-3 h-3 text-[#0284C7]" />
+                                Lihat Riwayat Pesanan
+                              </span>
                             </div>
-                          </div>
+                          </button>
                         </td>
 
                         {/* Phone Number with quick actions */}
@@ -387,42 +422,245 @@ export const CustomerManager: React.FC = () => {
                     </div>
 
                     {/* Action buttons */}
-                    {customer.nomorHp && customer.nomorHp !== '-' && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleCopyPhone(customer.id, customer.nomorHp)}
-                          className="p-1.5 rounded-lg bg-[#F0F7FF] text-[#0284C7] hover:bg-[#E0F2FE] transition-colors"
-                          title="Salin Nomor"
-                        >
-                          {copiedPhoneId === customer.id ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-                        {waPhone && (
-                          <a
-                            href={`https://wa.me/${waPhone}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
-                            title="Chat WhatsApp"
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCustomerDetail(customer)}
+                        className="px-2.5 py-1 rounded-lg bg-[#F0F7FF] text-[#0284C7] text-[11px] font-bold flex items-center gap-1 hover:bg-[#E0F2FE] transition-colors"
+                      >
+                        <Receipt className="w-3 h-3" />
+                        <span>Riwayat</span>
+                      </button>
+                      {customer.nomorHp && customer.nomorHp !== '-' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPhone(customer.id, customer.nomorHp)}
+                            className="p-1.5 rounded-lg bg-[#F0F7FF] text-[#0284C7] hover:bg-[#E0F2FE] transition-colors"
+                            title="Salin Nomor"
                           >
-                            <MessageCircle className="w-3.5 h-3.5" />
-                          </a>
-                        )}
-                      </div>
-                    )}
+                            {copiedPhoneId === customer.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                          {waPhone && (
+                            <a
+                              href={`https://wa.me/${waPhone}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                              title="Chat WhatsApp"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="pt-2 border-t border-[#E0F2FE] flex items-center gap-1.5 text-[11px] font-mono text-[#64748B]">
-                    <Calendar className="w-3 h-3 text-[#94A3B8]" />
-                    <span>Terdaftar: {formatDate(customer.createdAt)}</span>
+                  <div className="pt-2 border-t border-[#E0F2FE] flex items-center justify-between text-[11px] font-mono text-[#64748B]">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3 h-3 text-[#94A3B8]" />
+                      <span>Terdaftar: {formatDate(customer.createdAt)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCustomerDetail(customer)}
+                      className="text-[#0284C7] font-bold flex items-center gap-0.5 hover:underline"
+                    >
+                      <span>Detail</span>
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
                   </div>
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* MEMBER DETAIL & ORDER HISTORY MODAL                  */}
+      {/* ---------------------------------------------------- */}
+      {selectedCustomer && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-fadeIn">
+          <div className="bg-white w-full max-w-2xl rounded-3xl border border-[#E0F2FE] shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="p-6 bg-gradient-to-r from-[#0284C7] to-[#0369A1] text-white relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedCustomer(null)}
+                className="absolute top-5 right-5 p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 border border-white/30 text-white flex items-center justify-center font-display font-black text-2xl shadow-inner shrink-0">
+                  {selectedCustomer.namaLengkap ? selectedCustomer.namaLengkap.charAt(0).toUpperCase() : 'M'}
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-mono font-bold tracking-wider uppercase mb-1">
+                    <Award className="w-3 h-3 text-amber-300" />
+                    <span>Detail Member</span>
+                  </div>
+                  <h2 className="font-display font-black text-xl sm:text-2xl text-white">
+                    {selectedCustomer.namaLengkap}
+                  </h2>
+                  <p className="text-sky-100 text-xs font-mono mt-0.5">
+                    No. HP: {selectedCustomer.nomorHp || '-'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Body Info Stats */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-2xl bg-[#F0F7FF] border border-[#E0F2FE]">
+                  <span className="text-[10px] font-mono font-bold text-[#64748B] uppercase block">
+                    Tanggal Terdaftar
+                  </span>
+                  <span className="font-mono font-bold text-xs text-[#172033] mt-1 block">
+                    {formatDate(selectedCustomer.createdAt)}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-[#F0F7FF] border border-[#E0F2FE]">
+                  <span className="text-[10px] font-mono font-bold text-[#64748B] uppercase block">
+                    Total Pesanan
+                  </span>
+                  <span className="font-display font-black text-base text-[#0284C7] mt-0.5 block">
+                    {customerOrders.length} Order
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-2xl bg-[#F0F7FF] border border-[#E0F2FE] col-span-2 sm:col-span-1">
+                  <span className="text-[10px] font-mono font-bold text-[#64748B] uppercase block">
+                    Status Member
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold text-[11px] mt-1">
+                    <Check className="w-3 h-3 text-emerald-600" /> Member Aktif
+                  </span>
+                </div>
+              </div>
+
+              {/* Order History List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display font-black text-sm uppercase text-[#172033] flex items-center gap-2">
+                    <ShoppingBag className="w-4 h-4 text-[#0284C7]" />
+                    <span>Riwayat Pesanan ({customerOrders.length})</span>
+                  </h3>
+                  {isLoadingOrders && (
+                    <span className="text-xs font-mono text-[#0284C7] flex items-center gap-1">
+                      <RefreshCw className="w-3 h-3 animate-spin" /> Memuat...
+                    </span>
+                  )}
+                </div>
+
+                {isLoadingOrders ? (
+                  <div className="p-8 text-center bg-[#F8FBFF] rounded-2xl border border-[#E0F2FE]">
+                    <RefreshCw className="w-6 h-6 animate-spin text-[#0284C7] mx-auto mb-2" />
+                    <p className="text-xs font-mono text-[#64748B]">Retrieving order history from Supabase...</p>
+                  </div>
+                ) : customerOrders.length === 0 ? (
+                  <div className="p-8 text-center bg-[#F8FBFF] rounded-2xl border border-[#E0F2FE] space-y-2">
+                    <Receipt className="w-8 h-8 text-[#94A3B8] mx-auto" />
+                    <p className="text-xs font-bold text-[#172033]">Belum Ada Riwayat Pesanan</p>
+                    <p className="text-[11px] text-[#64748B]">Member ini belum pernah membuat pesanan di outlet.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                    {customerOrders.map((ord) => {
+                      const isReady = ord.orderStatus === 'READY';
+                      const isCompleted = ord.orderStatus === 'COMPLETED';
+                      const isCancelled = ord.orderStatus === 'CANCELLED';
+
+                      return (
+                        <div
+                          key={ord.id}
+                          className="p-4 rounded-2xl bg-white border border-[#E0F2FE] hover:border-[#0284C7]/40 shadow-sm transition-all space-y-2.5"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-black text-sm text-[#172033]">
+                                  #{ord.orderNumber}
+                                </span>
+                                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#E0F2FE] text-[#0284C7] font-bold">
+                                  {ord.orderType}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-[#64748B] flex items-center gap-1 mt-1">
+                                <Store className="w-3 h-3 text-[#0284C7]" />
+                                {ord.outletName || 'Cabang Leton'}
+                              </span>
+                            </div>
+
+                            <div className="text-right">
+                              <span
+                                className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase ${
+                                  isCompleted || isReady
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : isCancelled
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {ord.orderStatus}
+                              </span>
+                              <span className="text-[10px] text-[#64748B] font-mono block mt-1">
+                                {formatDate(ord.createdAt)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Ordered Items Summary */}
+                          <div className="p-2.5 rounded-xl bg-[#F8FBFF] border border-[#E0F2FE] text-xs space-y-1">
+                            {Array.isArray(ord.items) && ord.items.map((it: any, idx: number) => (
+                              <div key={idx} className="flex justify-between items-center text-[11px]">
+                                <span className="font-semibold text-[#172033]">
+                                  {it.quantity}x {it.name || it.productName}
+                                </span>
+                                <span className="font-mono text-[#64748B]">
+                                  Rp {((it.unitPrice || it.price || 0) * (it.quantity || 1)).toLocaleString('id-ID')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1 text-xs">
+                            <span className="text-[#64748B] font-mono">Total Pembayaran:</span>
+                            <span className="font-display font-black text-sm text-[#0284C7]">
+                              Rp {Number(ord.totalAmount || 0).toLocaleString('id-ID')}
+                            </span>
+                          </div>
+
+                          {ord.rejectionReason && (
+                            <div className="p-2 rounded-xl bg-rose-50 text-rose-700 text-[11px]">
+                              <strong>Alasan Penolakan:</strong> {ord.rejectionReason}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-[#F8FBFF] border-t border-[#E0F2FE] flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedCustomer(null)}
+                className="px-5 py-2.5 rounded-xl bg-white border border-[#E0F2FE] text-xs font-bold text-[#172033] hover:bg-[#F0F7FF] transition-colors cursor-pointer"
+              >
+                Tutup Detail
+              </button>
+            </div>
           </div>
         </div>
       )}

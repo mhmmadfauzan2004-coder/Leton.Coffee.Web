@@ -28,6 +28,7 @@ import {
   Sparkles,
   Droplets,
   Award,
+  User,
 } from 'lucide-react';
 
 interface OrderCheckoutProps {
@@ -43,6 +44,7 @@ interface OrderCheckoutProps {
     paymentMethod: PaymentMethod;
     paymentReceiptUrl?: string;
     paymentReceiptPath?: string;
+    isMemberChoice?: boolean;
   }) => Promise<void>;
   isSubmitting: boolean;
   customerProfile?: CustomerProfile | null;
@@ -65,6 +67,7 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   const [tableNumber, setTableNumber] = useState<string>('');
   const [customerName, setCustomerName] = useState<string>(customerProfile?.namaLengkap || '');
   const [customerPhone, setCustomerPhone] = useState<string>(customerProfile?.nomorHp || '');
+  const [isMemberChoice, setIsMemberChoice] = useState<boolean>(customerProfile ? true : false);
   const [orderNote, setOrderNote] = useState<string>(generalNote || '');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('QRIS');
   const [formError, setFormError] = useState<string>('');
@@ -162,6 +165,7 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
       paymentMethod,
       paymentReceiptUrl: paymentMethod === 'QRIS' ? (uploadedReceiptUrl || undefined) : undefined,
       paymentReceiptPath: paymentMethod === 'QRIS' ? (uploadedReceiptPath || undefined) : undefined,
+      isMemberChoice,
     });
   };
 
@@ -361,6 +365,58 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
                       : 'bg-white border border-[#E0F2FE]'
                   }`}
                 />
+              </div>
+
+              {/* Pilihan Keanggotaan Member Saat Checkout */}
+              <div className="space-y-2 md:col-span-2 pt-2 border-t border-[#E0F2FE]">
+                <label className="text-xs text-[#172033] font-bold flex items-center gap-1.5 uppercase tracking-wider">
+                  <Award className="w-4 h-4 text-[#0284C7]" />
+                  <span>Keanggotaan Member</span>
+                </label>
+                {customerProfile ? (
+                  <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-[#C39A6B]/40 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-[#C39A6B] text-white flex items-center justify-center font-bold text-xs">
+                        <Award className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-[#172033] block">
+                          Terdaftar sebagai Member: <span className="text-[#0284C7]">{customerProfile.namaLengkap}</span>
+                        </span>
+                        <span className="text-[10px] text-[#64748B]">
+                          Pesanan akan otomatis terhubung dengan akun member Anda.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 p-1.5 bg-[#F0F7FF] rounded-2xl border border-[#E0F2FE]">
+                    <button
+                      type="button"
+                      onClick={() => setIsMemberChoice(true)}
+                      className={`py-3 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        isMemberChoice
+                          ? 'bg-white text-[#0284C7] shadow-sm border border-[#E0F2FE] ring-1 ring-[#0284C7]/20'
+                          : 'text-[#64748B] hover:text-[#172033]'
+                      }`}
+                    >
+                      <Award className="w-4 h-4 text-[#0284C7]" />
+                      <span>Jadi Member</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsMemberChoice(false)}
+                      className={`py-3 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        !isMemberChoice
+                          ? 'bg-white text-slate-700 shadow-sm border border-[#E0F2FE] ring-1 ring-slate-400/20'
+                          : 'text-[#64748B] hover:text-[#172033]'
+                      }`}
+                    >
+                      <User className="w-4 h-4 text-slate-500" />
+                      <span>Tidak Jadi Member</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5 md:col-span-2">

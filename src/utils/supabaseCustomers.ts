@@ -119,3 +119,85 @@ export function subscribeToCustomersRealtime(
     }
   };
 }
+
+/**
+ * Finds an existing registered customer by phone or name, or creates a new customer row in Supabase `customers` table.
+ * Used when a customer chooses "Jadi Member" during checkout.
+ * Ensures no duplicate customers are created and new members immediately show up in Admin Pusat -> Data Customer.
+ */
+export async function findOrCreateCustomerMember(
+  namaLengkap: string,
+  nomorHp: string
+): Promise<RegisteredCustomer | null> {
+  const cleanNama = (namaLengkap || '').trim();
+  const cleanPhone = (nomorHp || '').replace(/[^0-9]/g, '');
+  const rawPhone = (nomorHp || '').trim();
+  const client = getSupabase();
+
+  try {
+    // 1. Check if customer with this phone number already exists
+    if (cleanPhone && cleanPhone.length >= 8) {
+      const { data: phoneMatches } = await client
+        .from('customers')
+        .select('*');
+
+      if (Array.isArray(phoneMatches) && phoneMatches.length > 0) {
+        const foundByPhone = phoneMatches.find((c: any) => {
+          const cPhone = String(c.nomor_hp || c.nomorHp || '').replace(/[^0-9]/g, '');
+          return cPhone && (cPhone === cleanPhone || cPhone.endsWith(cleanPhone) || cleanPhone.endsWith(cPhone));
+        });
+        if (foundByPhone) {
+          return normalizeCustomerRow(foundByPhone);
+        }
+      }
+    }
+
+    // 2. Check if customer with exact matching name exists
+    if (cleanNama) {
+      const { data: nameMatches } = await client
+        .from('customers')
+        .select('*');
+
+      if (Array.isArray(nameMatches) && nameMatches.length > 0) {
+        const foundByName = nameMatches.find((c: any) => {
+          const cName = String(c.nama_lengkap || c.namaLengkap || '').toLowerCase().trim();
+          return cName === cleanNama.toLowerCase();
+        });
+        if (foundByName) {
+          return normalizeCustomerRow(foundByName);
+        }
+      }
+    }
+
+    // 3. Create a new member in the existing Supabase `customers` table
+    const newId = `cust-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const newRow = {
+      id: newId,
+      nama_lengkap: cleanNama,
+      nomor_hp: cleanPhone || rawPhone || '-',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: inserted, error } = await client
+      .from('customers')
+      .insert(newRow)
+      .select('*')
+      .maybeSingle();
+
+    if (!error && inserted) {
+      return normalizeCustomerRow(inserted);
+    }
+
+    // Fallback object if insert succeeds without returned payload
+    return {
+      id: newId,
+      namaLengkap: cleanNama,
+      nomorHp: cleanPhone || rawPhone || '-',
+      createdAt: newRow.created_at,
+    };
+  } catch (err) {
+    console.warn('[findOrCreateCustomerMember] Exception:', err);
+    return null;
+  }
+}

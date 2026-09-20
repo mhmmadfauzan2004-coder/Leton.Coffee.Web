@@ -1466,6 +1466,8 @@ ALTER TABLE public.reward_redemptions ENABLE ROW LEVEL SECURITY;
 -- Allow reading loyalty settings and rewards for anyone
 CREATE POLICY "Allow read loyalty_settings" ON public.loyalty_settings FOR SELECT USING (true);
 CREATE POLICY "Allow read loyalty_rewards" ON public.loyalty_rewards FOR SELECT USING (true);
+CREATE POLICY "Allow read loyalty_transactions" ON public.loyalty_transactions FOR SELECT USING (true);
+CREATE POLICY "Allow read reward_redemptions" ON public.reward_redemptions FOR SELECT USING (true);
 
 -- Allow admins full access to settings, rewards, and transactions
 CREATE POLICY "Admins manage loyalty_settings" ON public.loyalty_settings 

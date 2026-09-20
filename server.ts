@@ -678,7 +678,10 @@ function saveOrders(orders: any[]) {
   }
 }
 
-function broadcastOrderEvent(type: 'ORDER_CREATED' | 'ORDER_UPDATED', order: any) {
+function broadcastOrderEvent(
+  type: 'ORDER_CREATED' | 'ORDER_UPDATED' | 'ORDER_STATUS_UPDATED' | 'ORDER_DELETED',
+  order: any
+) {
   const message = `data: ${JSON.stringify({ type, order, timestamp: Date.now() })}\n\n`;
   for (let i = sseClients.length - 1; i >= 0; i--) {
     const client = sseClients[i];
@@ -784,7 +787,16 @@ app.patch('/api/orders/:id', (req, res) => {
   }
 
   if (orderStatus) orders[index].orderStatus = orderStatus;
-  if (paymentStatus) orders[index].paymentStatus = paymentStatus;
+  if (paymentStatus) {
+    orders[index].paymentStatus = paymentStatus;
+    if (paymentStatus === 'PAID' || paymentStatus === 'PAYMENT REJECTED' || paymentStatus === 'REJECTED') {
+      if (!orders[index].paymentVerifiedAt && !orders[index].payment_verified_at) {
+        const nowIso = new Date().toISOString();
+        orders[index].paymentVerifiedAt = nowIso;
+        orders[index].payment_verified_at = nowIso;
+      }
+    }
+  }
   if (rejectionReason !== undefined) orders[index].rejectionReason = rejectionReason;
   if (paymentReceiptUrl) orders[index].paymentReceiptUrl = paymentReceiptUrl;
   if (paymentReceiptPath) orders[index].paymentReceiptPath = paymentReceiptPath;
@@ -792,9 +804,113 @@ app.patch('/api/orders/:id', (req, res) => {
 
   saveOrders(orders);
   broadcastOrderEvent('ORDER_UPDATED', orders[index]);
+  broadcastOrderEvent('ORDER_STATUS_UPDATED', orders[index]);
 
   res.json({ success: true, order: orders[index] });
 });
+
+// Delete or archive order (with strict Outlet isolation)
+app.delete('/api/orders/:id', (req, res) => {
+  const { id } = req.params;
+  const role = req.headers['x-admin-role'] as string | undefined;
+  const outletId = (req.headers['x-outlet-id'] as string | undefined)?.toLowerCase();
+
+  const orders = getOrders();
+  const index = orders.findIndex((o: any) => o.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+  }
+
+  // If outlet_admin, verify that the order belongs to this admin's outlet
+  if (role === 'outlet_admin' && outletId && outletId !== 'all') {
+    const orderOutlet = orders[index].outletId || orders[index].outlet_id;
+    if (!orderMatchesOutlet(orderOutlet, outletId)) {
+      return res.status(403).json({ error: 'Akses Ditolak: Anda tidak memiliki wewenang menghapus pesanan dari cabang lain.' });
+    }
+  }
+
+  const [deletedOrder] = orders.splice(index, 1);
+  saveOrders(orders);
+  broadcastOrderEvent('ORDER_DELETED', deletedOrder);
+
+  res.json({ success: true, deletedId: id });
+});
+
+// ---------------------------------------------
+// BACKGROUND WORKER: AUTO-DELETE PAYMENT PROOF AFTER 24 HOURS
+// ---------------------------------------------
+async function runPaymentProofCleanup() {
+  try {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
+    const { data: ordersToClean, error } = await supabase
+      .from('orders')
+      .select('id, payment_status, updated_at, created_at, payment_proof_path, payment_receipt_path, payment_receipt_url')
+      .in('payment_status', ['PAID', 'PAYMENT REJECTED', 'REJECTED'])
+      .or('payment_proof_path.not.is.null,payment_receipt_path.not.is.null,payment_receipt_url.not.is.null');
+
+    if (error) {
+      console.warn('[Payment Proof Cleanup Query Error]:', error.message);
+      return;
+    }
+
+    if (ordersToClean && ordersToClean.length > 0) {
+      const eligibleOrders = ordersToClean.filter(order => {
+        const verifiedTime = order.updated_at || order.created_at;
+        if (!verifiedTime) return false;
+        return new Date(verifiedTime).getTime() <= Date.now() - 24 * 60 * 60 * 1000;
+      });
+
+      if (eligibleOrders.length > 0) {
+        console.log(`[Payment Proof Cleanup] Found ${eligibleOrders.length} order(s) eligible for payment proof deletion.`);
+        for (const order of eligibleOrders) {
+          const pathsToRemove: string[] = [];
+          if (order.payment_proof_path) pathsToRemove.push(order.payment_proof_path);
+          if (order.payment_receipt_path) pathsToRemove.push(order.payment_receipt_path);
+          if (order.payment_receipt_url && !order.payment_receipt_url.startsWith('http')) {
+            pathsToRemove.push(order.payment_receipt_url);
+          }
+
+          if (pathsToRemove.length > 0) {
+            try {
+              const { error: removeErr } = await supabase.storage
+                .from('leton-images')
+                .remove(pathsToRemove);
+
+              if (removeErr) {
+                console.warn(`[Payment Proof Cleanup] Storage remove notice for order ${order.id}:`, removeErr.message);
+              } else {
+                console.log(`[Payment Proof Cleanup] Successfully deleted storage file(s) for order ${order.id}`);
+              }
+            } catch (storageEx) {
+              console.warn(`[Payment Proof Cleanup] Storage remove exception for order ${order.id}:`, storageEx);
+            }
+          }
+
+          const { error: updateErr } = await supabase
+            .from('orders')
+            .update({
+              payment_proof_path: null,
+              payment_receipt_path: null,
+              payment_receipt_url: null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', order.id);
+
+          if (updateErr) {
+            console.warn(`[Payment Proof Cleanup] Failed to nullify proof references for order ${order.id}:`, updateErr.message);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Payment Proof Cleanup Worker Error]:', err);
+  }
+}
+
+// Run cleanup every 30 minutes in the background and once 10 seconds after startup
+setInterval(runPaymentProofCleanup, 30 * 60 * 1000);
+setTimeout(runPaymentProofCleanup, 10 * 1000);
 
 // ---------------------------------------------
 // VITE / STATIC SERVING

@@ -6,6 +6,10 @@ import { resolveMediaUrl } from '../../../utils/api';
 import { calculateItemUnitPrice } from '../../../data/addOnsData';
 import { ProductAddOnsModal } from './ProductAddOnsModal';
 import {
+  isMenuItemAvailableForOutlet,
+  subscribeToOutletStockRealtime,
+} from '../../../utils/supabaseStock';
+import {
   ShoppingBag,
   Search,
   Plus,
@@ -46,12 +50,22 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
   preSelectedProduct,
   onClearPreSelectedProduct,
 }) => {
-  const { data } = useContent();
+  const { data, refreshData } = useContent();
   const { menuCategories, menuItems } = data;
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [customizingProduct, setCustomizingProduct] = useState<MenuItem | null>(null);
+
+  // Subscribe to live stock broadcast updates
+  React.useEffect(() => {
+    const unsub = subscribeToOutletStockRealtime((payload) => {
+      if (!payload.outletId || payload.outletId === outlet?.id) {
+        refreshData();
+      }
+    });
+    return () => unsub();
+  }, [outlet?.id, refreshData]);
 
   // Auto-open modal if a preSelectedProduct was passed
   React.useEffect(() => {
@@ -218,7 +232,7 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6">
             {filteredItems.map((item) => {
               const qtyInCart = getProductQuantityInCart(item.id);
-              const isAvailable = item.isAvailable !== false;
+              const isAvailable = isMenuItemAvailableForOutlet(item, outlet?.id);
 
               return (
                 <div
@@ -374,6 +388,7 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
       {/* Product Add-Ons Customization Modal */}
       <ProductAddOnsModal
         product={customizingProduct}
+        outletId={outlet?.id}
         isOpen={!!customizingProduct}
         onClose={() => setCustomizingProduct(null)}
         onConfirm={handleConfirmAddOns}

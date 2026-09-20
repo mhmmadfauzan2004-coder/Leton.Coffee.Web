@@ -16,8 +16,10 @@ import {
   Layers,
   Sparkles,
   Droplets,
+  AlertTriangle,
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { isMenuItemAvailableForOutlet } from '../../../utils/supabaseStock';
 
 interface OrderCartDrawerProps {
   outlet: OrderOutlet;
@@ -60,6 +62,10 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
     0
   );
   const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
+
+  const hasUnavailableItems = cart.some(
+    (item) => !isMenuItemAvailableForOutlet(item.product, outlet.id)
+  );
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden flex justify-end bg-black/80 backdrop-blur-sm animate-fadeIn">
@@ -125,30 +131,49 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
                   const hasSize = item.size && item.size.name;
                   const hasTopping = item.topping && item.topping.name !== 'No Topping';
                   const hasSyrup = item.syrup && item.syrup.name !== 'No Syrup';
+                  const isItemAvailableInOutlet = isMenuItemAvailableForOutlet(item.product, outlet.id);
 
                   return (
                     <div
                       key={itemId}
-                      className="p-3.5 sm:p-4 rounded-2xl bg-slate-900/90 border border-slate-800/90 space-y-3 shadow-md"
+                      className={`p-3.5 sm:p-4 rounded-2xl border space-y-3 shadow-md transition-all ${
+                        isItemAvailableInOutlet
+                          ? 'bg-slate-900/90 border-slate-800/90'
+                          : 'bg-rose-950/20 border-rose-500/50'
+                      }`}
                     >
                       <div className="flex items-start gap-3">
                         {/* Thumbnail */}
                         {item.product.image && (
-                          <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-950 shrink-0 border border-slate-800">
+                          <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-950 shrink-0 border border-slate-800 relative">
                             <img
                               src={resolveMediaUrl(item.product.image)}
                               alt={item.product.name}
                               className="w-full h-full object-cover"
                               referrerPolicy="no-referrer"
                             />
+                            {!isItemAvailableInOutlet && (
+                              <div className="absolute inset-0 bg-rose-950/80 flex items-center justify-center p-1 text-center">
+                                <span className="text-[9px] font-mono font-bold text-rose-300 uppercase">
+                                  HABIS
+                                </span>
+                              </div>
+                            )}
                           </div>
                         )}
 
                         {/* Name & Price Breakdown */}
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-display font-bold text-sm text-white truncate">
-                            {item.product.name}
-                          </h4>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-display font-bold text-sm text-white truncate">
+                              {item.product.name}
+                            </h4>
+                            {!isItemAvailableInOutlet && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-rose-950 text-rose-300 border border-rose-500/50 uppercase shrink-0">
+                                HABIS DI CABANG INI
+                              </span>
+                            )}
+                          </div>
                           <span className="font-mono text-xs text-slate-400 block mt-0.5">
                             Harga Dasar: {formatRupiah(item.product.price)}
                           </span>
@@ -293,6 +318,13 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
         {/* Footer Summary & Continue CTA */}
         {cart.length > 0 && (
           <div className="p-4 sm:p-6 border-t border-slate-800 bg-slate-950 space-y-4">
+            {hasUnavailableItems && (
+              <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/60 flex items-center gap-2.5 text-rose-300 text-xs font-mono">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>Ada menu yang HABIS di cabang {outlet.shortName || outlet.name}. Silakan hapus item bertanda HABIS untuk melanjutkan.</span>
+              </div>
+            )}
+
             <div className="space-y-2 text-xs">
               <div className="flex justify-between text-slate-400">
                 <span>Subtotal ({totalItems} item)</span>
@@ -323,10 +355,15 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
 
               <button
                 onClick={onContinue}
+                disabled={hasUnavailableItems}
                 id="cart-continue-checkout-btn"
-                className="py-3 px-4 rounded-xl bg-[#2563EB] hover:bg-[#1d4ed8] text-white font-display font-bold text-xs tracking-wider uppercase transition-all shadow-lg shadow-[#2563EB]/30 hover:shadow-[#2563EB]/50 active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                className={`py-3 px-4 rounded-xl font-display font-bold text-xs tracking-wider uppercase transition-all flex items-center justify-center gap-2 ${
+                  hasUnavailableItems
+                    ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                    : 'bg-[#2563EB] hover:bg-[#1d4ed8] text-white shadow-lg shadow-[#2563EB]/30 hover:shadow-[#2563EB]/50 active:scale-95 cursor-pointer'
+                }`}
               >
-                <span>CONTINUE</span>
+                <span>{hasUnavailableItems ? 'MENU HABIS' : 'CONTINUE'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>

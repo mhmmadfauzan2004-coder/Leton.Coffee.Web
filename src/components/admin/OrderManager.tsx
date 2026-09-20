@@ -5,6 +5,7 @@ import { matchesOutlet } from '../../data/adminAccounts';
 import {
   fetchAllOrders,
   updateOrderStatus,
+  deleteOrder,
   subscribeToOrdersRealtime,
   ORDERS_SQL_SCHEMA,
 } from '../../utils/supabaseOrders';
@@ -36,6 +37,7 @@ import {
   ShieldCheck,
   Building2,
   Lock,
+  Trash2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { KitchenSlipModal } from './KitchenSlipModal';
@@ -60,11 +62,17 @@ export const OrderManager: React.FC = () => {
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
-  // Lightbox & Rejection dialog states
+  // Lightbox & Modal states
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  
+  // Rejection modal states
   const [rejectingOrder, setRejectingOrder] = useState<CustomerOrder | null>(null);
   const [rejectionReasonInput, setRejectionReasonInput] = useState<string>('');
   const [isSubmittingReject, setIsSubmittingReject] = useState<boolean>(false);
+
+  // Deletion modal states
+  const [orderToDelete, setOrderToDelete] = useState<CustomerOrder | null>(null);
+  const [isSubmittingDelete, setIsSubmittingDelete] = useState<boolean>(false);
 
   // Kitchen Slip / Checker modal states
   const [selectedOrderForSlip, setSelectedOrderForSlip] = useState<CustomerOrder | null>(null);
@@ -75,7 +83,6 @@ export const OrderManager: React.FC = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
 
   // New order notification state
-  const [newOrders, setNewOrders] = useState<CustomerOrder[]>([]);
   const [notificationState, setNotificationState] = useState<{
     showBanner: boolean;
     currentOrder: CustomerOrder | null;
@@ -85,33 +92,49 @@ export const OrderManager: React.FC = () => {
     currentOrder: null,
     orderCount: 0,
   });
-  const notifiedOrderIds = useMemo(() => new Set<string>(), []);
+  const notifiedOrderIdsRef = React.useRef<Set<string>>(new Set());
 
-  // Play synthetic chime when new order arrives
+  // Play synthetic chime when new order arrives (with resume for autoplay policy safety)
   const playOrderChime = () => {
     if (!soundEnabled) return;
     try {
-      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
 
+      const now = ctx.currentTime;
+
+      // Note 1: High crisp ding
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();
       osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-      osc1.frequency.setValueAtTime(880, ctx.currentTime + 0.12); // A5
-
-      gain1.gain.setValueAtTime(0, ctx.currentTime);
-      gain1.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
-      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-
+      osc1.frequency.setValueAtTime(587.33, now); // D5
+      gain1.gain.setValueAtTime(0, now);
+      gain1.gain.linearRampToValueAtTime(0.4, now + 0.04);
+      gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
       osc1.connect(gain1);
       gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.4);
 
-      osc1.start();
-      osc1.stop(ctx.currentTime + 0.6);
-    } catch {
-      // Audio context might be blocked until user gesture
+      // Note 2: Harmonious dong
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(880, now + 0.14); // A5
+      gain2.gain.setValueAtTime(0, now + 0.14);
+      gain2.gain.linearRampToValueAtTime(0.45, now + 0.18);
+      gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.85);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.14);
+      osc2.stop(now + 0.85);
+    } catch (e) {
+      // Non-blocking catch if browser restricts audio
+      console.warn('[Audio Notification Warning]:', e);
     }
   };
 
@@ -143,13 +166,13 @@ export const OrderManager: React.FC = () => {
         }
       },
       (newOrder) => {
-        if (!notifiedOrderIds.has(newOrder.id)) {
-          notifiedOrderIds.add(newOrder.id);
+        if (!notifiedOrderIdsRef.current.has(newOrder.id)) {
+          notifiedOrderIdsRef.current.add(newOrder.id);
           playOrderChime();
-          setNotificationState(prev => ({
+          setNotificationState((prev) => ({
             showBanner: true,
             currentOrder: newOrder,
-            orderCount: prev.orderCount + 1
+            orderCount: prev.orderCount + 1,
           }));
         }
       },
@@ -159,7 +182,6 @@ export const OrderManager: React.FC = () => {
     return () => {
       mounted = false;
       unsubscribe();
-      notifiedOrderIds.clear();
     };
   }, [soundEnabled, effectiveOutletScope]);
 
@@ -203,34 +225,90 @@ export const OrderManager: React.FC = () => {
     }
   };
 
-  // Quick Action: Verify Payment to PAID
-  const handleVerifyPayment = async (order: CustomerOrder) => {
-    // If order is NEW, advance to ACCEPTED simultaneously for faster workflow
-    const nextOrderStatus = order.orderStatus === 'NEW' ? 'ACCEPTED' : order.orderStatus;
-    await handleUpdateStatus(order.id, nextOrderStatus, 'PAID', '');
+  // Action 1: [ SIAP ]
+  const handleMarkReady = async (order: CustomerOrder) => {
+    // Strict Outlet Isolation Check
+    if (isOutletAdmin && !matchesOutlet(order.outletId, assignedOutletId)) {
+      showToast('Akses Ditolak: Anda hanya dapat memproses pesanan di cabang Anda.', 'error');
+      return;
+    }
+
+    setUpdatingOrderId(order.id);
+    try {
+      if (order.orderStatus === 'READY') {
+        // Toggle or mark completed if already ready
+        await handleUpdateStatus(order.id, 'COMPLETED');
+        showToast(`Pesanan #${order.orderNumber} telah ditandai SELESAI.`, 'success');
+      } else {
+        // Mark as READY (Siap diambil) and confirm payment if QRIS with receipt or cash
+        const nextPayment = (order.paymentMethod === 'QRIS' && order.paymentReceiptUrl) || order.paymentMethod === 'TUNAI'
+          ? 'PAID'
+          : order.paymentStatus;
+
+        await handleUpdateStatus(order.id, 'READY', nextPayment, '');
+        showToast(`Pesanan #${order.orderNumber} berhasil ditandai SIAP ☕`, 'success');
+      }
+    } finally {
+      setUpdatingOrderId(null);
+    }
   };
 
-  // Open Reject Dialog
+  // Action 2: [ TOLAK ]
   const handleOpenRejectDialog = (order: CustomerOrder) => {
+    // Strict Outlet Isolation Check
+    if (isOutletAdmin && !matchesOutlet(order.outletId, assignedOutletId)) {
+      showToast('Akses Ditolak: Anda hanya dapat memproses pesanan di cabang Anda.', 'error');
+      return;
+    }
     setRejectingOrder(order);
-    setRejectionReasonInput('Nominal transfer tidak sesuai atau bukti pembayaran tidak valid.');
+    setRejectionReasonInput('Stok bahan habis / toko sedang tutup / transaksi tidak valid.');
   };
 
-  // Submit Rejection
-  const handleSubmitRejectPayment = async () => {
+  const handleSubmitRejectOrder = async () => {
     if (!rejectingOrder) return;
     setIsSubmittingReject(true);
     try {
       await handleUpdateStatus(
         rejectingOrder.id,
-        rejectingOrder.orderStatus,
-        'PAYMENT REJECTED',
-        rejectionReasonInput.trim() || 'Bukti pembayaran ditolak oleh kasir.'
+        'CANCELLED',
+        'REJECTED',
+        rejectionReasonInput.trim() || 'Pesanan ditolak oleh kasir outlet.'
       );
+      showToast(`Pesanan #${rejectingOrder.orderNumber} telah DITOLAK.`, 'info');
       setRejectingOrder(null);
       setRejectionReasonInput('');
     } finally {
       setIsSubmittingReject(false);
+    }
+  };
+
+  // Action 3: [ HAPUS PESANAN ]
+  const handleOpenDeleteDialog = (order: CustomerOrder) => {
+    // Strict Outlet Isolation Check
+    if (isOutletAdmin && !matchesOutlet(order.outletId, assignedOutletId)) {
+      showToast('Akses Ditolak: Anda hanya dapat memproses pesanan di cabang Anda.', 'error');
+      return;
+    }
+    setOrderToDelete(order);
+  };
+
+  const handleConfirmDeleteOrder = async () => {
+    if (!orderToDelete) return;
+    setIsSubmittingDelete(true);
+    const targetId = orderToDelete.id;
+    const targetNumber = orderToDelete.orderNumber;
+
+    try {
+      // Optimistic delete from UI
+      setOrders((prev) => prev.filter((o) => o.id !== targetId));
+
+      await deleteOrder(targetId, assignedOutletId, auth.role);
+      showToast(`Pesanan #${targetNumber} berhasil dihapus dari daftar.`, 'success');
+      setOrderToDelete(null);
+    } catch (err: any) {
+      showToast('Gagal menghapus pesanan: ' + (err?.message || 'Error'), 'error');
+    } finally {
+      setIsSubmittingDelete(false);
     }
   };
 
@@ -307,7 +385,7 @@ export const OrderManager: React.FC = () => {
                   <span className="text-[#00E5FF]">🔔</span> PESANAN BARU
                 </h3>
                 <div className="mt-2 space-y-1 text-xs text-slate-300 font-mono">
-                  <p>Order: <span className="font-bold text-white">{notificationState.currentOrder.orderNumber}</span></p>
+                  <p>Order: <span className="font-bold text-white">{notificationState.currentOrder.orderNumber.startsWith('#') ? notificationState.currentOrder.orderNumber : `#${notificationState.currentOrder.orderNumber}`}</span></p>
                   <p>Customer: <span className="text-white">{notificationState.currentOrder.customerName}</span></p>
                   <p>Outlet: <span className="text-white">{notificationState.currentOrder.outletName}</span></p>
                   <p>Total: <span className="font-bold text-[#00E5FF]">{formatRupiah(notificationState.currentOrder.totalAmount)}</span></p>
@@ -317,15 +395,15 @@ export const OrderManager: React.FC = () => {
                     onClick={() => {
                       setSelectedOrderDetail(notificationState.currentOrder);
                       setIsDetailModalOpen(true);
-                      setNotificationState(prev => ({ ...prev, showBanner: false }));
+                      setNotificationState((prev) => ({ ...prev, showBanner: false }));
                     }}
-                    className="flex-1 px-3 py-2 rounded-lg bg-[#00E5FF] text-slate-950 font-bold text-[11px] uppercase tracking-wider hover:bg-white transition-colors"
+                    className="flex-1 px-3 py-2 rounded-lg bg-[#00E5FF] text-slate-950 font-black text-[11px] uppercase tracking-wider hover:bg-white transition-colors cursor-pointer"
                   >
-                    Lihat Pesanan
+                    LIHAT PESANAN
                   </button>
                   <button
-                    onClick={() => setNotificationState(prev => ({ ...prev, showBanner: false }))}
-                    className="px-3 py-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-[11px] uppercase tracking-wider hover:bg-slate-700 transition-colors"
+                    onClick={() => setNotificationState((prev) => ({ ...prev, showBanner: false }))}
+                    className="px-3 py-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-[11px] uppercase tracking-wider hover:bg-slate-700 transition-colors cursor-pointer"
                   >
                     Tutup
                   </button>
@@ -823,7 +901,7 @@ export const OrderManager: React.FC = () => {
                     {order.paymentReceiptUrl ? (
                       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-1">
                         <div className="flex items-center gap-3.5">
-                           {/* Thumbnail */}
+                          {/* Thumbnail (Clickable to view full preview) */}
                           <div
                             onClick={(e) => {
                               e.stopPropagation();
@@ -844,7 +922,7 @@ export const OrderManager: React.FC = () => {
 
                           <div className="space-y-1">
                             <span className="font-mono text-xs text-slate-300 block">
-                              File tersimpan di Supabase Storage
+                              File tersimpan di Cloud Storage
                             </span>
                             <div className="flex items-center gap-2">
                               <button
@@ -871,39 +949,6 @@ export const OrderManager: React.FC = () => {
                             </div>
                           </div>
                         </div>
-
-                        {/* Admin Action: Verify or Reject */}
-                        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                          {order.paymentStatus !== 'PAID' && (
-                            <button
-                              type="button"
-                              disabled={isUpdating}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleVerifyPayment(order);
-                              }}
-                              className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
-                            >
-                              <CheckCircle2 className="w-4 h-4" />
-                              <span>VERIFIKASI / LUNAS</span>
-                            </button>
-                          )}
-
-                          {order.paymentStatus !== 'PAYMENT REJECTED' && (
-                            <button
-                              type="button"
-                              disabled={isUpdating}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenRejectDialog(order);
-                              }}
-                              className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                            >
-                              <XCircle className="w-4 h-4 text-rose-400" />
-                              <span>TOLAK BUKTI</span>
-                            </button>
-                          )}
-                        </div>
                       </div>
                     ) : (
                       <p className="text-xs text-slate-400">
@@ -912,12 +957,12 @@ export const OrderManager: React.FC = () => {
                     )}
 
                     {/* Rejection Note Alert if rejected */}
-                    {order.paymentStatus === 'PAYMENT REJECTED' && (
+                    {(order.orderStatus === 'CANCELLED' || order.paymentStatus === 'PAYMENT REJECTED' || order.paymentStatus === 'REJECTED') && (
                       <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                         <div>
                           <strong className="block text-rose-300 uppercase font-mono">
-                            Bukti Pembayaran Ditolak:
+                            Status Penolakan:
                           </strong>
                           <span>{order.rejectionReason || 'Alasan tidak dispesifikasikan.'}</span>
                         </div>
@@ -926,31 +971,14 @@ export const OrderManager: React.FC = () => {
                   </div>
                 )}
 
-                {/* TUNAI PAYMENT ACTION BAR (For Cash at Store) */}
+                {/* TUNAI PAYMENT INFO BAR (For Cash at Store) */}
                 {order.paymentMethod === 'TUNAI' && (
-                  <div className="mb-4 p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-xs">
-                      <Banknote className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span className="text-slate-300">
-                        Pembayaran Tunai di Kasir. Status:{' '}
-                        <strong className="font-mono text-emerald-400">{order.paymentStatus}</strong>
-                      </span>
-                    </div>
-
-                    {order.paymentStatus !== 'PAID' && (
-                      <button
-                        type="button"
-                        disabled={isUpdating}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleVerifyPayment(order);
-                        }}
-                        className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>TERIMA PEMBAYARAN TUNAI (LUNAS)</span>
-                      </button>
-                    )}
+                  <div className="mb-4 p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center gap-2 text-xs">
+                    <Banknote className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="text-slate-300">
+                      Pembayaran Tunai di Kasir. Status:{' '}
+                      <strong className="font-mono text-emerald-400">{order.paymentStatus}</strong>
+                    </span>
                   </div>
                 )}
 
@@ -1061,25 +1089,26 @@ export const OrderManager: React.FC = () => {
                   )}
                 </div>
 
-                {/* Operational Action Bar: Prominent PESANAN SUDAH SIAP Button */}
+                {/* SIMPLIFIED ADMIN OUTLET ACTIONS: [ SIAP ] [ TOLAK ] [ HAPUS PESANAN ] */}
                 <div className="pt-4 mt-4 border-t border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {/* 1. [ SIAP ] ACTION */}
                     {order.orderStatus !== 'READY' && order.orderStatus !== 'COMPLETED' && order.orderStatus !== 'CANCELLED' ? (
                       <button
                         type="button"
                         disabled={isUpdating}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleUpdateStatus(order.id, 'READY');
+                          handleMarkReady(order);
                         }}
-                        className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-display font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
+                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-display font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
                       >
                         <CheckCircle2 className="w-4 h-4 text-white" />
-                        <span>PESANAN SUDAH SIAP</span>
+                        <span>SIAP</span>
                       </button>
                     ) : order.orderStatus === 'READY' ? (
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-3 py-2 rounded-xl bg-emerald-950 border border-emerald-500/60 text-emerald-300 font-mono font-bold text-xs flex items-center gap-1.5">
+                        <span className="px-3.5 py-2 rounded-xl bg-emerald-950 border border-emerald-500/60 text-emerald-300 font-mono font-bold text-xs flex items-center gap-1.5">
                           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                           <span>Pesanan Sudah Siap (Menunggu Customer Ambil)</span>
                         </span>
@@ -1088,68 +1117,84 @@ export const OrderManager: React.FC = () => {
                           disabled={isUpdating}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleUpdateStatus(order.id, 'COMPLETED');
+                            handleMarkReady(order);
                           }}
                           className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs uppercase font-bold transition-all cursor-pointer border border-slate-700"
                         >
-                          Tandai Selesai
+                          Selesai
                         </button>
                       </div>
-                    ) : null}
-
-                    {/* Order Status Stepper Buttons */}
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-mono uppercase text-slate-500 mr-1">
-                        Status Manual:
+                    ) : order.orderStatus === 'CANCELLED' ? (
+                      <span className="px-3.5 py-2 rounded-xl bg-rose-950/80 border border-rose-500/60 text-rose-300 font-mono font-bold text-xs flex items-center gap-1.5">
+                        <XCircle className="w-4 h-4 text-rose-400" />
+                        <span>Pesanan Ditolak</span>
                       </span>
-                      {(['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'] as OrderStatus[]).map(
-                        (st) => {
-                          const isCurrent = order.orderStatus === st;
-                          return (
-                            <button
-                              key={st}
-                              disabled={isUpdating}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleUpdateStatus(order.id, st);
-                              }}
-                              className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all cursor-pointer ${
-                                isCurrent
-                                  ? 'bg-[#00E5FF] text-slate-950 font-black shadow-md shadow-cyan-500/30'
-                                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                              }`}
-                            >
-                              {st}
-                            </button>
-                          );
-                        }
-                      )}
-                    </div>
+                    ) : (
+                      <span className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 font-mono font-bold text-xs flex items-center gap-1.5">
+                        <Check className="w-4 h-4 text-emerald-400" />
+                        <span>Pesanan Selesai</span>
+                      </span>
+                    )}
+
+                    {/* 2. [ TOLAK ] ACTION */}
+                    {order.orderStatus !== 'CANCELLED' && order.orderStatus !== 'COMPLETED' && (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenRejectDialog(order);
+                        }}
+                        className="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <XCircle className="w-4 h-4 text-rose-400" />
+                        <span>TOLAK</span>
+                      </button>
+                    )}
+
+                    {/* 3. [ HAPUS PESANAN ] ACTION */}
+                    <button
+                      type="button"
+                      disabled={isUpdating}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenDeleteDialog(order);
+                      }}
+                      className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-rose-950/50 border border-slate-800 hover:border-rose-700/60 text-slate-400 hover:text-rose-300 font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      title="Hapus pesanan dari antrean"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>HAPUS PESANAN</span>
+                    </button>
                   </div>
 
-                  {/* Payment Status Dropdown for Full Control */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[11px] font-mono uppercase text-slate-400">Bayar:</span>
-                    <select
-                      disabled={isUpdating}
-                      value={order.paymentStatus}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => {
+                  {/* Operational Utilities: Slip & Detail */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
                         e.stopPropagation();
-                        handleUpdateStatus(
-                          order.id,
-                          order.orderStatus,
-                          e.target.value as PaymentStatus
-                        );
+                        setSelectedOrderForSlip(order);
+                        setIsSlipModalOpen(true);
                       }}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-xs font-mono text-slate-200 focus:outline-none focus:border-[#00E5FF] cursor-pointer"
+                      className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-mono inline-flex items-center gap-1.5 cursor-pointer"
                     >
-                      <option value="WAITING VERIFICATION">WAITING VERIFICATION</option>
-                      <option value="PAY AT STORE">PAY AT STORE</option>
-                      <option value="PAID">PAID (Lunas)</option>
-                      <option value="PAYMENT REJECTED">PAYMENT REJECTED</option>
-                      <option value="WAITING PAYMENT">WAITING PAYMENT</option>
-                    </select>
+                      <Printer className="w-3.5 h-3.5 text-[#00E5FF]" />
+                      <span>Slip Dapur</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedOrderDetail(order);
+                        setIsDetailModalOpen(true);
+                      }}
+                      className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-mono inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Detail</span>
+                    </button>
                   </div>
                 </div>
               </motion.div>
@@ -1211,7 +1256,7 @@ export const OrderManager: React.FC = () => {
         </div>
       )}
 
-      {/* Rejection Reason Modal */}
+      {/* Rejection Modal for TOLAK */}
       {rejectingOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
@@ -1219,30 +1264,31 @@ export const OrderManager: React.FC = () => {
               <div className="flex items-center gap-2 text-rose-400">
                 <XCircle className="w-5 h-5" />
                 <h3 className="font-display font-black text-base uppercase">
-                  TOLAK BUKTI PEMBAYARAN
+                  TOLAK PESANAN
                 </h3>
               </div>
               <button
                 onClick={() => setRejectingOrder(null)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-full bg-slate-800"
+                className="p-1.5 text-slate-400 hover:text-white rounded-full bg-slate-800 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <p className="text-xs text-slate-300">
-              Order: <strong className="text-white font-mono">{rejectingOrder.orderNumber}</strong> ({rejectingOrder.customerName})
+              Apakah Anda yakin ingin menolak pesanan{' '}
+              <strong className="text-white font-mono">#{rejectingOrder.orderNumber}</strong> ({rejectingOrder.customerName})?
             </p>
 
             <div className="space-y-1.5">
               <label className="text-xs font-mono uppercase text-slate-400 font-bold block">
-                Alasan Penolakan Bukti:
+                Alasan Penolakan:
               </label>
               <textarea
                 rows={3}
                 value={rejectionReasonInput}
                 onChange={(e) => setRejectionReasonInput(e.target.value)}
-                placeholder="Contoh: Nominal transfer kurang, bukti transfer tidak terbaca, transaksi kadaluarsa..."
+                placeholder="Contoh: Stok bahan habis, toko sedang tutup, antrean penuh..."
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-rose-500 font-sans"
               />
             </div>
@@ -1251,20 +1297,74 @@ export const OrderManager: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setRejectingOrder(null)}
-                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-display font-bold text-xs uppercase tracking-wider"
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-display font-bold text-xs uppercase tracking-wider cursor-pointer"
               >
                 BATAL
               </button>
               <button
                 type="button"
                 disabled={isSubmittingReject}
-                onClick={handleSubmitRejectPayment}
+                onClick={handleSubmitRejectOrder}
                 className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-display font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md shadow-rose-600/30"
               >
                 {isSubmittingReject ? (
                   <span>Menyimpan...</span>
                 ) : (
                   <span>KONFIRMASI TOLAK</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deletion Confirmation Modal for HAPUS PESANAN */}
+      {orderToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-rose-400">
+                <Trash2 className="w-5 h-5" />
+                <h3 className="font-display font-black text-base uppercase">
+                  HAPUS PESANAN
+                </h3>
+              </div>
+              <button
+                onClick={() => setOrderToDelete(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-full bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs text-slate-300">
+              <p>
+                Hapus pesanan{' '}
+                <strong className="text-white font-mono">#{orderToDelete.orderNumber}</strong> ({orderToDelete.customerName}) dari daftar?
+              </p>
+              <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-900/50 text-rose-300">
+                ⚠️ Tindakan ini akan menghapus pesanan dari antrean operasional outlet.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setOrderToDelete(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-display font-bold text-xs uppercase tracking-wider cursor-pointer"
+              >
+                BATAL
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingDelete}
+                onClick={handleConfirmDeleteOrder}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-display font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md shadow-rose-600/30"
+              >
+                {isSubmittingDelete ? (
+                  <span>Menghapus...</span>
+                ) : (
+                  <span>YA, HAPUS PESANAN</span>
                 )}
               </button>
             </div>

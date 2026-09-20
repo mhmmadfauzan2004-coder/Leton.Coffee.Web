@@ -387,32 +387,75 @@ export interface CustomerLoyaltyData {
 export async function getCustomerLoyalty(customerId: string): Promise<CustomerLoyaltyData> {
   try {
     const client = getSupabase();
-    const { data, error } = await client
-      .from('customer_points')
-      .select('current_balance, total_points_earned, total_points_redeemed')
-      .eq('customer_id', customerId)
-      .maybeSingle();
 
-    if (error) {
-      if (isTableMissingError(error) && shouldFallback()) {
-        return getLocalCustomerLoyalty(customerId);
+    // 1. Primary: query customers table directly (authorized via session/role or security policies)
+    try {
+      const { data: custData, error: custErr } = await client
+        .from('customers')
+        .select('points_balance, total_points_earned, total_points_redeemed')
+        .eq('id', customerId)
+        .maybeSingle();
+
+      if (!custErr && custData) {
+        return {
+          pointsBalance: Number(custData.points_balance || 0),
+          totalPointsEarned: Number(custData.total_points_earned || 0),
+          totalPointsRedeemed: Number(custData.total_points_redeemed || 0),
+        };
       }
-      throw error;
+    } catch {
+      // Continue to next lookup
     }
 
-    if (data) {
-      return {
-        pointsBalance: Number(data.current_balance || 0),
-        totalPointsEarned: Number(data.total_points_earned || 0),
-        totalPointsRedeemed: Number(data.total_points_redeemed || 0),
-      };
+    // 2. Secondary: query customer_points table if present in custom schema
+    try {
+      const { data, error } = await client
+        .from('customer_points')
+        .select('current_balance, total_points_earned, total_points_redeemed')
+        .eq('customer_id', customerId)
+        .maybeSingle();
+
+      if (!error && data) {
+        return {
+          pointsBalance: Number(data.current_balance || 0),
+          totalPointsEarned: Number(data.total_points_earned || 0),
+          totalPointsRedeemed: Number(data.total_points_redeemed || 0),
+        };
+      }
+    } catch {
+      // Continue to transactions lookup
     }
-    return { pointsBalance: 0, totalPointsEarned: 0, totalPointsRedeemed: 0 };
+
+    // 3. Tertiary: calculate balance from loyalty_transactions
+    try {
+      const { data: txData, error: txErr } = await client
+        .from('loyalty_transactions')
+        .select('points, transaction_type, balance_after')
+        .eq('customer_id', customerId)
+        .order('created_at', { ascending: false });
+
+      if (!txErr && txData && txData.length > 0) {
+        const latestBalance = Number(txData[0].balance_after || 0);
+        let earned = 0;
+        let redeemed = 0;
+        for (const t of txData) {
+          const pts = Number(t.points || 0);
+          if (pts > 0) earned += pts;
+          else redeemed += Math.abs(pts);
+        }
+        return {
+          pointsBalance: latestBalance,
+          totalPointsEarned: earned,
+          totalPointsRedeemed: redeemed,
+        };
+      }
+    } catch {
+      // Continue to local storage
+    }
+
+    return getLocalCustomerLoyalty(customerId);
   } catch (err: any) {
-    if (shouldFallback()) {
-      return getLocalCustomerLoyalty(customerId);
-    }
-    throw new Error('Gagal memuat saldo poin dari database: ' + err.message);
+    return getLocalCustomerLoyalty(customerId);
   }
 }
 

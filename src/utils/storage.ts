@@ -171,6 +171,8 @@ export function sanitizeLoadedData(raw: any): LetonData {
               hasSyrup: typeof m?.hasSyrup === 'boolean' ? m.hasSyrup : (fallbackItem?.hasSyrup ?? true),
               availableSyrupIds: Array.isArray(m?.availableSyrupIds) ? m.availableSyrupIds : fallbackItem?.availableSyrupIds,
               customizations: Array.isArray(m?.customizations) ? m.customizations : (fallbackItem?.customizations || []),
+              outletAvailability: m?.outletAvailability && typeof m.outletAvailability === 'object' ? m.outletAvailability : (fallbackItem?.outletAvailability || {}),
+              outletStock: m?.outletStock && typeof m.outletStock === 'object' ? m.outletStock : (fallbackItem?.outletStock || {}),
             };
           })
         : initialLetonData.menuItems,

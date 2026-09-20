@@ -12,11 +12,13 @@ import {
 } from '../../../data/addOnsData';
 import { formatRupiah } from '../../../utils/formatters';
 import { resolveMediaUrl } from '../../../utils/api';
-import { X, Plus, Minus, Coffee, Sparkles, MessageSquare, Layers, Droplets } from 'lucide-react';
+import { X, Plus, Minus, Coffee, Sparkles, MessageSquare, Layers, Droplets, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { isMenuItemAvailableForOutlet } from '../../../utils/supabaseStock';
 
 interface ProductAddOnsModalProps {
   product: MenuItem | null;
+  outletId?: string;
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (
@@ -38,6 +40,7 @@ interface ProductAddOnsModalProps {
 
 export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
   product,
+  outletId,
   isOpen,
   onClose,
   onConfirm,
@@ -49,6 +52,8 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
   initialNote = '',
 }) => {
   const { data } = useContent();
+
+  const isAvailableInOutlet = isMenuItemAvailableForOutlet(product, outletId);
 
   // Dynamic Master Toppings from Context/DB
   const masterToppings: CustomizationOption[] = useMemo(() => {
@@ -655,14 +660,27 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
               </div>
             </div>
 
+            {/* Stock status warning if unavailable */}
+            {!isAvailableInOutlet && (
+              <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/50 flex items-center gap-2 text-rose-300 text-xs font-mono">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>Menu ini sedang HABIS di cabang yang dipilih.</span>
+              </div>
+            )}
+
             {/* Confirm Add to Cart CTA */}
             <button
               type="button"
+              disabled={!isAvailableInOutlet}
               onClick={handleConfirm}
               id="confirm-add-ons-btn"
-              className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-[#00E5FF] via-[#38BDF8] to-[#2563EB] hover:from-[#3cf0ff] hover:to-[#1d4ed8] text-slate-950 font-display font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-between shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 active:scale-[0.99] transition-all cursor-pointer"
+              className={`w-full py-3.5 px-5 rounded-2xl font-display font-black text-xs sm:text-sm tracking-wider uppercase flex items-center justify-between transition-all ${
+                isAvailableInOutlet
+                  ? 'bg-gradient-to-r from-[#00E5FF] via-[#38BDF8] to-[#2563EB] hover:from-[#3cf0ff] hover:to-[#1d4ed8] text-slate-950 shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 active:scale-[0.99] cursor-pointer'
+                  : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+              }`}
             >
-              <span>TAMBAH KE PESANAN</span>
+              <span>{isAvailableInOutlet ? 'TAMBAH KE PESANAN' : 'HABIS DI CABANG INI'}</span>
               <span className="font-mono font-black text-sm sm:text-base">
                 {formatRupiah(totalPrice)}
               </span>

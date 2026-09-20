@@ -11,6 +11,7 @@ import {
 import { calculateItemUnitPrice } from '../../../data/addOnsData';
 import { formatRupiah } from '../../../utils/formatters';
 import { uploadPaymentReceipt } from '../../../utils/supabaseOrders';
+import { isMenuItemAvailableForOutlet } from '../../../utils/supabaseStock';
 import {
   Utensils,
   Package,
@@ -126,6 +127,17 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+
+    // Outlet Stock Validation
+    const unavailableItem = cart.find(
+      (it) => !isMenuItemAvailableForOutlet(it.product, outlet.id)
+    );
+    if (unavailableItem) {
+      setFormError(
+        `Menu "${unavailableItem.product.name}" saat ini sedang HABIS di cabang ${outlet.shortName || outlet.name}. Silakan kembali ke keranjang untuk menghapusnya.`
+      );
+      return;
+    }
 
     if (!customerName.trim()) {
       setFormError('Nama pemesan wajib diisi.');

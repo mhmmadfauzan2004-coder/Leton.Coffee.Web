@@ -99,6 +99,8 @@ export interface MenuItem {
   description: string;
   image: string;
   isAvailable: boolean;
+  outletAvailability?: Record<string, boolean>;
+  outletStock?: Record<string, { isAvailable: boolean; stock?: number }>;
   badge?: string;
   order: number;
 

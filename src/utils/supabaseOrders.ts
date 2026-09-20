@@ -1,5 +1,6 @@
 import { CustomerOrder, OrderStatus, PaymentStatus } from '../types';
-import { getSupabase, isSupabaseConfigured, getCustomerSessionToken } from './supabase';
+import { getSupabase, isSupabaseConfigured, getCustomerSessionToken, fetchContentFromSupabase } from './supabase';
+import { isMenuItemAvailableForOutlet } from './supabaseStock';
 import { normalizeIndonesianPhone } from './phone';
 import { matchesOutlet } from '../data/adminAccounts';
 import { getApiUrl } from './api';
@@ -59,6 +60,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
   rejection_reason TEXT, -- Catatan penolakan jika pembayaran / pesanan ditolak
   order_status TEXT NOT NULL DEFAULT 'NEW', -- 'NEW' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED'
   customer_note TEXT,
+  payment_verified_at TIMESTAMPTZ, -- Waktu verifikasi/penolakan pembayaran untuk retensi 24 jam
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -73,6 +75,7 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_receipt_url TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_receipt_path TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_note TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_verified_at TIMESTAMPTZ;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 -- 3. Buat Tabel Order Items (Relasi Produk)
@@ -823,6 +826,28 @@ export async function createNewOrder(
   try {
     const client = getSupabase();
 
+    // Verify outlet stock before placing order
+    try {
+      const liveContent = await fetchContentFromSupabase();
+      if (liveContent && Array.isArray(liveContent.menuItems)) {
+        for (const item of orderData.items) {
+          const menuItem = liveContent.menuItems.find(
+            (m) => m.id === item.productId || m.name.toLowerCase() === item.name.toLowerCase()
+          );
+          if (menuItem && !isMenuItemAvailableForOutlet(menuItem, orderData.outletId)) {
+            console.error(`[Stock Check Failed]: Menu "${item.name}" is OUT OF STOCK for outlet "${orderData.outletId}"`);
+            return {
+              success: false,
+              order: orderData,
+              error: `Pesanan tidak dapat diproses: Menu "${item.name}" sedang HABIS di cabang ${orderData.outletName || orderData.outletId}.`,
+            };
+          }
+        }
+      }
+    } catch (stockErr) {
+      console.warn('[Stock Verification Notice]:', stockErr);
+    }
+
     // Customer standalone uses public.orders.customer_id. Do NOT put customer ID into user_id!
     // user_id is reserved exclusively for Supabase Auth (Admin/Outlet).
     let effectiveUserId: string | null = null;
@@ -936,6 +961,21 @@ export async function createNewOrder(
         await client.from('order_items').insert(itemRows);
       } catch (itemErr) {
         console.warn('[Supabase Order Items Note]:', itemErr);
+      }
+      // 1b. Instant Realtime Broadcast via Supabase Channel
+      try {
+        const broadcastChannel = client.channel('leton_orders_stream');
+        broadcastChannel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            broadcastChannel.send({
+              type: 'broadcast',
+              event: 'ORDER_CREATED',
+              payload: orderData,
+            });
+          }
+        });
+      } catch (bcErr) {
+        console.warn('[Supabase Broadcast Warning]:', bcErr);
       }
     } else {
       console.warn('[Supabase Order Insert Notice]:', insertError.message);
@@ -1114,6 +1154,9 @@ export async function updateOrderStatus(
   };
   if (newPaymentStatus) {
     updatePayload.payment_status = newPaymentStatus;
+    if (newPaymentStatus === 'PAID' || newPaymentStatus === 'PAYMENT REJECTED' || newPaymentStatus === 'REJECTED') {
+      updatePayload.payment_verified_at = new Date().toISOString();
+    }
   }
   if (rejectionReason !== undefined) {
     updatePayload.rejection_reason = rejectionReason;
@@ -1126,6 +1169,24 @@ export async function updateOrderStatus(
     if (error) {
       console.warn('[Supabase updateOrderStatus Notice]:', error.message);
     } else {
+      // Broadcast ORDER_STATUS_UPDATED event on Supabase Realtime channel for instant customer notification
+      try {
+        const liveChannel = client.channel(`order_live_${orderId}`);
+        liveChannel.send({
+          type: 'broadcast',
+          event: 'ORDER_STATUS_UPDATED',
+          payload: {
+            order_id: orderId,
+            order_status: newOrderStatus,
+            payment_status: newPaymentStatus,
+            rejection_reason: rejectionReason,
+            updated_at: updatePayload.updated_at,
+          },
+        });
+      } catch (bcErr) {
+        console.warn('[Supabase Broadcast Warning]:', bcErr);
+      }
+
       // Award loyalty points securely if PAID or COMPLETED
       if (newPaymentStatus === 'PAID' || newOrderStatus === 'COMPLETED') {
         try {
@@ -1180,6 +1241,60 @@ export async function updateOrderStatus(
 }
 
 /**
+ * Delete or Archive Order with strict Outlet Isolation
+ */
+export async function deleteOrder(
+  orderId: string,
+  requesterOutletId?: string,
+  isAdminRole?: string
+): Promise<boolean> {
+  if (!orderId) return false;
+
+  // Verify outlet isolation if outlet admin
+  if (requesterOutletId && requesterOutletId !== 'ALL' && isAdminRole !== 'super_admin') {
+    const existing = await fetchSingleOrder(orderId);
+    if (existing && !matchesOutlet(existing.outletId, requesterOutletId)) {
+      throw new Error('Akses Ditolak: Anda tidak memiliki wewenang menghapus pesanan dari cabang lain.');
+    }
+  }
+
+  // 1. Delete or Soft Delete in Supabase
+  try {
+    const client = getSupabase(isAdminRole, requesterOutletId);
+    const { error } = await client.from('orders').delete().eq('id', orderId);
+    if (error) {
+      console.warn('[Supabase deleteOrder Notice]:', error.message);
+    }
+  } catch (err) {
+    console.warn('[Supabase deleteOrder Exception]:', err);
+  }
+
+  // 2. Broadcast and sync cache
+  (async () => {
+    try {
+      const cached = safeGetItem(ADMIN_ORDERS_CACHE_KEY);
+      if (cached) {
+        let list: CustomerOrder[] = JSON.parse(cached);
+        list = list.filter((o) => o.id !== orderId);
+        safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(list).slice(0, 50)));
+      }
+
+      fetch(getApiUrl(`/api/orders/${orderId}`), {
+        method: 'DELETE',
+        headers: {
+          'x-admin-role': isAdminRole || '',
+          'x-outlet-id': requesterOutletId || '',
+        },
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
+  })();
+
+  return true;
+}
+
+/**
  * Realtime Subscription for Orders
  * Listens for new and updated orders via Supabase Postgres Realtime Channel,
  * Server-Sent Events (SSE), and backup polling.
@@ -1193,29 +1308,65 @@ export function subscribeToOrdersRealtime(
   let isSubscribed = true;
   let clientChannel: any = null;
   let sseSource: EventSource | null = null;
+  const knownOrderIds = new Set<string>();
+  let isInitialLoadDone = false;
 
   const activeOutlet = targetOutletId || (typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '');
   const activeRole = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '';
   const filterOutletId = activeOutlet && activeOutlet !== 'ALL' ? activeOutlet : undefined;
 
+  const triggerAlertIfNeeded = (order: CustomerOrder) => {
+    if (!order || !order.id) return;
+    // Super Admin / Central TIDAK menerima operational new-order notification popup/chime
+    if (activeRole === 'super_admin') return;
+    // Routing outlet check: hanya admin cabang yang sesuai
+    if (filterOutletId && !matchesOutlet(order.outletId, filterOutletId)) return;
+    if (onNewOrderAlert) {
+      onNewOrderAlert(order);
+    }
+  };
+
   // Function to refresh and notify
   const refresh = async (alertOrder?: CustomerOrder) => {
     if (!isSubscribed) return;
     const orders = await fetchAllOrders(filterOutletId);
+    if (!isSubscribed) return;
     onOrdersChange(orders);
-    if (alertOrder && onNewOrderAlert) {
-      // Super Admin TIDAK menerima realtime kitchen order dan TIDAK memainkan suara notifikasi order dapur
-      if (activeRole !== 'super_admin' && (!filterOutletId || matchesOutlet(alertOrder.outletId, filterOutletId))) {
-        onNewOrderAlert(alertOrder);
-      }
+
+    if (!isInitialLoadDone) {
+      orders.forEach((o) => knownOrderIds.add(o.id));
+      isInitialLoadDone = true;
+    } else {
+      // Find any newly discovered order from cloud fetch
+      const newlyDiscovered = orders.filter((o) => !knownOrderIds.has(o.id));
+      newlyDiscovered.forEach((o) => {
+        knownOrderIds.add(o.id);
+        triggerAlertIfNeeded(o);
+      });
+    }
+
+    if (alertOrder && alertOrder.id) {
+      knownOrderIds.add(alertOrder.id);
+      triggerAlertIfNeeded(alertOrder);
     }
   };
 
-  // 1. Supabase Postgres Realtime Listener
+  // Initial load
+  refresh();
+
+  // 1. Supabase Postgres Realtime & Broadcast Stream
   try {
     const client = getSupabase(activeRole, filterOutletId);
     clientChannel = client
-      .channel('orders_realtime_' + Math.random().toString(36).slice(2))
+      .channel('leton_orders_stream_' + Math.random().toString(36).slice(2))
+      .on('broadcast', { event: 'ORDER_CREATED' }, (payload: any) => {
+        const newOrder = payload?.payload;
+        if (newOrder && newOrder.id) {
+          refresh(newOrder);
+        } else {
+          refresh();
+        }
+      })
       .on(
         'postgres_changes',
         {
@@ -1224,7 +1375,6 @@ export function subscribeToOrdersRealtime(
           table: 'orders',
         },
         (payload: any) => {
-          console.log('[Supabase Realtime Order Event]:', payload.eventType);
           if (payload.eventType === 'INSERT' && payload.new) {
             const raw = payload.new;
             const newOrder: CustomerOrder = {
@@ -1248,12 +1398,7 @@ export function subscribeToOrdersRealtime(
               customerNote: raw.customer_note || raw.customerNote || '',
               createdAt: raw.created_at || raw.createdAt || new Date().toISOString(),
             };
-
-            if (activeRole !== 'super_admin' && (!filterOutletId || matchesOutlet(newOrder.outletId, filterOutletId))) {
-              refresh(newOrder);
-            } else {
-              refresh();
-            }
+            refresh(newOrder);
           } else {
             refresh();
           }
@@ -1297,12 +1442,12 @@ export function subscribeToOrdersRealtime(
     // SSE optional notice
   }
 
-  // 3. Backup polling every 20 seconds (only when tab is visible to prevent duplicate background load)
+  // 3. Fast Backup Polling every 2.5 seconds
   const pollInterval = setInterval(() => {
-    if (isSubscribed && typeof document !== 'undefined' && document.visibilityState === 'visible') {
+    if (isSubscribed) {
       refresh();
     }
-  }, 20000);
+  }, 2500);
 
   // Return cleanup
   return () => {
@@ -1454,6 +1599,14 @@ export function subscribeToSingleOrder(
     const client = getSupabase();
     clientChannel = client
       .channel(`order_live_${orderIdOrNumber}_${Math.random().toString(36).slice(2)}`)
+      .on('broadcast', { event: 'ORDER_STATUS_UPDATED' }, (payload: any) => {
+        if (
+          payload?.payload?.order_id === orderIdOrNumber ||
+          payload?.payload?.order_number === orderIdOrNumber
+        ) {
+          checkOrder();
+        }
+      })
       .on(
         'postgres_changes',
         {
@@ -1495,7 +1648,9 @@ export function subscribeToSingleOrder(
         const payload = JSON.parse(e.data);
         if (
           payload &&
-          (payload.type === 'ORDER_UPDATED' || payload.type === 'ORDER_CREATED')
+          (payload.type === 'ORDER_UPDATED' ||
+            payload.type === 'ORDER_STATUS_UPDATED' ||
+            payload.type === 'ORDER_CREATED')
         ) {
           if (
             payload.order?.id === orderIdOrNumber ||

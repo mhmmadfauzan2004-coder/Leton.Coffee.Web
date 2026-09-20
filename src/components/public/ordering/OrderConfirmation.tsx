@@ -20,6 +20,8 @@ import {
   Store,
   MapPin,
   CheckCircle,
+  AlertCircle,
+  XCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -82,7 +84,10 @@ export const OrderConfirmation: React.FC<OrderConfirmationProps> = ({
     };
   }, []);
 
-  // Keep live sync with database / admin updates
+  // Keep live sync with database / admin updates & trigger customer realtime notification
+  const lastNotifiedStatusRef = React.useRef<string>(initialOrder.orderStatus);
+  const [inAppNotice, setInAppNotice] = useState<{ message: string; type: 'ready' | 'rejected' } | null>(null);
+
   useEffect(() => {
     setCurrentOrder(initialOrder);
   }, [initialOrder]);
@@ -94,6 +99,30 @@ export const OrderConfirmation: React.FC<OrderConfirmationProps> = ({
       (updatedOrder) => {
         if (updatedOrder) {
           setCurrentOrder(updatedOrder);
+
+          // Trigger in-app notification when status changes
+          if (
+            updatedOrder.orderStatus !== lastNotifiedStatusRef.current
+          ) {
+            const oldStatus = lastNotifiedStatusRef.current;
+            lastNotifiedStatusRef.current = updatedOrder.orderStatus;
+
+            if (
+              (updatedOrder.orderStatus === 'READY' || updatedOrder.orderStatus === 'COMPLETED') &&
+              oldStatus !== 'READY' &&
+              oldStatus !== 'COMPLETED'
+            ) {
+              setInAppNotice({
+                message: 'Pesananmu sudah siap! ☕',
+                type: 'ready',
+              });
+            } else if (updatedOrder.orderStatus === 'CANCELLED' && oldStatus !== 'CANCELLED') {
+              setInAppNotice({
+                message: 'Pesananmu ditolak.',
+                type: 'rejected',
+              });
+            }
+          }
         }
       }
     );
@@ -108,11 +137,10 @@ export const OrderConfirmation: React.FC<OrderConfirmationProps> = ({
     setTimeout(() => setCopied(false), 2500);
   };
 
-  // Status mapping: HANYA 2 STATUS CUSTOMER
-  // Status 1: "Sebentar ya, lagi disiapin"
-  // Status 2: "Pesanan sudah siap"
+  // Status mapping:
   const isOrderReady =
     currentOrder.orderStatus === 'READY' || currentOrder.orderStatus === 'COMPLETED';
+  const isOrderCancelled = currentOrder.orderStatus === 'CANCELLED';
 
   // WhatsApp helper text
   const waItemsText = currentOrder.items
@@ -146,7 +174,39 @@ Halo Barista ${currentOrder.outletName}, saya ingin menanyakan status pesanan no
   const waLink = createWhatsAppLink(outlet.whatsapp || '6281234567890', waMessage);
 
   return (
-    <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-10 bg-[#F8FBFF] min-h-full font-sans">
+    <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-10 bg-[#F8FBFF] min-h-full font-sans relative">
+      {/* Realtime Status Update Floating Toast/Banner for Customer */}
+      <AnimatePresence>
+        {inAppNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 border backdrop-blur-md ${
+              inAppNotice.type === 'ready'
+                ? 'bg-emerald-900/95 text-white border-emerald-500/50 shadow-emerald-900/30'
+                : 'bg-rose-900/95 text-white border-rose-500/50 shadow-rose-900/30'
+            }`}
+          >
+            {inAppNotice.type === 'ready' ? (
+              <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+            )}
+            <span className="font-display font-bold text-sm tracking-wide">
+              {inAppNotice.message}
+            </span>
+            <button
+              type="button"
+              onClick={() => setInAppNotice(null)}
+              className="ml-2 p-1 text-white/70 hover:text-white rounded-full bg-white/10"
+            >
+              <Check className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* 1. TOP WELCOME GREETING MESSAGE (AS REQUESTED) */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -166,14 +226,16 @@ Halo Barista ${currentOrder.outletName}, saya ingin menanyakan status pesanan no
         </div>
       </motion.div>
 
-      {/* 2. LIVE KITCHEN STATUS: 2 STATUSES ONLY */}
+      {/* 2. LIVE KITCHEN STATUS */}
       <motion.div
         layout
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.3 }}
         className={`rounded-3xl p-6 sm:p-8 border shadow-sm mb-8 transition-all overflow-hidden relative ${
-          isOrderReady
+          isOrderCancelled
+            ? 'bg-gradient-to-br from-[#FFF1F2] via-white to-[#FFE4E6] border-[#FDA4AF]'
+            : isOrderReady
             ? 'bg-gradient-to-br from-[#F0FDF4] via-white to-[#ECFDF5] border-[#86EFAC]'
             : 'bg-gradient-to-br from-[#F0F9FF] via-white to-[#E0F2FE] border-[#7DD3FC]'
         }`}
@@ -184,14 +246,20 @@ Halo Barista ${currentOrder.outletName}, saya ingin menanyakan status pesanan no
             <div className="flex items-center gap-2">
               <span
                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-mono uppercase tracking-wider ${
-                  isOrderReady
+                  isOrderCancelled
+                    ? 'bg-rose-100 text-rose-800'
+                    : isOrderReady
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-[#E0F2FE] text-[#0284C7]'
                 }`}
               >
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    isOrderReady ? 'bg-emerald-600' : 'bg-[#0284C7] animate-ping'
+                    isOrderCancelled
+                      ? 'bg-rose-600'
+                      : isOrderReady
+                      ? 'bg-emerald-600'
+                      : 'bg-[#0284C7] animate-ping'
                   }`}
                 />
                 <span>LIVE KITCHEN STATUS</span>
@@ -205,7 +273,27 @@ Halo Barista ${currentOrder.outletName}, saya ingin menanyakan status pesanan no
 
             {/* STATUS TITLE & MESSAGE */}
             <AnimatePresence mode="wait">
-              {isOrderReady ? (
+              {isOrderCancelled ? (
+                <motion.div
+                  key="status-cancelled"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className="space-y-1.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-7 h-7 sm:w-8 sm:h-8 text-rose-600 shrink-0" />
+                    <h2 className="font-display font-black text-2xl sm:text-3xl text-rose-900 tracking-tight">
+                      Pesanan Ditolak
+                    </h2>
+                  </div>
+                  <p className="text-sm sm:text-base font-bold text-rose-800 pl-9 sm:pl-10">
+                    {currentOrder.rejectionReason
+                      ? `Alasan: "${currentOrder.rejectionReason}"`
+                      : 'Pesananmu tidak dapat diproses oleh outlet.'}
+                  </p>
+                </motion.div>
+              ) : isOrderReady ? (
                 <motion.div
                   key="status-ready"
                   initial={{ opacity: 0, y: 8 }}

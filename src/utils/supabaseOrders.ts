@@ -513,9 +513,7 @@ BEGIN
   END IF;
 
   -- Order must be PAID or COMPLETED
-  IF v_payment_status <> 'PAID' AND v_order_status <> 'COMPLETED' THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Poin hanya diberikan untuk pesanan dengan status PAID atau COMPLETED');
-  END IF;
+  -- REMOVED: IF v_payment_status <> 'PAID' AND v_order_status <> 'COMPLETED' THEN ...
 
   -- 3. Fetch loyalty settings
   SELECT is_active, earning_amount_per_point, calculation_basis
@@ -894,6 +892,9 @@ export async function createNewOrder(
         console.error('[Loyalty Earning Error]: Order tidak terhubung ke customer.');
       } else {
         try {
+          // Explicitly calling the points earning RPC immediately upon order creation.
+          // Note: The RPC process_order_points_earning internally checks for duplicate processing, 
+          // making it safe to call here immediately without waiting for payment status.
           const { data: rpcRes, error: rpcErr } = await client.rpc('process_order_points_earning', { p_order_id: orderData.id });
           if (rpcErr) {
             console.error('[Loyalty Earning Error in createNewOrder RPC]:', rpcErr.message);

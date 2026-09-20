@@ -74,6 +74,19 @@ export const OrderManager: React.FC = () => {
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<CustomerOrder | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
 
+  // New order notification state
+  const [newOrders, setNewOrders] = useState<CustomerOrder[]>([]);
+  const [notificationState, setNotificationState] = useState<{
+    showBanner: boolean;
+    currentOrder: CustomerOrder | null;
+    orderCount: number;
+  }>({
+    showBanner: false,
+    currentOrder: null,
+    orderCount: 0,
+  });
+  const notifiedOrderIds = useMemo(() => new Set<string>(), []);
+
   // Play synthetic chime when new order arrives
   const playOrderChime = () => {
     if (!soundEnabled) return;
@@ -129,8 +142,16 @@ export const OrderManager: React.FC = () => {
           setOrders(updatedList);
         }
       },
-      (_newOrder) => {
-        playOrderChime();
+      (newOrder) => {
+        if (!notifiedOrderIds.has(newOrder.id)) {
+          notifiedOrderIds.add(newOrder.id);
+          playOrderChime();
+          setNotificationState(prev => ({
+            showBanner: true,
+            currentOrder: newOrder,
+            orderCount: prev.orderCount + 1
+          }));
+        }
       },
       targetId
     );
@@ -138,8 +159,10 @@ export const OrderManager: React.FC = () => {
     return () => {
       mounted = false;
       unsubscribe();
+      notifiedOrderIds.clear();
     };
   }, [soundEnabled, effectiveOutletScope]);
+
 
   // Handle status update with instant Optimistic UI + non-blocking background sync + rollback
   const handleUpdateStatus = async (
@@ -266,7 +289,55 @@ export const OrderManager: React.FC = () => {
 
   return (
     <div className="space-y-6 sm:space-y-8">
+      {/* New Order Notification Banner */}
+      <AnimatePresence>
+        {notificationState.showBanner && notificationState.currentOrder && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed top-20 left-4 right-4 md:left-auto md:right-8 md:w-96 z-50 p-4 rounded-2xl bg-slate-950 border border-[#00E5FF] shadow-2xl shadow-[#00E5FF]/20"
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-full bg-[#00E5FF]/20 flex items-center justify-center shrink-0 animate-pulse">
+                <ShoppingBag className="w-5 h-5 text-[#00E5FF]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-display font-black text-white text-sm uppercase flex items-center gap-2">
+                  <span className="text-[#00E5FF]">🔔</span> PESANAN BARU
+                </h3>
+                <div className="mt-2 space-y-1 text-xs text-slate-300 font-mono">
+                  <p>Order: <span className="font-bold text-white">{notificationState.currentOrder.orderNumber}</span></p>
+                  <p>Customer: <span className="text-white">{notificationState.currentOrder.customerName}</span></p>
+                  <p>Outlet: <span className="text-white">{notificationState.currentOrder.outletName}</span></p>
+                  <p>Total: <span className="font-bold text-[#00E5FF]">{formatRupiah(notificationState.currentOrder.totalAmount)}</span></p>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedOrderDetail(notificationState.currentOrder);
+                      setIsDetailModalOpen(true);
+                      setNotificationState(prev => ({ ...prev, showBanner: false }));
+                    }}
+                    className="flex-1 px-3 py-2 rounded-lg bg-[#00E5FF] text-slate-950 font-bold text-[11px] uppercase tracking-wider hover:bg-white transition-colors"
+                  >
+                    Lihat Pesanan
+                  </button>
+                  <button
+                    onClick={() => setNotificationState(prev => ({ ...prev, showBanner: false }))}
+                    className="px-3 py-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-[11px] uppercase tracking-wider hover:bg-slate-700 transition-colors"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Role & Outlet Scope Notification Banner */}
+
       <div
         className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
           isOutletAdmin

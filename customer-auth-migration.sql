@@ -378,5 +378,114 @@ $$;
 REVOKE ALL ON FUNCTION public.customer_get_my_orders(TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.customer_get_my_orders(TEXT) TO anon, authenticated, service_role;
 
--- 7. REFRESH POSTGREST SCHEMA CACHE SECARA INSTAN
+-- 8. ALLOW SUPER ADMIN ACCESS TO CUSTOMERS (POLICY & RPC)
+DROP POLICY IF EXISTS "Allow super_admin select customers" ON public.customers;
+CREATE POLICY "Allow super_admin select customers" ON public.customers
+FOR SELECT TO anon, authenticated
+USING (
+  public.get_current_admin_role() = 'super_admin'
+);
+
+DROP POLICY IF EXISTS "Allow super_admin delete customers" ON public.customers;
+CREATE POLICY "Allow super_admin delete customers" ON public.customers
+FOR DELETE TO anon, authenticated
+USING (
+  public.get_current_admin_role() = 'super_admin'
+);
+
+DROP POLICY IF EXISTS "Allow super_admin delete customer_sessions" ON public.customer_sessions;
+CREATE POLICY "Allow super_admin delete customer_sessions" ON public.customer_sessions
+FOR DELETE TO anon, authenticated
+USING (
+  public.get_current_admin_role() = 'super_admin'
+);
+
+CREATE OR REPLACE FUNCTION public.delete_registered_customer_rpc(p_customer_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_exists BOOLEAN;
+BEGIN
+  -- Security check: only allow if current admin role is super_admin
+  IF public.get_current_admin_role() <> 'super_admin' THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Akses Ditolak: Hanya Super Admin / Admin Pusat yang dapat menghapus member.');
+  END IF;
+
+  SELECT EXISTS(SELECT 1 FROM public.customers WHERE id = p_customer_id) INTO v_exists;
+  IF NOT v_exists THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Member tidak ditemukan di database.');
+  END IF;
+
+  -- Unlink orders referencing this customer_id so orders are preserved as history
+  UPDATE public.orders SET customer_id = NULL WHERE customer_id = p_customer_id;
+
+  -- Delete related customer sessions and loyalty records
+  DELETE FROM public.customer_sessions WHERE customer_id = p_customer_id;
+  DELETE FROM public.reward_redemptions WHERE customer_id = p_customer_id;
+  DELETE FROM public.loyalty_transactions WHERE customer_id = p_customer_id;
+  DELETE FROM public.customer_points WHERE customer_id = p_customer_id;
+
+  -- Delete customer record from public.customers
+  DELETE FROM public.customers WHERE id = p_customer_id;
+
+  -- Verification check
+  IF EXISTS(SELECT 1 FROM public.customers WHERE id = p_customer_id) THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Gagal menghapus member: Record masih tersimpan di database.');
+  END IF;
+
+  RETURN jsonb_build_object('success', true, 'message', 'Member berhasil dihapus secara permanen.');
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.delete_registered_customer_rpc(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.delete_registered_customer_rpc(UUID) TO anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.get_registered_customers()
+RETURNS TABLE (
+  id UUID,
+  nama_lengkap TEXT,
+  nomor_hp TEXT,
+  tanggal_lahir DATE,
+  points_balance INTEGER,
+  total_points_earned INTEGER,
+  total_points_redeemed INTEGER,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  password_hash TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Security check: only allow if current admin role is super_admin
+  IF public.get_current_admin_role() <> 'super_admin' THEN
+    RAISE EXCEPTION 'Akses Ditolak: Hanya Super Admin / Admin Pusat yang dapat melihat Data Customer.';
+  END IF;
+
+  RETURN QUERY
+  SELECT 
+    c.id,
+    c.nama_lengkap,
+    c.nomor_hp,
+    c.tanggal_lahir,
+    c.points_balance,
+    c.total_points_earned,
+    c.total_points_redeemed,
+    c.created_at,
+    c.updated_at,
+    c.password_hash
+  FROM public.customers c
+  ORDER BY c.created_at DESC;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_registered_customers() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_registered_customers() TO anon, authenticated, service_role;
+
+-- 9. REFRESH POSTGREST SCHEMA CACHE SECARA INSTAN
 NOTIFY pgrst, 'reload schema';
+

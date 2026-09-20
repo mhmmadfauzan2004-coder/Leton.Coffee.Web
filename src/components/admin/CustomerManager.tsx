@@ -3,6 +3,7 @@ import { useContent } from '../../context/ContentContext';
 import {
   fetchRegisteredCustomers,
   subscribeToCustomersRealtime,
+  deleteRegisteredCustomer,
   RegisteredCustomer,
 } from '../../utils/supabaseCustomers';
 import { fetchCustomerOrdersForAdmin } from '../../utils/supabaseOrders';
@@ -26,6 +27,7 @@ import {
   Receipt,
   Store,
   Award,
+  Trash2,
 } from 'lucide-react';
 
 export const CustomerManager: React.FC = () => {
@@ -37,11 +39,53 @@ export const CustomerManager: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [copiedPhoneId, setCopiedPhoneId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Customer Detail Modal State
   const [selectedCustomer, setSelectedCustomer] = useState<RegisteredCustomer | null>(null);
   const [customerOrders, setCustomerOrders] = useState<CustomerOrder[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState<boolean>(false);
+
+  // Confirm delete modal state & success toast
+  const [confirmingCustomer, setConfirmingCustomer] = useState<RegisteredCustomer | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  // Delete customer handler (triggers confirmation dialog)
+  const handleDeleteCustomer = (customer: RegisteredCustomer) => {
+    setConfirmingCustomer(customer);
+  };
+
+  // Execute permanent delete in Supabase
+  const handleExecuteDelete = async () => {
+    if (!confirmingCustomer) return;
+
+    const customerId = confirmingCustomer.id;
+    setDeletingId(customerId);
+    try {
+      const result = await deleteRegisteredCustomer(customerId, auth.role);
+      if (result.success) {
+        // 1. Remove member from local list immediately
+        setCustomers((prev) => prev.filter((c) => c.id !== customerId));
+        // 2. Close detail modal if open for this customer
+        if (selectedCustomer?.id === customerId) {
+          setSelectedCustomer(null);
+        }
+        // 3. Close confirmation modal
+        setConfirmingCustomer(null);
+        // 4. Show success toast
+        setSuccessToast('Member berhasil dihapus');
+        setTimeout(() => setSuccessToast(null), 3500);
+        // 5. Re-fetch customer data to ensure sync with source of truth
+        await loadCustomers();
+      } else {
+        alert(result.error || 'Gagal menghapus member dari database.');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Terjadi kesalahan sistem saat menghapus member.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   // Load customer data directly from Supabase
   const loadCustomers = async () => {
@@ -307,6 +351,7 @@ export const CustomerManager: React.FC = () => {
                     <th className="py-3.5 px-6 font-bold text-center">Saldo Poin</th>
                     <th className="py-3.5 px-6 font-bold text-center">Poin Diperoleh / Ditukar</th>
                     <th className="py-3.5 px-6 font-bold text-right">Tanggal Terdaftar</th>
+                    <th className="py-3.5 px-6 font-bold text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E0F2FE] text-xs">
@@ -414,6 +459,23 @@ export const CustomerManager: React.FC = () => {
                             <span>{formatDate(customer.createdAt)}</span>
                           </div>
                         </td>
+
+                        {/* Action */}
+                        <td className="py-4 px-6 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCustomer(customer)}
+                            disabled={deletingId === customer.id}
+                            className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50 cursor-pointer"
+                            title="Hapus Member"
+                          >
+                            {deletingId === customer.id ? (
+                              <RefreshCw className="w-4 h-4 animate-spin text-rose-600" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -520,14 +582,26 @@ export const CustomerManager: React.FC = () => {
                       <Calendar className="w-3 h-3 text-[#94A3B8]" />
                       <span>Terdaftar: {formatDate(customer.createdAt)}</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenCustomerDetail(customer)}
-                      className="text-[#0284C7] font-bold flex items-center gap-0.5 hover:underline"
-                    >
-                      <span>Detail</span>
-                      <ChevronRight className="w-3 h-3" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCustomer(customer)}
+                        disabled={deletingId === customer.id}
+                        className="px-2 py-1 rounded-lg bg-rose-50 text-rose-600 font-bold flex items-center gap-1 hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-50"
+                        title="Hapus Member"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>{deletingId === customer.id ? '...' : 'Hapus'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCustomerDetail(customer)}
+                        className="text-[#0284C7] font-bold flex items-center gap-0.5 hover:underline"
+                      >
+                        <span>Detail</span>
+                        <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -706,7 +780,16 @@ export const CustomerManager: React.FC = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 bg-[#F8FBFF] border-t border-[#E0F2FE] flex justify-end shrink-0">
+            <div className="p-4 bg-[#F8FBFF] border-t border-[#E0F2FE] flex items-center justify-between shrink-0">
+              <button
+                type="button"
+                onClick={() => handleDeleteCustomer(selectedCustomer)}
+                disabled={deletingId === selectedCustomer.id}
+                className="px-4 py-2.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{deletingId === selectedCustomer.id ? 'Menghapus...' : 'Hapus Member Ini'}</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setSelectedCustomer(null)}
@@ -716,6 +799,60 @@ export const CustomerManager: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog Modal */}
+      {confirmingCustomer && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white w-full max-w-md rounded-3xl border border-[#E0F2FE] shadow-2xl overflow-hidden p-6 space-y-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="font-display font-black text-xl text-[#172033]">
+                Hapus member ini secara permanen?
+              </h3>
+              <p className="text-xs text-[#64748B] leading-relaxed">
+                Data profil dan data loyalty member <strong className="text-[#172033]">{confirmingCustomer.namaLengkap}</strong> ({confirmingCustomer.nomorHp}) akan dihapus.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingCustomer(null)}
+                disabled={deletingId === confirmingCustomer.id}
+                className="flex-1 py-3 px-4 rounded-xl bg-white border border-[#E0F2FE] font-bold text-xs text-[#172033] hover:bg-[#F8FBFF] transition-colors cursor-pointer disabled:opacity-50"
+              >
+                BATAL
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteDelete}
+                disabled={deletingId === confirmingCustomer.id}
+                className="flex-1 py-3 px-4 rounded-xl bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 transition-colors shadow-lg shadow-rose-600/20 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deletingId === confirmingCustomer.id ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>MENGHAPUS...</span>
+                  </>
+                ) : (
+                  <span>HAPUS PERMANEN</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Toast */}
+      {successToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 animate-bounce">
+          <Check className="w-5 h-5" />
+          <span className="font-bold text-xs">{successToast}</span>
         </div>
       )}
     </div>

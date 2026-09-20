@@ -81,20 +81,45 @@ export async function fetchRegisteredCustomers(adminRole?: string): Promise<Regi
 
     const customerMap = new Map<string, RegisteredCustomer>();
 
-    // Query customers table with correct columns and password_hash
-    const { data: custData, error: custErr } = await client
-      .from('customers')
-      .select('id, nama_lengkap, nomor_hp, tanggal_lahir, points_balance, total_points_earned, total_points_redeemed, created_at, updated_at, password_hash');
+    let custData: any[] | null = null;
+    let custErr: any = null;
+
+    // Direct select first
+    try {
+      const res = await client
+        .from('customers')
+        .select('id, nama_lengkap, nomor_hp, tanggal_lahir, points_balance, total_points_earned, total_points_redeemed, created_at, updated_at, password_hash');
+      custData = res.data;
+      custErr = res.error;
+    } catch (e: any) {
+      custErr = e;
+    }
+
+    // Try RPC fallback if direct select is empty or fails (due to RLS USING(false))
+    if (custErr || !custData || custData.length === 0) {
+      console.warn('[supabaseCustomers] Direct query empty or failed. Trying security-definer RPC...');
+      try {
+        const { data: rpcData, error: rpcErr } = await client.rpc('get_registered_customers');
+        if (!rpcErr && Array.isArray(rpcData) && rpcData.length > 0) {
+          custData = rpcData;
+          custErr = null;
+        } else if (rpcErr) {
+          console.warn('[supabaseCustomers RPC error]:', rpcErr.message);
+        }
+      } catch (rpcEx: any) {
+        console.warn('[supabaseCustomers RPC exception]:', rpcEx.message || rpcEx);
+      }
+    }
 
     if (custErr) {
       console.error('[Supabase direct customers fetch error]:', custErr);
-      throw new Error(custErr.message);
+      throw new Error(custErr.message || custErr);
     }
 
     if (Array.isArray(custData)) {
       custData.forEach((row) => {
         // Only include customers with a valid password_hash (registered customers/members)
-        if (!row.password_hash) {
+        if (!row.password_hash || String(row.password_hash).trim() === '') {
           return;
         }
 
@@ -255,3 +280,89 @@ export async function findOrCreateCustomerMember(
     return null;
   }
 }
+
+/**
+ * Delete a registered customer by ID (Super Admin only).
+ * Uses two-tier approach: Server API proxy first, with Direct Supabase fallback if network fails.
+ */
+export async function deleteRegisteredCustomer(customerId: string, adminRole?: string): Promise<{ success: boolean; error?: string }> {
+  // 1. Try server-side API proxy first
+  try {
+    const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
+    const res = await fetch(getApiUrl(`/api/admin/customers/${customerId}`), {
+      method: 'DELETE',
+      headers: {
+        'x-admin-role': adminRole || 'super_admin',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (res.ok) {
+      return { success: true };
+    } else {
+      const errText = await res.text();
+      let errJson;
+      try { errJson = JSON.parse(errText); } catch {}
+      // If server returns error, we can also try direct fallback or return error
+      const errMsg = errJson?.error || errJson?.message || `HTTP ${res.status}: Gagal menghapus member`;
+      console.warn('[deleteRegisteredCustomer] Server API error, attempting direct Supabase fallback:', errMsg);
+    }
+  } catch (netErr: any) {
+    console.warn('[deleteRegisteredCustomer] Network exception / Load failed, attempting direct Supabase fallback:', netErr?.message || netErr);
+  }
+
+  // 2. Direct Supabase Client fallback
+  try {
+    const client = getSupabase(adminRole || 'super_admin');
+
+    // Try RPC function first
+    const { data: rpcData, error: rpcErr } = await client.rpc('delete_registered_customer_rpc', {
+      p_customer_id: customerId
+    });
+
+    if (!rpcErr && rpcData && typeof rpcData === 'object') {
+      const resObj = rpcData as any;
+      if (resObj.success) {
+        return { success: true };
+      } else {
+        return { success: false, error: resObj.error || 'Gagal menghapus member via Supabase RPC.' };
+      }
+    }
+
+    // Unlink orders
+    await client.from('orders').update({ customer_id: null }).eq('customer_id', customerId);
+
+    // Delete related records
+    await client.from('customer_sessions').delete().eq('customer_id', customerId);
+    await client.from('reward_redemptions').delete().eq('customer_id', customerId);
+    await client.from('loyalty_transactions').delete().eq('customer_id', customerId);
+    await client.from('customer_points').delete().eq('customer_id', customerId);
+
+    // Delete customer
+    const { error: delErr } = await client.from('customers').delete().eq('id', customerId);
+    if (delErr) {
+      return { success: false, error: `Gagal menghapus dari database: ${delErr.message}` };
+    }
+
+    // VERIFICATION SELECT: Ensure record is truly gone from public.customers
+    const { data: checkData, error: checkErr } = await client
+      .from('customers')
+      .select('id')
+      .eq('id', customerId)
+      .maybeSingle();
+
+    if (checkErr) {
+      console.warn('[deleteRegisteredCustomer] Verification select warning:', checkErr);
+    }
+
+    if (checkData) {
+      return { success: false, error: 'Gagal menghapus member: Record masih tersimpan di database Supabase.' };
+    }
+
+    return { success: true };
+  } catch (dbErr: any) {
+    console.error('[deleteRegisteredCustomer] Direct Supabase fallback exception:', dbErr);
+    return { success: false, error: dbErr?.message || 'Terjadi kesalahan sistem saat menghapus member.' };
+  }
+}
+

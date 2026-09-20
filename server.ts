@@ -597,20 +597,45 @@ app.get('/api/admin/customers', async (req, res) => {
   try {
     const customerMap = new Map<string, any>();
 
-    // 1. Query customers table with correct points columns and password_hash
-    const { data: custRows, error: custErr } = await supabase
-      .from('customers')
-      .select('id, nama_lengkap, nomor_hp, tanggal_lahir, points_balance, total_points_earned, total_points_redeemed, created_at, updated_at, password_hash');
+    let custRows: any[] | null = null;
+    let custErr: any = null;
+
+    // First try standard select with global admin headers
+    try {
+      const res = await supabase
+        .from('customers')
+        .select('id, nama_lengkap, nomor_hp, tanggal_lahir, points_balance, total_points_earned, total_points_redeemed, created_at, updated_at, password_hash');
+      custRows = res.data;
+      custErr = res.error;
+    } catch (e: any) {
+      custErr = e;
+    }
+
+    // Try RPC fallback if direct query failed or returned 0 rows (highly likely due to RLS restrictions)
+    if (custErr || !custRows || custRows.length === 0) {
+      console.log('[API admin/customers] Direct query returned 0 rows or failed. Trying security-definer RPC...');
+      try {
+        const { data: rpcRows, error: rpcErr } = await supabase.rpc('get_registered_customers');
+        if (!rpcErr && Array.isArray(rpcRows) && rpcRows.length > 0) {
+          custRows = rpcRows;
+          custErr = null;
+        } else if (rpcErr) {
+          console.warn('[API admin/customers RPC fallback error]:', rpcErr.message);
+        }
+      } catch (rpcEx: any) {
+        console.warn('[API admin/customers RPC fallback exception]:', rpcEx.message || rpcEx);
+      }
+    }
 
     if (custErr) {
       console.error('[API admin/customers Supabase error]:', custErr);
-      return res.status(500).json({ error: `Gagal memuat data dari Supabase: ${custErr.message}` });
+      return res.status(500).json({ error: `Gagal memuat data dari Supabase: ${custErr.message || custErr}` });
     }
 
     if (Array.isArray(custRows)) {
       for (const row of custRows) {
         // Only include customers with a valid password_hash (registered customers/members)
-        if (!row.password_hash) {
+        if (!row.password_hash || String(row.password_hash).trim() === '') {
           continue;
         }
 
@@ -644,6 +669,97 @@ app.get('/api/admin/customers', async (req, res) => {
   } catch (err: any) {
     console.error('[API admin/customers exception]:', err);
     return res.status(500).json({ error: 'Gagal mengambil data customer dari database: ' + err.message });
+  }
+});
+
+// Admin: Delete a registered customer member (Super Admin only)
+app.delete('/api/admin/customers/:id', async (req, res) => {
+  const isAuthorizedAdmin = verifyAuthHeader(req);
+  if (!isAuthorizedAdmin) {
+    return res.status(401).json({ error: 'Unauthorized: Silakan login terlebih dahulu' });
+  }
+
+  const role = req.headers['x-admin-role'] as string | undefined;
+  if (role !== 'super_admin') {
+    return res.status(403).json({ error: 'Akses Ditolak: Hanya Super Admin / Admin Pusat yang dapat menghapus member.' });
+  }
+
+  const customerId = req.params.id;
+  if (!customerId) {
+    return res.status(400).json({ error: 'ID Customer tidak valid.' });
+  }
+
+  try {
+    // 1. Try secure Postgres RPC function first
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('delete_registered_customer_rpc', {
+      p_customer_id: customerId
+    });
+
+    if (!rpcErr && rpcData && typeof rpcData === 'object') {
+      const resObj = rpcData as any;
+      if (resObj.success) {
+        return res.json({ success: true, message: resObj.message || 'Member berhasil dihapus.' });
+      } else {
+        return res.status(400).json({ error: resObj.error || 'Gagal menghapus member via RPC.' });
+      }
+    }
+
+    console.warn('[API DELETE /api/admin/customers/:id] RPC fallback triggered:', rpcErr);
+
+    // 2. Fallback to direct table operations
+    // Unlink orders referencing this customer_id so orders are preserved as guest/unlinked history
+    const { error: orderErr } = await supabase
+      .from('orders')
+      .update({ customer_id: null })
+      .eq('customer_id', customerId);
+
+    if (orderErr) {
+      console.error('[API DELETE /api/admin/customers/:id] Order unlink error:', orderErr);
+    }
+
+    // Delete related sessions
+    await supabase.from('customer_sessions').delete().eq('customer_id', customerId);
+
+    // Delete related reward redemptions
+    await supabase.from('reward_redemptions').delete().eq('customer_id', customerId);
+
+    // Delete related loyalty transactions
+    await supabase.from('loyalty_transactions').delete().eq('customer_id', customerId);
+
+    // Delete customer points record
+    await supabase.from('customer_points').delete().eq('customer_id', customerId);
+
+    // Delete customer from public.customers
+    const { error: deleteErr } = await supabase
+      .from('customers')
+      .delete()
+      .eq('id', customerId);
+
+    if (deleteErr) {
+      console.error('[API DELETE /api/admin/customers/:id] Error:', deleteErr);
+      return res.status(500).json({ error: `Gagal menghapus member dari database: ${deleteErr.message}` });
+    }
+
+    // 7. VERIFICATION: Select customer by ID to guarantee record is deleted from public.customers
+    const { data: checkData, error: checkErr } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('id', customerId)
+      .maybeSingle();
+
+    if (checkErr) {
+      console.error('[API DELETE /api/admin/customers/:id] Verification select error:', checkErr);
+    }
+
+    if (checkData) {
+      console.error('[API DELETE /api/admin/customers/:id] CRITICAL: Record still exists after delete execution!');
+      return res.status(500).json({ error: 'Gagal menghapus member: Record masih tersimpan di database Supabase.' });
+    }
+
+    return res.json({ success: true, message: 'Member berhasil dihapus.' });
+  } catch (err: any) {
+    console.error('[API DELETE /api/admin/customers/:id] Exception:', err);
+    return res.status(500).json({ error: err?.message || 'Terjadi kesalahan sistem saat menghapus member.' });
   }
 });
 

@@ -898,7 +898,7 @@ export async function createNewOrder(
       items: orderData.items,
       total_amount: orderData.totalAmount,
       payment_method: orderData.paymentMethod,
-      payment_status: effectiveCustomerId ? 'PAID' : originalPaymentStatus, // Set to PAID temporarily if customer exists so RPC checks succeed
+      payment_status: originalPaymentStatus,
       payment_proof_path: receiptProofPath,
       payment_receipt_url: orderData.paymentReceiptUrl || null,
       payment_receipt_path: receiptProofPath,
@@ -912,37 +912,6 @@ export async function createNewOrder(
     const { error: insertError } = await client.from('orders').insert(payload);
     if (!insertError) {
       console.log('[Supabase Orders] Order inserted successfully into public.orders:', orderData.orderNumber);
-
-      // Award loyalty points securely immediately on order creation
-      if (!effectiveCustomerId) {
-        console.error('[Loyalty Earning Error]: Order tidak terhubung ke customer.');
-      } else {
-        try {
-          // Explicitly calling the points earning RPC immediately upon order creation.
-          // Note: The RPC process_order_points_earning internally checks for duplicate processing, 
-          // making it safe to call here immediately without waiting for payment status.
-          const { data: rpcRes, error: rpcErr } = await client.rpc('process_order_points_earning', { p_order_id: orderData.id });
-          if (rpcErr) {
-            console.error('[Loyalty Earning Error in createNewOrder RPC]:', rpcErr.message);
-          } else {
-            console.log('[Loyalty Earning Success in createNewOrder RPC]:', rpcRes);
-          }
-        } catch (ptsErr: any) {
-          console.error('[Loyalty Earning Exception in createNewOrder]:', ptsErr.message || ptsErr);
-        }
-      }
-
-      // Restore correct original payment status in the database
-      if (effectiveCustomerId && originalPaymentStatus !== 'PAID') {
-        try {
-          await client
-            .from('orders')
-            .update({ payment_status: originalPaymentStatus })
-            .eq('id', orderData.id);
-        } catch (restoreErr) {
-          console.error('[Supabase Orders] Failed to restore payment status:', restoreErr);
-        }
-      }
 
       // Try inserting into order_items table
       try {
@@ -1188,8 +1157,8 @@ export async function updateOrderStatus(
         console.warn('[Supabase Broadcast Warning]:', bcErr);
       }
 
-      // Award loyalty points securely if order status is READY, COMPLETED, or payment is PAID
-      if (newOrderStatus === 'READY' || newOrderStatus === 'COMPLETED' || newPaymentStatus === 'PAID') {
+      // Award loyalty points securely ONLY when Admin Outlet presses tombol SIAP (newOrderStatus === 'READY')
+      if (newOrderStatus === 'READY') {
         try {
           const { data: rpcRes, error: rpcErr } = await client.rpc('process_order_points_earning', { p_order_id: orderId });
           if (rpcErr || (rpcRes && typeof rpcRes === 'object' && rpcRes.success === false)) {

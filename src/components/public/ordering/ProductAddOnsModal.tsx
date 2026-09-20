@@ -499,81 +499,91 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
             )}
 
             {/* DYNAMIC CUSTOMIZATION GROUPS SECTIONS */}
-            {activeCustomGroups.map((group, groupIdx) => {
-              const selectedOpt = selectedCustoms[group.id];
-              const sectionLetter = String.fromCharCode(68 + groupIdx); // D, E, F...
+            {activeCustomGroups
+              .filter((group) => {
+                if (group.name.toLowerCase().includes('toping donat')) {
+                  return product.use_topping_donut === true;
+                }
+                if (group.name.toLowerCase().includes('toping maincourse')) {
+                  return product.use_topping_maincourse === true;
+                }
+                return true;
+              })
+              .map((group, groupIdx) => {
+                const selectedOpt = selectedCustoms[group.id];
+                const sectionLetter = String.fromCharCode(68 + groupIdx); // D, E, F...
 
-              return (
-                <div key={group.id} className="space-y-3 pt-2 border-t border-slate-800/80">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-display font-black text-xs sm:text-sm text-white uppercase tracking-wider flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-[#00E5FF]" />
-                        <span>{sectionLetter}. {group.name.toUpperCase()}</span>
-                      </h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        Pilih {group.name} sesuai selera.
-                      </p>
+                return (
+                  <div key={group.id} className="space-y-3 pt-2 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-display font-black text-xs sm:text-sm text-white uppercase tracking-wider flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-[#00E5FF]" />
+                          <span>{sectionLetter}. {group.name.toUpperCase()}</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Pilih {group.name} sesuai selera.
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-mono text-[#00E5FF] bg-[#00E5FF]/10 px-2 py-0.5 rounded-md border border-[#00E5FF]/20">
+                        PILIH 1
+                      </span>
                     </div>
-                    <span className="text-[10px] font-mono text-[#00E5FF] bg-[#00E5FF]/10 px-2 py-0.5 rounded-md border border-[#00E5FF]/20">
-                      PILIH 1
-                    </span>
-                  </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {group.options.map((opt) => {
-                      const isSelected = selectedOpt?.optionId === opt.id;
-                      return (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedCustoms((prev) => ({
-                              ...prev,
-                              [group.id]: {
-                                groupId: group.id,
-                                groupName: group.name,
-                                optionId: opt.id,
-                                optionName: opt.name,
-                                price: opt.price,
-                              },
-                            }));
-                          }}
-                          className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
-                            isSelected
-                              ? 'bg-[#00E5FF]/10 border-[#00E5FF] ring-1 ring-[#00E5FF]/50 shadow-md shadow-[#00E5FF]/15 text-white'
-                              : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 text-slate-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div
-                              className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-all ${
-                                isSelected ? 'border-[#00E5FF] bg-[#00E5FF]' : 'border-slate-600 bg-slate-950'
-                              }`}
-                            >
-                              {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
-                            </div>
-                            <span className="text-xs font-medium truncate">{opt.name}</span>
-                          </div>
-
-                          <span
-                            className={`text-xs font-mono font-bold whitespace-nowrap ${
-                              opt.price === 0
-                                ? 'text-slate-400'
-                                : isSelected
-                                ? 'text-[#00E5FF]'
-                                : 'text-slate-300'
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {group.options.map((opt) => {
+                        const isSelected = selectedOpt?.optionId === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCustoms((prev) => ({
+                                ...prev,
+                                [group.id]: {
+                                  groupId: group.id,
+                                  groupName: group.name,
+                                  optionId: opt.id,
+                                  optionName: opt.name,
+                                  price: opt.price,
+                                },
+                              }));
+                            }}
+                            className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                              isSelected
+                                ? 'bg-[#00E5FF]/10 border-[#00E5FF] ring-1 ring-[#00E5FF]/50 shadow-md shadow-[#00E5FF]/15 text-white'
+                                : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 text-slate-300'
                             }`}
                           >
-                            {opt.price === 0 ? '+Rp0' : `+${formatRupiah(opt.price)}`}
-                          </span>
-                        </button>
-                      );
-                    })}
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div
+                                className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-all ${
+                                  isSelected ? 'border-[#00E5FF] bg-[#00E5FF]' : 'border-slate-600 bg-slate-950'
+                                }`}
+                              >
+                                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+                              </div>
+                              <span className="text-xs font-medium truncate">{opt.name}</span>
+                            </div>
+
+                            <span
+                              className={`text-xs font-mono font-bold whitespace-nowrap ${
+                                opt.price === 0
+                                  ? 'text-slate-400'
+                                  : isSelected
+                                  ? 'text-[#00E5FF]'
+                                  : 'text-slate-300'
+                              }`}
+                            >
+                              {opt.price === 0 ? '+Rp0' : `+${formatRupiah(opt.price)}`}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
 
             {/* SPECIAL NOTE SECTION */}
             <div className="space-y-2 pt-2 border-t border-slate-800/80">

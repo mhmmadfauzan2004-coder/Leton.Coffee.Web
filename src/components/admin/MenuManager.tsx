@@ -74,6 +74,8 @@ export const MenuManager: React.FC = () => {
     isAvailable: true,
     badge: '',
     order: 0,
+    use_topping_donut: false,
+    use_topping_maincourse: false,
   });
 
   // Category modal state
@@ -166,6 +168,8 @@ export const MenuManager: React.FC = () => {
       availableToppingIds: item.availableToppingIds || masterToppings.filter((t) => t.isActive).map((t) => t.id),
       hasSyrup: item.hasSyrup !== false,
       availableSyrupIds: item.availableSyrupIds || masterSyrups.filter((s) => s.isActive).map((s) => s.id),
+      use_topping_donut: item.use_topping_donut || false,
+      use_topping_maincourse: item.use_topping_maincourse || false,
       customizations: item.customizations || (data.customizationGroups || []).map((g) => ({
         groupId: g.id,
         enabled: true,
@@ -198,6 +202,8 @@ export const MenuManager: React.FC = () => {
         hasSize: itemForm.hasSize !== false,
         hasTopping: itemForm.hasTopping !== false,
         hasSyrup: itemForm.hasSyrup !== false,
+        use_topping_donut: itemForm.use_topping_donut || false,
+        use_topping_maincourse: itemForm.use_topping_maincourse || false,
       };
 
       const success = await saveMenuItem(targetItem);
@@ -1672,6 +1678,34 @@ export const MenuManager: React.FC = () => {
                     </div>
                   );
                 })}
+
+                <div className="pt-4 border-t border-slate-800 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="item-use-topping-donut"
+                      checked={itemForm.use_topping_donut || false}
+                      onChange={(e) => setItemForm({ ...itemForm, use_topping_donut: e.target.checked })}
+                      className="w-4 h-4 rounded text-cyan-400 bg-slate-950 border-slate-800 focus:ring-0"
+                    />
+                    <label htmlFor="item-use-topping-donut" className="text-xs text-white font-bold cursor-pointer">
+                      Produk Menggunakan Toping Donat
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="item-use-topping-maincourse"
+                      checked={itemForm.use_topping_maincourse || false}
+                      onChange={(e) => setItemForm({ ...itemForm, use_topping_maincourse: e.target.checked })}
+                      className="w-4 h-4 rounded text-cyan-400 bg-slate-950 border-slate-800 focus:ring-0"
+                    />
+                    <label htmlFor="item-use-topping-maincourse" className="text-xs text-white font-bold cursor-pointer">
+                      Produk Menggunakan Toping Maincourse
+                    </label>
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center gap-3 pt-2">

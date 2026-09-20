@@ -109,6 +109,8 @@ export interface MenuItem {
   availableToppingIds?: string[];
   hasSyrup?: boolean;
   availableSyrupIds?: string[];
+  use_topping_donut?: boolean;
+  use_topping_maincourse?: boolean;
   customizations?: MenuItemCustomizationSetting[];
 }
 

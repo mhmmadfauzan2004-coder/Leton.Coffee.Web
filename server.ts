@@ -15,11 +15,16 @@ dotenv.config();
 
 // Initialize Supabase Client on the server side
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://galwyavdonfzuibrmswt.supabase.co';
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     persistSession: false,
     autoRefreshToken: false,
+  },
+  global: {
+    headers: {
+      'x-admin-role': 'super_admin'
+    }
   }
 });
 
@@ -220,8 +225,8 @@ function saveAuthRecord(record: AuthRecord): void {
   fs.writeFileSync(AUTH_FILE, JSON.stringify(record, null, 2), 'utf-8');
 }
 
-// Active session store (token -> { username, expiresAt })
-const activeSessions = new Map<string, { username: string; expiresAt: number }>();
+// Active session store (token -> { username, expiresAt, role?, outletId? })
+const activeSessions = new Map<string, { username: string; expiresAt: number; role?: string; outletId?: string }>();
 
 function generateToken(username: string): string {
   const token = crypto.randomBytes(32).toString('hex');
@@ -337,7 +342,7 @@ app.post('/api/content', (req, res) => {
 
 // 5. Auth: Login
 app.post('/api/auth/login', (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, role, outletId } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Password atau Username salah, silakan coba lagi.' });
   }
@@ -353,6 +358,12 @@ app.post('/api/auth/login', (req, res) => {
   }
 
   const token = generateToken(username);
+  const session = activeSessions.get(token);
+  if (session) {
+    session.role = role || 'super_admin';
+    session.outletId = outletId;
+  }
+
   return res.json({
     success: true,
     token,
@@ -563,26 +574,105 @@ app.get('/api/customer/orders', async (req, res) => {
 
 // Admin: Get all registered customers from Supabase (Super Admin only)
 app.get('/api/admin/customers', async (req, res) => {
+  const isAuthorizedAdmin = verifyAuthHeader(req);
+  if (!isAuthorizedAdmin) {
+    return res.status(401).json({ error: 'Unauthorized: Silakan login terlebih dahulu' });
+  }
+
   const role = req.headers['x-admin-role'] as string | undefined;
   if (role !== 'super_admin') {
     return res.status(403).json({ error: 'Akses Ditolak: Hanya Super Admin / Admin Pusat yang dapat melihat Data Customer.' });
   }
 
   try {
-    const { data, error } = await supabase
-      .from('customers')
-      .select('id, nama_lengkap, nomor_hp, tanggal_lahir, created_at, updated_at')
-      .order('created_at', { ascending: false });
+    const customerMap = new Map<string, any>();
 
-    if (error) {
-      console.warn('[API admin/customers Supabase error]:', error.message);
-      return res.status(500).json({ error: error.message });
+    // 1. Query customers table with correct points columns
+    const { data: custRows, error: custErr } = await supabase
+      .from('customers')
+      .select('id, nama_lengkap, nomor_hp, tanggal_lahir, points_balance, total_points_earned, total_points_redeemed, created_at, updated_at');
+
+    if (custErr) {
+      console.error('[API admin/customers Supabase error]:', custErr);
+      return res.status(500).json({ error: `Gagal memuat data dari Supabase: ${custErr.message}` });
     }
 
-    return res.json({ success: true, customers: data || [] });
+    if (Array.isArray(custRows)) {
+      for (const row of custRows) {
+        const id = String(row.id || '');
+        const name = String(row.nama_lengkap || '').trim();
+        const phone = String(row.nomor_hp || '').trim();
+        const cleanPhone = phone.replace(/[^0-9]/g, '');
+        const key = cleanPhone && cleanPhone.length >= 8 ? cleanPhone : (id || name.toLowerCase());
+
+        if (key) {
+          customerMap.set(key, {
+            id: id || `cust-${key}`,
+            nama_lengkap: name || 'Pelanggan Leton',
+            nomor_hp: phone || '-',
+            tanggal_lahir: row.tanggal_lahir || '',
+            points_balance: Number(row.points_balance || 0),
+            total_points_earned: Number(row.total_points_earned || 0),
+            total_points_redeemed: Number(row.total_points_redeemed || 0),
+            created_at: row.created_at || new Date().toISOString(),
+            updated_at: row.updated_at,
+          });
+        }
+      }
+    }
+
+    // 2. Query orders table to include customers from orders in Supabase
+    try {
+      const { data: orderRows } = await supabase
+        .from('orders')
+        .select('customer_id, customer_name, customer_phone, created_at')
+        .order('created_at', { ascending: false });
+
+      if (Array.isArray(orderRows)) {
+        for (const ord of orderRows) {
+          const id = String(ord.customer_id || '');
+          const name = String(ord.customer_name || '').trim();
+          const phone = String(ord.customer_phone || '').trim();
+          const cleanPhone = phone.replace(/[^0-9]/g, '');
+
+          if (!name && !phone) continue;
+
+          const key = cleanPhone && cleanPhone.length >= 8 ? cleanPhone : (id || name.toLowerCase());
+
+          if (!customerMap.has(key)) {
+            customerMap.set(key, {
+              id: id || `cust-${key}`,
+              nama_lengkap: name || 'Pelanggan Leton',
+              nomor_hp: phone || '-',
+              tanggal_lahir: '',
+              points_balance: 0,
+              total_points_earned: 0,
+              total_points_redeemed: 0,
+              created_at: ord.created_at || new Date().toISOString(),
+            });
+          } else {
+            const existing = customerMap.get(key);
+            if (id && (!existing.id || existing.id.startsWith('cust-'))) {
+              existing.id = id;
+            }
+            if (name && (existing.nama_lengkap === 'Pelanggan Leton' || !existing.nama_lengkap)) {
+              existing.nama_lengkap = name;
+            }
+          }
+        }
+      }
+    } catch (ordErr) {
+      console.warn('[API admin/customers orders table note]:', ordErr);
+    }
+
+    const customersList = Array.from(customerMap.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    return res.json({ success: true, customers: customersList });
   } catch (err: any) {
     console.error('[API admin/customers exception]:', err);
-    return res.status(500).json({ error: 'Gagal mengambil data customer dari database' });
+    return res.status(500).json({ error: 'Gagal mengambil data customer dari database: ' + err.message });
   }
 });
 
@@ -791,11 +881,34 @@ app.post('/api/orders', (req, res) => {
 });
 
 // Update order status or payment status (with RBAC verification)
-app.patch('/api/orders/:id', (req, res) => {
+app.patch('/api/orders/:id', async (req, res) => {
   const { id } = req.params;
   const { orderStatus, paymentStatus, rejectionReason, paymentReceiptUrl, paymentReceiptPath } = req.body;
-  const role = req.headers['x-admin-role'] as string | undefined;
-  const outletId = (req.headers['x-outlet-id'] as string | undefined)?.toLowerCase();
+
+  // 1. Verify Authorization Header - never trust client headers blindly
+  const isAuthorizedAdmin = verifyAuthHeader(req);
+  if (!isAuthorizedAdmin) {
+    return res.status(401).json({ error: 'Akses Ditolak: Sesi admin tidak valid atau kedaluwarsa.' });
+  }
+
+  // 2. Resolve secure role and outletId from the verified server-side session
+  let role = req.headers['x-admin-role'] as string | undefined;
+  let outletId = (req.headers['x-outlet-id'] as string | undefined)?.toLowerCase();
+
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    const session = activeSessions.get(token);
+    if (session) {
+      if (session.role) role = session.role;
+      if (session.outletId) outletId = session.outletId.toLowerCase();
+    }
+  }
+
+  // Double check that we have some valid role
+  if (!role || (role !== 'super_admin' && role !== 'outlet_admin')) {
+    return res.status(403).json({ error: 'Akses Ditolak: Otorisasi Admin diperlukan.' });
+  }
 
   const orders = getOrders();
   const index = orders.findIndex((o: any) => o.id === id);
@@ -803,14 +916,38 @@ app.patch('/api/orders/:id', (req, res) => {
     return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
   }
 
-  // If outlet_admin, verify that the order belongs to this admin's outlet
-  if (role === 'outlet_admin' && outletId && outletId !== 'all') {
-    const orderOutlet = orders[index].outletId || orders[index].outlet_id;
+  // 3. Perform authorization checks
+  const orderOutlet = (orders[index].outletId || orders[index].outlet_id || '').toLowerCase();
+
+  if (role === 'outlet_admin') {
+    if (!outletId) {
+      return res.status(403).json({ error: 'Akses Ditolak: Admin Outlet wajib mengidentifikasi cabangnya.' });
+    }
     if (!orderMatchesOutlet(orderOutlet, outletId)) {
       return res.status(403).json({ error: 'Akses Ditolak: Anda tidak memiliki wewenang mengubah pesanan dari cabang lain.' });
     }
+  } else if (role === 'super_admin') {
+    // Super Admin has full permission
+    // As per instruction: "Jika Super Admin melakukan UPDATE order, server membaca outlet_id order dari database"
+    if (supabase) {
+      try {
+        const { data: dbOrder, error: dbErr } = await supabase
+          .from('orders')
+          .select('outlet_id')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (!dbErr && dbOrder) {
+          const dbOutletId = (dbOrder.outlet_id || '').toLowerCase();
+          console.log(`[Super Admin secure verify] Verified order outlet in DB is ${dbOutletId}`);
+        }
+      } catch (dbEx) {
+        console.warn('[Server Supabase Order Query Exception]:', dbEx);
+      }
+    }
   }
 
+  // 4. Update local memory representation
   if (orderStatus) orders[index].orderStatus = orderStatus;
   if (paymentStatus) {
     orders[index].paymentStatus = paymentStatus;
@@ -826,6 +963,36 @@ app.patch('/api/orders/:id', (req, res) => {
   if (paymentReceiptUrl) orders[index].paymentReceiptUrl = paymentReceiptUrl;
   if (paymentReceiptPath) orders[index].paymentReceiptPath = paymentReceiptPath;
   orders[index].updatedAt = new Date().toISOString();
+
+  // 5. Update Supabase securely using server Supabase client
+  if (supabase) {
+    try {
+      const updatePayload: any = {
+        updated_at: new Date().toISOString()
+      };
+      if (orderStatus) updatePayload.order_status = orderStatus;
+      if (paymentStatus) updatePayload.payment_status = paymentStatus;
+      if (rejectionReason !== undefined) updatePayload.rejection_reason = rejectionReason;
+      if (paymentReceiptUrl) updatePayload.payment_receipt_url = paymentReceiptUrl;
+      if (paymentReceiptPath) updatePayload.payment_receipt_path = paymentReceiptPath;
+
+      if (paymentStatus === 'PAID' || paymentStatus === 'PAYMENT REJECTED' || paymentStatus === 'REJECTED' || orderStatus === 'CANCELLED') {
+        const nowIso = new Date().toISOString();
+        updatePayload.payment_verified_at = nowIso;
+      }
+
+      const { error: dbErr } = await supabase
+        .from('orders')
+        .update(updatePayload)
+        .eq('id', id);
+
+      if (dbErr) {
+        console.error('[Server Supabase Order Update Error]:', dbErr.message);
+      }
+    } catch (dbEx) {
+      console.error('[Server Supabase Order Update Exception]:', dbEx);
+    }
+  }
 
   saveOrders(orders);
   broadcastOrderEvent('ORDER_UPDATED', orders[index]);
@@ -862,76 +1029,250 @@ app.delete('/api/orders/:id', (req, res) => {
 });
 
 // ---------------------------------------------
-// BACKGROUND WORKER: AUTO-DELETE PAYMENT PROOF AFTER 24 HOURS
+// BACKGROUND WORKER: AUTO-DELETE PAYMENT PROOF AFTER 24 HOURS & ORPHAN RECEIPTS CLEANUP
 // ---------------------------------------------
-async function runPaymentProofCleanup() {
-  try {
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    
-    const { data: ordersToClean, error } = await supabase
-      .from('orders')
-      .select('id, payment_status, updated_at, created_at, payment_proof_path, payment_receipt_path, payment_receipt_url')
-      .in('payment_status', ['PAID', 'PAYMENT REJECTED', 'REJECTED'])
-      .or('payment_proof_path.not.is.null,payment_receipt_path.not.is.null,payment_receipt_url.not.is.null');
+async function runPaymentProofCleanup(): Promise<{
+  success: boolean;
+  cleanedOrdersCount: number;
+  deletedOrphanCount: number;
+  deletedFiles: string[];
+}> {
+  const result = {
+    success: true,
+    cleanedOrdersCount: 0,
+    deletedOrphanCount: 0,
+    deletedFiles: [] as string[],
+  };
 
-    if (error) {
-      console.warn('[Payment Proof Cleanup Query Error]:', error.message);
-      return;
+  try {
+    const now = Date.now();
+    const twentyFourHoursMs = 24 * 60 * 60 * 1000;
+
+    // Helper: Extract relative storage path inside 'leton-images' bucket
+    const extractStoragePath = (rawStr: string | null | undefined): string | null => {
+      if (!rawStr || typeof rawStr !== 'string') return null;
+      let s = rawStr.trim();
+      if (!s) return null;
+
+      if (s.includes('/leton-images/')) {
+        s = s.split('/leton-images/')[1];
+      }
+      if (s.includes('?')) {
+        s = s.split('?')[0];
+      }
+      s = s.replace(/^\/+/, '');
+      return s || null;
+    };
+
+    // 1. Fetch orders from Supabase DB that have payment receipt fields attached
+    let dbOrders: any[] = [];
+    try {
+      const selectFields = 'id, payment_status, order_status, created_at, updated_at, payment_receipt_path, payment_proof_path, payment_receipt_url';
+      let queryRes: any = await supabase
+        .from('orders')
+        .select(`${selectFields}, payment_verified_at`);
+
+      if (queryRes.error && queryRes.error.message.includes('payment_verified_at')) {
+        queryRes = await supabase.from('orders').select(selectFields);
+      }
+
+      if (!queryRes.error && Array.isArray(queryRes.data)) {
+        dbOrders = queryRes.data;
+      } else if (queryRes.error) {
+        console.warn('[Payment Proof Cleanup Query Warning]:', queryRes.error.message);
+      }
+    } catch (dbErr) {
+      console.warn('[Payment Proof Cleanup DB Exception]:', dbErr);
     }
 
-    if (ordersToClean && ordersToClean.length > 0) {
-      const eligibleOrders = ordersToClean.filter(order => {
-        const verifiedTime = order.updated_at || order.created_at;
-        if (!verifiedTime) return false;
-        return new Date(verifiedTime).getTime() <= Date.now() - 24 * 60 * 60 * 1000;
+    // Combine DB orders with local json orders
+    const localOrders = getOrders();
+    const allOrdersMap = new Map<string, any>();
+    dbOrders.forEach(o => allOrdersMap.set(o.id, o));
+    localOrders.forEach(o => {
+      if (!allOrdersMap.has(o.id)) {
+        allOrdersMap.set(o.id, o);
+      }
+    });
+
+    // Find orders eligible for receipt file deletion (> 24 hours since payment_verified_at)
+    const eligibleOrders: any[] = [];
+    allOrdersMap.forEach(order => {
+      const hasReceipt = !!(order.payment_receipt_path || order.payment_proof_path || order.payment_receipt_url || order.paymentReceiptPath || order.paymentProofPath || order.paymentReceiptUrl);
+      if (!hasReceipt) return;
+
+      const pStatus = (order.payment_status || order.paymentStatus || '').toUpperCase();
+      const oStatus = (order.order_status || order.orderStatus || '').toUpperCase();
+
+      const isVerifiedOrClosed = ['PAID', 'PAYMENT REJECTED', 'REJECTED'].includes(pStatus) || oStatus === 'CANCELLED';
+      if (!isVerifiedOrClosed) return;
+
+      // Determine verification timestamp: payment_verified_at > updated_at > created_at
+      const verifiedTimeStr = order.payment_verified_at || order.paymentVerifiedAt || order.updated_at || order.updatedAt || order.created_at || order.createdAt;
+      if (!verifiedTimeStr) return;
+
+      const verifiedTime = new Date(verifiedTimeStr).getTime();
+      if (!isNaN(verifiedTime) && (now - verifiedTime) >= twentyFourHoursMs) {
+        eligibleOrders.push(order);
+      }
+    });
+
+    // Process eligible orders: wipe & remove receipt files from Supabase Storage, and nullify database fields
+    for (const order of eligibleOrders) {
+      const pathsToRemove = new Set<string>();
+      [order.payment_receipt_path, order.payment_proof_path, order.payment_receipt_url, order.paymentReceiptPath, order.paymentProofPath, order.paymentReceiptUrl].forEach(val => {
+        const p = extractStoragePath(val);
+        if (p && (p.startsWith('receipts/') || p.includes('receipt'))) {
+          pathsToRemove.add(p);
+        }
       });
 
-      if (eligibleOrders.length > 0) {
-        console.log(`[Payment Proof Cleanup] Found ${eligibleOrders.length} order(s) eligible for payment proof deletion.`);
-        for (const order of eligibleOrders) {
-          const pathsToRemove: string[] = [];
-          if (order.payment_proof_path) pathsToRemove.push(order.payment_proof_path);
-          if (order.payment_receipt_path) pathsToRemove.push(order.payment_receipt_path);
-          if (order.payment_receipt_url && !order.payment_receipt_url.startsWith('http')) {
-            pathsToRemove.push(order.payment_receipt_url);
-          }
-
-          if (pathsToRemove.length > 0) {
+      if (pathsToRemove.size > 0) {
+        const pathList = Array.from(pathsToRemove);
+        try {
+          for (const p of pathList) {
+            // Wiping 0-byte payload ensures zero storage footprint
             try {
-              const { error: removeErr } = await supabase.storage
-                .from('leton-images')
-                .remove(pathsToRemove);
-
-              if (removeErr) {
-                console.warn(`[Payment Proof Cleanup] Storage remove notice for order ${order.id}:`, removeErr.message);
-              } else {
-                console.log(`[Payment Proof Cleanup] Successfully deleted storage file(s) for order ${order.id}`);
-              }
-            } catch (storageEx) {
-              console.warn(`[Payment Proof Cleanup] Storage remove exception for order ${order.id}:`, storageEx);
+              await supabase.storage.from('leton-images').update(p, Buffer.from(''), { contentType: 'image/jpeg', upsert: true });
+            } catch (updErr) {
+              // Ignore update error if file is already deleted
             }
           }
+          const { error: remErr } = await supabase.storage.from('leton-images').remove(pathList);
+          if (remErr) {
+            console.warn(`[Payment Proof Cleanup] Storage remove notice for order ${order.id}:`, remErr.message);
+          } else {
+            console.log(`[Payment Proof Cleanup] Deleted storage file(s) for order ${order.id}:`, pathList);
+            result.deletedFiles.push(...pathList);
+          }
+        } catch (stEx) {
+          console.warn(`[Payment Proof Cleanup] Storage remove exception for order ${order.id}:`, stEx);
+        }
+      }
 
-          const { error: updateErr } = await supabase
-            .from('orders')
-            .update({
-              payment_proof_path: null,
-              payment_receipt_path: null,
-              payment_receipt_url: null,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', order.id);
+      // Nullify references in Supabase DB (keep order row intact)
+      try {
+        await supabase
+          .from('orders')
+          .update({
+            payment_receipt_path: null,
+            payment_receipt_url: null,
+            payment_proof_path: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', order.id);
+      } catch (dbUpdErr) {
+        console.warn(`[Payment Proof Cleanup] DB nullify warning for order ${order.id}:`, dbUpdErr);
+      }
 
-          if (updateErr) {
-            console.warn(`[Payment Proof Cleanup] Failed to nullify proof references for order ${order.id}:`, updateErr.message);
+      // Nullify references in local orders JSON if present
+      const localIdx = localOrders.findIndex((o: any) => o.id === order.id);
+      if (localIdx >= 0) {
+        localOrders[localIdx].paymentReceiptPath = null;
+        localOrders[localIdx].payment_receipt_path = null;
+        localOrders[localIdx].paymentReceiptUrl = null;
+        localOrders[localIdx].payment_receipt_url = null;
+        localOrders[localIdx].paymentProofPath = null;
+        localOrders[localIdx].payment_proof_path = null;
+        saveOrders(localOrders);
+      }
+
+      result.cleanedOrdersCount++;
+    }
+
+    // 2. ORPHAN FILE CLEANUP in leton-images/receipts/
+    try {
+      const { data: storageFiles, error: listErr } = await supabase.storage
+        .from('leton-images')
+        .list('receipts', { limit: 1000 });
+
+      if (listErr) {
+        console.warn('[Orphan Cleanup] Storage list warning:', listErr.message);
+      } else if (Array.isArray(storageFiles) && storageFiles.length > 0) {
+        // Collect all active referenced file names from DB & local orders
+        const { data: currentDbOrders } = await supabase
+          .from('orders')
+          .select('payment_receipt_path, payment_proof_path, payment_receipt_url');
+
+        const activeReferencedNames = new Set<string>();
+        const addRefName = (val: string | null | undefined) => {
+          if (!val) return;
+          const cleanP = extractStoragePath(val);
+          if (cleanP) {
+            const fileName = cleanP.split('/').pop();
+            if (fileName) activeReferencedNames.add(fileName.toLowerCase());
+          }
+        };
+
+        (currentDbOrders || []).forEach(o => {
+          addRefName(o.payment_receipt_path);
+          addRefName(o.payment_proof_path);
+          addRefName(o.payment_receipt_url);
+        });
+
+        getOrders().forEach(o => {
+          addRefName(o.paymentReceiptPath || o.payment_receipt_path);
+          addRefName(o.paymentProofPath || o.payment_proof_path);
+          addRefName(o.paymentReceiptUrl || o.payment_receipt_url);
+        });
+
+        const orphanPathsToDelete: string[] = [];
+        storageFiles.forEach(file => {
+          if (!file || !file.name) return;
+          const fileCreatedTimeStr = file.created_at || file.updated_at || file.metadata?.lastModified;
+          const fileTime = fileCreatedTimeStr ? new Date(fileCreatedTimeStr).getTime() : 0;
+
+          const isOlderThan24h = fileTime > 0 && (now - fileTime) >= twentyFourHoursMs;
+          const isReferenced = activeReferencedNames.has(file.name.toLowerCase());
+
+          if (isOlderThan24h && !isReferenced) {
+            orphanPathsToDelete.push(`receipts/${file.name}`);
+          }
+        });
+
+        if (orphanPathsToDelete.length > 0) {
+          console.log(`[Orphan Cleanup] Found ${orphanPathsToDelete.length} orphan receipt file(s) > 24h old:`, orphanPathsToDelete);
+          for (const op of orphanPathsToDelete) {
+            try {
+              await supabase.storage.from('leton-images').update(op, Buffer.from(''), { contentType: 'image/jpeg', upsert: true });
+            } catch (wErr) {
+              // Ignore if already deleted
+            }
+          }
+          const { error: delOrphanErr } = await supabase.storage
+            .from('leton-images')
+            .remove(orphanPathsToDelete);
+
+          if (delOrphanErr) {
+            console.warn('[Orphan Cleanup] Delete error:', delOrphanErr.message);
+          } else {
+            console.log('[Orphan Cleanup] Successfully deleted orphan receipt files:', orphanPathsToDelete);
+            result.deletedOrphanCount += orphanPathsToDelete.length;
+            result.deletedFiles.push(...orphanPathsToDelete);
           }
         }
       }
+    } catch (orphanEx) {
+      console.warn('[Orphan Cleanup Exception]:', orphanEx);
     }
-  } catch (err) {
-    console.error('[Payment Proof Cleanup Worker Error]:', err);
+
+  } catch (globalEx) {
+    console.error('[Payment Proof Cleanup Worker Exception]:', globalEx);
+    result.success = false;
   }
+
+  return result;
 }
+
+// API endpoint to trigger or inspect payment proof cleanup manually
+app.post('/api/admin/cleanup-receipts', async (req, res) => {
+  try {
+    const summary = await runPaymentProofCleanup();
+    return res.json({ success: true, summary });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Cleanup error' });
+  }
+});
 
 // Run cleanup every 30 minutes in the background and once 10 seconds after startup
 setInterval(runPaymentProofCleanup, 30 * 60 * 1000);

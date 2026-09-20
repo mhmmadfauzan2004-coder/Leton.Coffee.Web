@@ -845,12 +845,12 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`pointer-events-auto p-4 rounded-xl shadow-2xl flex items-start gap-3 backdrop-blur-md border transition-all duration-300 transform translate-y-0 ${
+            className={`custom-toast-notification pointer-events-auto p-4 rounded-xl shadow-2xl flex items-start gap-3 backdrop-blur-md border transition-all duration-300 transform translate-y-0 ${
               toast.type === 'success'
-                ? 'bg-[#0B1524]/95 border-[#00E5FF]/40 text-slate-100 shadow-[#00E5FF]/10'
+                ? 'toast-success bg-[#0B1524]/95 border-[#00E5FF]/40 text-slate-100 shadow-[#00E5FF]/10'
                 : toast.type === 'error'
-                ? 'bg-rose-950/95 border-rose-500/40 text-white shadow-rose-950/40'
-                : 'bg-slate-900/95 border-slate-700 text-slate-100 shadow-black/40'
+                ? 'toast-error bg-rose-950/95 border-rose-500/40 text-white shadow-rose-950/40'
+                : 'toast-info bg-slate-900/95 border-slate-700 text-slate-100 shadow-black/40'
             }`}
           >
             <div

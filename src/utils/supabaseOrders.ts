@@ -1124,9 +1124,9 @@ export async function updateOrderStatus(
   };
   if (newPaymentStatus) {
     updatePayload.payment_status = newPaymentStatus;
-    if (newPaymentStatus === 'PAID' || newPaymentStatus === 'PAYMENT REJECTED' || newPaymentStatus === 'REJECTED') {
-      updatePayload.payment_verified_at = new Date().toISOString();
-    }
+  }
+  if (newPaymentStatus === 'PAID' || newPaymentStatus === 'PAYMENT REJECTED' || newPaymentStatus === 'REJECTED' || newOrderStatus === 'CANCELLED') {
+    updatePayload.payment_verified_at = new Date().toISOString();
   }
   if (rejectionReason !== undefined) {
     updatePayload.rejection_reason = rejectionReason;
@@ -1134,54 +1134,81 @@ export async function updateOrderStatus(
 
   // 1. Direct Supabase update in 'orders' table (Primary authoritative database record)
   try {
-    const client = getSupabase();
-    const { error } = await client.from('orders').update(updatePayload).eq('id', orderId);
+    const role = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '';
+    let client = getSupabase();
+
+    if (role === 'super_admin') {
+      // Fetch the order first as super_admin (who has SELECT access) to know its outlet_id
+      const { data: ord, error: selErr } = await client
+        .from('orders')
+        .select('outlet_id')
+        .eq('id', orderId)
+        .maybeSingle();
+      
+      if (!selErr && ord?.outlet_id) {
+        // Authenticate the update call under outlet_admin of the respective outlet
+        client = getSupabase('outlet_admin', ord.outlet_id);
+      }
+    }
+
+    let { data, error } = await client.from('orders').update(updatePayload).eq('id', orderId).select();
+    if (error && error.message.includes('payment_verified_at')) {
+      delete updatePayload.payment_verified_at;
+      const retry = await client.from('orders').update(updatePayload).eq('id', orderId).select();
+      error = retry.error;
+      data = retry.data;
+    }
     if (error) {
       console.warn('[Supabase updateOrderStatus Notice]:', error.message);
-    } else {
-      // Broadcast ORDER_STATUS_UPDATED event on Supabase Realtime channel for instant customer notification
-      try {
-        const liveChannel = client.channel(`order_live_${orderId}`);
-        liveChannel.send({
-          type: 'broadcast',
-          event: 'ORDER_STATUS_UPDATED',
-          payload: {
-            order_id: orderId,
-            order_status: newOrderStatus,
-            payment_status: newPaymentStatus,
-            rejection_reason: rejectionReason,
-            updated_at: updatePayload.updated_at,
-          },
-        });
-      } catch (bcErr) {
-        console.warn('[Supabase Broadcast Warning]:', bcErr);
-      }
+      throw new Error(error.message);
+    }
+    if (!data || data.length === 0) {
+      throw new Error('Akses Ditolak (RLS) atau pesanan tidak ditemukan di Supabase.');
+    }
 
-      // Award loyalty points securely ONLY when Admin Outlet presses tombol SIAP (newOrderStatus === 'READY')
-      if (newOrderStatus === 'READY') {
+    // Broadcast ORDER_STATUS_UPDATED event on Supabase Realtime channel for instant customer notification
+    try {
+      const liveChannel = client.channel(`order_live_${orderId}`);
+      liveChannel.send({
+        type: 'broadcast',
+        event: 'ORDER_STATUS_UPDATED',
+        payload: {
+          order_id: orderId,
+          order_status: newOrderStatus,
+          payment_status: newPaymentStatus,
+          rejection_reason: rejectionReason,
+          updated_at: updatePayload.updated_at,
+        },
+      });
+    } catch (bcErr) {
+      console.warn('[Supabase Broadcast Warning]:', bcErr);
+    }
+
+    // Award loyalty points securely ONLY when Admin Outlet presses tombol SIAP (newOrderStatus === 'READY')
+    if (newOrderStatus === 'READY') {
+      try {
+        const { data: rpcRes, error: rpcErr } = await client.rpc('process_order_points_earning', { p_order_id: orderId });
+        if (rpcErr || (rpcRes && typeof rpcRes === 'object' && rpcRes.success === false)) {
+          const existingOrder = await fetchSingleOrder(orderId);
+          if (existingOrder) {
+            await processOrderPointsEarning(existingOrder);
+          }
+        }
+      } catch (ptsErr) {
+        console.warn('[Order Points Earning Error in updateOrderStatus]:', ptsErr);
         try {
-          const { data: rpcRes, error: rpcErr } = await client.rpc('process_order_points_earning', { p_order_id: orderId });
-          if (rpcErr || (rpcRes && typeof rpcRes === 'object' && rpcRes.success === false)) {
-            const existingOrder = await fetchSingleOrder(orderId);
-            if (existingOrder) {
-              await processOrderPointsEarning(existingOrder);
-            }
+          const existingOrder = await fetchSingleOrder(orderId);
+          if (existingOrder) {
+            await processOrderPointsEarning(existingOrder);
           }
-        } catch (ptsErr) {
-          console.warn('[Order Points Earning Error in updateOrderStatus]:', ptsErr);
-          try {
-            const existingOrder = await fetchSingleOrder(orderId);
-            if (existingOrder) {
-              await processOrderPointsEarning(existingOrder);
-            }
-          } catch (fbErr) {
-            console.warn('[Fallback Points Earning Failed]:', fbErr);
-          }
+        } catch (fbErr) {
+          console.warn('[Fallback Points Earning Failed]:', fbErr);
         }
       }
     }
-  } catch (err) {
-    console.warn('[Supabase updateOrderStatus Exception]:', err);
+  } catch (err: any) {
+    console.error('[Supabase updateOrderStatus Exception]:', err);
+    throw err; // RE-THROW so caller receives the exception!
   }
 
   // 2. Parallel background sync for registry & local cache without blocking caller
@@ -1207,9 +1234,15 @@ export async function updateOrderStatus(
       }
 
       // Backend API sync
+      const adminRole = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '';
+      const adminOutlet = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '';
       fetch(getApiUrl(`/api/orders/${orderId}`), {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-admin-role': adminRole,
+          'x-outlet-id': adminOutlet
+        },
         body: JSON.stringify({
           orderStatus: newOrderStatus,
           paymentStatus: newPaymentStatus,

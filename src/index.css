@@ -437,3 +437,67 @@ aside button[class*="text-slate-400"]:hover {
 .bg-white\/30 {
   background-color: #BAE6FD !important;
 }
+
+/* ============================================================ */
+/* REALTIME NOTIFICATION & DARK BANNER STYLES (BUG 1 FIX)       */
+/* ============================================================ */
+
+/* Realtime Toast Notification Style Fix (Bug 1) */
+.custom-toast-notification {
+  background-color: #0B1524 !important;
+  border-color: rgba(0, 229, 255, 0.4) !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5) !important;
+}
+
+.custom-toast-notification.toast-success {
+  background-color: #0B1524 !important;
+  border-color: rgba(0, 229, 255, 0.4) !important;
+}
+
+.custom-toast-notification.toast-error {
+  background-color: #3F0C10 !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+}
+
+.custom-toast-notification.toast-info {
+  background-color: #0F172A !important;
+  border-color: rgba(100, 116, 139, 0.4) !important;
+}
+
+/* Force child elements inside toast notification to remain light/white */
+.custom-toast-notification p,
+.custom-toast-notification span,
+.custom-toast-notification strong,
+.custom-toast-notification div {
+  color: #FFFFFF !important;
+}
+
+.custom-toast-notification button {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.custom-toast-notification button:hover {
+  color: #FFFFFF !important;
+}
+
+/* Custom Dark Navy Banner styling to bypass light overrides */
+.dark-navy-card {
+  background-color: #0B1524 !important;
+  border-color: #00E5FF !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.4) !important;
+}
+
+.dark-navy-card p,
+.dark-navy-card span,
+.dark-navy-card strong,
+.dark-navy-card h3,
+.dark-navy-card h4,
+.dark-navy-card div {
+  color: #FFFFFF !important;
+}
+
+.dark-navy-card .text-\[\#00E5FF\] {
+  color: #00E5FF !important;
+}
+

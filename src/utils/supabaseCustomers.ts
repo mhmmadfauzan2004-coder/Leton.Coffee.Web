@@ -6,6 +6,9 @@ export interface RegisteredCustomer {
   namaLengkap: string;
   nomorHp: string;
   tanggalLahir?: string;
+  pointsBalance: number;
+  totalPointsEarned: number;
+  totalPointsRedeemed: number;
   createdAt: string;
   updatedAt?: string;
 }
@@ -31,65 +34,137 @@ function normalizeCustomerRow(row: any): RegisteredCustomer {
         '-'
     ),
     tanggalLahir: row.tanggal_lahir || row.tanggalLahir || '',
+    pointsBalance: Number(row.points_balance || row.pointsBalance || 0),
+    totalPointsEarned: Number(row.total_points_earned || row.totalPointsEarned || 0),
+    totalPointsRedeemed: Number(row.total_points_redeemed || row.totalPointsRedeemed || 0),
     createdAt: row.created_at || row.createdAt || new Date().toISOString(),
     updatedAt: row.updated_at || row.updatedAt,
   };
 }
 
 /**
- * Fetch all registered customers directly from Supabase `customers` table.
- * Strictly no localStorage used.
+ * Fetch all registered customers directly from Supabase.
+ * Queries Supabase production database via server-side API proxy / direct Supabase client.
+ * Strictly no localStorage used as source of truth.
  */
 export async function fetchRegisteredCustomers(adminRole?: string): Promise<RegisteredCustomer[]> {
+  // 1. Primary: Server-Side API Proxy (queries Supabase production database with admin role)
   try {
-    // 1. Direct Supabase Query
-    const client = getSupabase(adminRole);
-    const { data, error } = await client
-      .from('customers')
-      .select('id, nama_lengkap, nomor_hp, tanggal_lahir, created_at, updated_at')
-      .order('created_at', { ascending: false });
-
-    if (!error && Array.isArray(data)) {
-      return data.map(normalizeCustomerRow);
-    }
-
-    if (error) {
-      console.warn('[Supabase fetchRegisteredCustomers notice]:', error.message);
-    }
-  } catch (err) {
-    console.warn('[Supabase fetchRegisteredCustomers exception]:', err);
-  }
-
-  // 2. Direct Server-Side API Proxy Fallback (queries Supabase with service/admin context)
-  try {
+    const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
     const res = await fetch(getApiUrl('/api/admin/customers'), {
       headers: {
         'x-admin-role': adminRole || 'super_admin',
+        'Authorization': `Bearer ${token}`,
       },
     });
     if (res.ok) {
       const json = await res.json();
       if (json && Array.isArray(json.customers)) {
         return json.customers.map(normalizeCustomerRow);
+      } else if (json && json.error) {
+        throw new Error(json.error);
       }
+    } else {
+      const errText = await res.text();
+      let errJson;
+      try { errJson = JSON.parse(errText); } catch {}
+      throw new Error(errJson?.error || errJson?.message || `HTTP ${res.status}: Gagal memuat customer`);
     }
-  } catch (err) {
-    console.warn('[API /api/admin/customers fallback exception]:', err);
+  } catch (err: any) {
+    console.error('[API /api/admin/customers exception]:', err);
+    // Keep trying direct query fallback but warn
+  }
+
+  // 2. Direct Supabase Query fallback
+  try {
+    const client = getSupabase(adminRole || 'super_admin');
+
+    const customerMap = new Map<string, RegisteredCustomer>();
+
+    // Query customers table with correct columns
+    const { data: custData, error: custErr } = await client
+      .from('customers')
+      .select('id, nama_lengkap, nomor_hp, tanggal_lahir, points_balance, total_points_earned, total_points_redeemed, created_at, updated_at');
+
+    if (custErr) {
+      console.error('[Supabase direct customers fetch error]:', custErr);
+      throw new Error(custErr.message);
+    }
+
+    if (Array.isArray(custData)) {
+      custData.forEach((row) => {
+        const normalized = normalizeCustomerRow(row);
+        const cleanPhone = normalized.nomorHp.replace(/[^0-9]/g, '');
+        const key = cleanPhone && cleanPhone.length >= 8 ? cleanPhone : (normalized.id || normalized.namaLengkap.toLowerCase());
+        if (key) customerMap.set(key, normalized);
+      });
+    }
+
+    // Query orders table fallback to merge missing customer info
+    const { data: orderData } = await client
+      .from('orders')
+      .select('customer_id, customer_name, customer_phone, created_at')
+      .order('created_at', { ascending: false });
+
+    if (Array.isArray(orderData)) {
+      orderData.forEach((ord) => {
+        const name = (ord.customer_name || '').trim();
+        const phone = (ord.customer_phone || '').trim();
+        const cleanPhone = phone.replace(/[^0-9]/g, '');
+        const id = ord.customer_id || '';
+
+        if (!name && !phone) return;
+
+        const key = cleanPhone && cleanPhone.length >= 8 ? cleanPhone : (id || name.toLowerCase());
+
+        if (!customerMap.has(key)) {
+          customerMap.set(key, {
+            id: id || `cust-${key}`,
+            namaLengkap: name || 'Pelanggan Leton',
+            nomorHp: phone || '-',
+            pointsBalance: 0,
+            totalPointsEarned: 0,
+            totalPointsRedeemed: 0,
+            createdAt: ord.created_at || new Date().toISOString(),
+          });
+        }
+      });
+    }
+
+    const merged = Array.from(customerMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    if (merged.length > 0) {
+      return merged;
+    }
+  } catch (err: any) {
+    console.error('[Supabase direct fetch exception]:', err);
+    throw err;
   }
 
   return [];
 }
 
 /**
- * Realtime Postgres changes subscription on the `public.customers` table.
+ * Realtime Postgres changes subscription on both `public.customers` and `public.orders` tables.
  * When a new customer registers or updates, immediately dispatches the updated customer list.
  */
 export function subscribeToCustomersRealtime(
   onUpdate: (customers: RegisteredCustomer[]) => void,
   adminRole?: string
 ): () => void {
-  const client = getSupabase(adminRole);
+  const client = getSupabase(adminRole || 'super_admin');
   const channelName = `customers_realtime_${Math.random().toString(36).substring(2, 9)}`;
+
+  const refreshList = async () => {
+    try {
+      const freshList = await fetchRegisteredCustomers(adminRole || 'super_admin');
+      onUpdate(freshList);
+    } catch (err) {
+      console.warn('[Realtime Customer Refresh warning]:', err);
+    }
+  };
 
   const channel = client
     .channel(channelName)
@@ -100,14 +175,16 @@ export function subscribeToCustomersRealtime(
         schema: 'public',
         table: 'customers',
       },
-      async () => {
-        try {
-          const freshList = await fetchRegisteredCustomers(adminRole);
-          onUpdate(freshList);
-        } catch (err) {
-          console.warn('[Realtime Customer Refresh warning]:', err);
-        }
-      }
+      refreshList
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'orders',
+      },
+      refreshList
     )
     .subscribe();
 
@@ -194,6 +271,9 @@ export async function findOrCreateCustomerMember(
       id: newId,
       namaLengkap: cleanNama,
       nomorHp: cleanPhone || rawPhone || '-',
+      pointsBalance: 0,
+      totalPointsEarned: 0,
+      totalPointsRedeemed: 0,
       createdAt: newRow.created_at,
     };
   } catch (err) {

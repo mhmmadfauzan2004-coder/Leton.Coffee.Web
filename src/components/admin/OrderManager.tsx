@@ -374,7 +374,7 @@ export const OrderManager: React.FC = () => {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed top-20 left-4 right-4 md:left-auto md:right-8 md:w-96 z-50 p-4 rounded-2xl bg-slate-950 border border-[#00E5FF] shadow-2xl shadow-[#00E5FF]/20"
+            className="dark-navy-card fixed top-20 left-4 right-4 md:left-auto md:right-8 md:w-96 z-50 p-4 rounded-2xl bg-slate-950 border border-[#00E5FF] shadow-2xl shadow-[#00E5FF]/20"
           >
             <div className="flex items-start gap-4">
               <div className="w-10 h-10 rounded-full bg-[#00E5FF]/20 flex items-center justify-center shrink-0 animate-pulse">

@@ -34,6 +34,7 @@ export const CustomerManager: React.FC = () => {
 
   const [customers, setCustomers] = useState<RegisteredCustomer[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [copiedPhoneId, setCopiedPhoneId] = useState<string | null>(null);
 
@@ -45,11 +46,13 @@ export const CustomerManager: React.FC = () => {
   // Load customer data directly from Supabase
   const loadCustomers = async () => {
     setIsLoading(true);
+    setErrorMessage(null);
     try {
       const data = await fetchRegisteredCustomers(auth.role);
       setCustomers(data);
-    } catch (err) {
-      console.warn('[CustomerManager] Gagal memuat data customer:', err);
+    } catch (err: any) {
+      console.error('[CustomerManager] Gagal memuat data customer:', err);
+      setErrorMessage(err?.message || 'Gagal menyinkronkan data customer dari database Supabase.');
     } finally {
       setIsLoading(false);
     }
@@ -212,6 +215,21 @@ export const CustomerManager: React.FC = () => {
         </div>
       </div>
 
+      {errorMessage && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between gap-4 mb-6 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="font-bold">Error:</span>
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            onClick={loadCustomers}
+            className="px-3 py-1.5 rounded-xl bg-white border border-rose-200 text-rose-800 font-bold hover:bg-rose-50 transition-colors uppercase tracking-wider text-[10px] cursor-pointer"
+          >
+            Coba Lagi
+          </button>
+        </div>
+      )}
+
       {/* ---------------------------------------------------- */}
       {/* SEARCH BAR & FILTER CONTROLS                         */}
       {/* ---------------------------------------------------- */}
@@ -285,7 +303,10 @@ export const CustomerManager: React.FC = () => {
                     <th className="py-3.5 px-6 font-bold w-12 text-center">#</th>
                     <th className="py-3.5 px-6 font-bold">Nama Customer</th>
                     <th className="py-3.5 px-6 font-bold">Nomor Handphone / WhatsApp</th>
-                    <th className="py-3.5 px-6 font-bold">Tanggal Terdaftar</th>
+                    <th className="py-3.5 px-6 font-bold text-center">Tanggal Lahir</th>
+                    <th className="py-3.5 px-6 font-bold text-center">Saldo Poin</th>
+                    <th className="py-3.5 px-6 font-bold text-center">Poin Diperoleh / Ditukar</th>
+                    <th className="py-3.5 px-6 font-bold text-right">Tanggal Terdaftar</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E0F2FE] text-xs">
@@ -363,9 +384,32 @@ export const CustomerManager: React.FC = () => {
                           </div>
                         </td>
 
+                        {/* Tanggal Lahir */}
+                        <td className="py-4 px-6 text-center font-mono text-xs text-[#475569]">
+                          {customer.tanggalLahir || '-'}
+                        </td>
+
+                        {/* Saldo Poin */}
+                        <td className="py-4 px-6 text-center text-xs">
+                          <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F0F9FF] text-[#0284C7] font-bold border border-[#E0F2FE]">
+                            <Award className="w-3.5 h-3.5 text-amber-500" />
+                            <span>{customer.pointsBalance ?? 0} Poin</span>
+                          </div>
+                        </td>
+
+                        {/* Poin Diperoleh / Ditukar */}
+                        <td className="py-4 px-6 text-center text-xs font-mono space-y-0.5">
+                          <div className="text-emerald-600 font-bold" title="Total Poin Diperoleh">
+                            +{customer.totalPointsEarned ?? 0}
+                          </div>
+                          <div className="text-rose-600 font-bold" title="Total Poin Ditukarkan">
+                            -{customer.totalPointsRedeemed ?? 0}
+                          </div>
+                        </td>
+
                         {/* Registered Date */}
-                        <td className="py-4 px-6 text-[#64748B] font-mono text-xs">
-                          <div className="flex items-center gap-1.5">
+                        <td className="py-4 px-6 text-right text-[#64748B] font-mono text-xs">
+                          <div className="flex items-center justify-end gap-1.5">
                             <Calendar className="w-3.5 h-3.5 text-[#94A3B8] shrink-0" />
                             <span>{formatDate(customer.createdAt)}</span>
                           </div>
@@ -400,16 +444,26 @@ export const CustomerManager: React.FC = () => {
                           {customer.namaLengkap}
                         </span>
                         <span className="text-[10px] font-mono text-[#64748B] block">
-                          #{index + 1}
+                          #{index + 1} {customer.tanggalLahir ? `| Lahir: ${customer.tanggalLahir}` : ''}
                         </span>
                       </div>
                     </div>
+                  </div>
 
-                    {customer.tanggalLahir && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#F0F7FF] text-[#0284C7] font-semibold shrink-0">
-                        Lahir: {customer.tanggalLahir}
-                      </span>
-                    )}
+                  {/* Points summary block */}
+                  <div className="p-3 rounded-xl bg-[#F4F9FF] border border-[#E0F2FE] grid grid-cols-3 gap-2 text-center text-xs">
+                    <div>
+                      <span className="text-[9px] font-mono text-[#64748B] uppercase block">Saldo Poin</span>
+                      <span className="font-bold text-[#0284C7]">{customer.pointsBalance ?? 0}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-mono text-[#64748B] uppercase block">Diperoleh</span>
+                      <span className="font-bold text-emerald-600">+{customer.totalPointsEarned ?? 0}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-mono text-[#64748B] uppercase block">Ditukarkan</span>
+                      <span className="font-bold text-rose-600">-{customer.totalPointsRedeemed ?? 0}</span>
+                    </div>
                   </div>
 
                   <div className="pt-2 border-t border-[#E0F2FE] flex items-center justify-between text-xs">

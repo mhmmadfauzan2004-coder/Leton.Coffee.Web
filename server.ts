@@ -49,7 +49,17 @@ app.use(
       callback(null, true);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With', 'X-Accel-Buffering'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Cache-Control',
+      'X-Requested-With',
+      'X-Accel-Buffering',
+      'x-admin-role',
+      'x-outlet-id',
+      'X-Admin-Role',
+      'X-Outlet-Id'
+    ],
     credentials: true,
     optionsSuccessStatus: 200,
   })
@@ -587,10 +597,10 @@ app.get('/api/admin/customers', async (req, res) => {
   try {
     const customerMap = new Map<string, any>();
 
-    // 1. Query customers table with correct points columns
+    // 1. Query customers table with correct points columns and password_hash
     const { data: custRows, error: custErr } = await supabase
       .from('customers')
-      .select('id, nama_lengkap, nomor_hp, tanggal_lahir, points_balance, total_points_earned, total_points_redeemed, created_at, updated_at');
+      .select('id, nama_lengkap, nomor_hp, tanggal_lahir, points_balance, total_points_earned, total_points_redeemed, created_at, updated_at, password_hash');
 
     if (custErr) {
       console.error('[API admin/customers Supabase error]:', custErr);
@@ -599,6 +609,11 @@ app.get('/api/admin/customers', async (req, res) => {
 
     if (Array.isArray(custRows)) {
       for (const row of custRows) {
+        // Only include customers with a valid password_hash (registered customers/members)
+        if (!row.password_hash) {
+          continue;
+        }
+
         const id = String(row.id || '');
         const name = String(row.nama_lengkap || '').trim();
         const phone = String(row.nomor_hp || '').trim();
@@ -619,50 +634,6 @@ app.get('/api/admin/customers', async (req, res) => {
           });
         }
       }
-    }
-
-    // 2. Query orders table to include customers from orders in Supabase
-    try {
-      const { data: orderRows } = await supabase
-        .from('orders')
-        .select('customer_id, customer_name, customer_phone, created_at')
-        .order('created_at', { ascending: false });
-
-      if (Array.isArray(orderRows)) {
-        for (const ord of orderRows) {
-          const id = String(ord.customer_id || '');
-          const name = String(ord.customer_name || '').trim();
-          const phone = String(ord.customer_phone || '').trim();
-          const cleanPhone = phone.replace(/[^0-9]/g, '');
-
-          if (!name && !phone) continue;
-
-          const key = cleanPhone && cleanPhone.length >= 8 ? cleanPhone : (id || name.toLowerCase());
-
-          if (!customerMap.has(key)) {
-            customerMap.set(key, {
-              id: id || `cust-${key}`,
-              nama_lengkap: name || 'Pelanggan Leton',
-              nomor_hp: phone || '-',
-              tanggal_lahir: '',
-              points_balance: 0,
-              total_points_earned: 0,
-              total_points_redeemed: 0,
-              created_at: ord.created_at || new Date().toISOString(),
-            });
-          } else {
-            const existing = customerMap.get(key);
-            if (id && (!existing.id || existing.id.startsWith('cust-'))) {
-              existing.id = id;
-            }
-            if (name && (existing.nama_lengkap === 'Pelanggan Leton' || !existing.nama_lengkap)) {
-              existing.nama_lengkap = name;
-            }
-          }
-        }
-      }
-    } catch (ordErr) {
-      console.warn('[API admin/customers orders table note]:', ordErr);
     }
 
     const customersList = Array.from(customerMap.values()).sort(

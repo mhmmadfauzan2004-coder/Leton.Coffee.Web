@@ -1236,10 +1236,12 @@ export async function updateOrderStatus(
       // Backend API sync
       const adminRole = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '';
       const adminOutlet = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '';
+      const adminToken = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_token') || 'leton_local_token' : 'leton_local_token';
       fetch(getApiUrl(`/api/orders/${orderId}`), {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`,
           'x-admin-role': adminRole,
           'x-outlet-id': adminOutlet
         },
@@ -1296,9 +1298,11 @@ export async function deleteOrder(
         safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(list).slice(0, 50)));
       }
 
+      const adminToken = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_token') || 'leton_local_token' : 'leton_local_token';
       fetch(getApiUrl(`/api/orders/${orderId}`), {
         method: 'DELETE',
         headers: {
+          'Authorization': `Bearer ${adminToken}`,
           'x-admin-role': isAdminRole || '',
           'x-outlet-id': requesterOutletId || '',
         },

@@ -42,6 +42,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { KitchenSlipModal } from './KitchenSlipModal';
 import { OrderDetailModal } from './OrderDetailModal';
+import { processOrderPointsEarning } from '../../utils/supabaseLoyalty';
+import { Sparkles } from 'lucide-react';
 
 export const OrderManager: React.FC = () => {
   const { auth, showToast } = useContent();
@@ -186,42 +188,39 @@ export const OrderManager: React.FC = () => {
   }, [soundEnabled, effectiveOutletScope]);
 
 
-  // Handle status update with instant Optimistic UI + non-blocking background sync + rollback
+  // Handle status update - Awaits database confirmation before updating UI to prevent optimistic UI discrepancy
   const handleUpdateStatus = async (
     orderId: string,
     newStatus: OrderStatus,
     newPaymentStatus?: PaymentStatus,
     rejectionReason?: string
   ) => {
-    // 1. Snapshot previous state for rollback
-    const previousOrders = [...orders];
-
-    // 2. OPTIMISTIC UPDATE: Update UI immediately (0ms delay)
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          return {
-            ...o,
-            orderStatus: newStatus,
-            paymentStatus: newPaymentStatus || o.paymentStatus,
-            rejectionReason: rejectionReason !== undefined ? rejectionReason : o.rejectionReason,
-            updatedAt: new Date().toISOString(),
-          };
-        }
-        return o;
-      })
-    );
-
-    // 3. Background sync to Supabase without blocking UI
     try {
+      // 1. Direct synchronous update in Supabase & wait for database confirmation
       const success = await updateOrderStatus(orderId, newStatus, newPaymentStatus, rejectionReason);
       if (!success) {
         throw new Error('Gagal memperbarui status di cloud');
       }
+
+      // 2. Only update UI state after database confirms success
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id === orderId) {
+            return {
+              ...o,
+              orderStatus: newStatus,
+              paymentStatus: newPaymentStatus || o.paymentStatus,
+              rejectionReason: rejectionReason !== undefined ? rejectionReason : o.rejectionReason,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return o;
+        })
+      );
     } catch (err: any) {
-      console.error('[Order Status Update Failed - Rolling Back UI]:', err);
-      setOrders(previousOrders);
+      console.error('[Order Status Update Failed]:', err);
       showToast('Gagal memperbarui status pesanan: ' + (err?.message || 'Koneksi terputus') + '. Perubahan dibatalkan.', 'error');
+      throw err;
     }
   };
 
@@ -309,6 +308,32 @@ export const OrderManager: React.FC = () => {
       showToast('Gagal menghapus pesanan: ' + (err?.message || 'Error'), 'error');
     } finally {
       setIsSubmittingDelete(false);
+    }
+  };
+
+  // Award loyalty points to customer manually
+  const [isAwardingPointsId, setIsAwardingPointsId] = useState<string | null>(null);
+
+  const handleAwardPoints = async (order: CustomerOrder) => {
+    if (!order) return;
+    if (isOutletAdmin && !matchesOutlet(order.outletId, assignedOutletId)) {
+      showToast('Akses Ditolak: Anda hanya dapat memproses pesanan di cabang Anda.', 'error');
+      return;
+    }
+
+    setIsAwardingPointsId(order.id);
+    try {
+      const res = await processOrderPointsEarning(order);
+      if (res.success) {
+        showToast(`Poin berhasil diberikan ke customer! (+${res.pointsEarned || 0} poin) 🌟`, 'success');
+      } else {
+        showToast(res.error || 'Gagal memberikan poin.', 'error');
+      }
+    } catch (err: any) {
+      console.error('[Manual Award Points Error]:', err);
+      showToast('Gagal memberikan poin: ' + (err?.message || 'Error'), 'error');
+    } finally {
+      setIsAwardingPointsId(null);
     }
   };
 
@@ -1166,6 +1191,23 @@ export const OrderManager: React.FC = () => {
                       <Trash2 className="w-4 h-4" />
                       <span>HAPUS PESANAN</span>
                     </button>
+
+                    {/* 4. [ BERI CUSTOMER POINT ] ACTION */}
+                    {order.customerId && (
+                      <button
+                        type="button"
+                        disabled={isAwardingPointsId === order.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAwardPoints(order);
+                        }}
+                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-display font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-amber-600/20 transition-all cursor-pointer"
+                        title="Berikan poin loyalty ke akun member customer"
+                      >
+                        <Sparkles className="w-4 h-4 text-white animate-pulse" />
+                        <span>{isAwardingPointsId === order.id ? 'Memproses...' : 'Beri Customer Point'}</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Operational Utilities: Slip & Detail */}

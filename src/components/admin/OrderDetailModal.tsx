@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { CustomerOrder } from '../../types';
 import { formatRupiah, createWhatsAppLink } from '../../utils/formatters';
+import { useContent } from '../../context/ContentContext';
+import { processOrderPointsEarning } from '../../utils/supabaseLoyalty';
 import {
   X,
   Clock,
@@ -17,7 +19,8 @@ import {
   AlertCircle,
   FileCheck,
   CreditCard,
-  ShoppingBag
+  ShoppingBag,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -28,7 +31,27 @@ interface OrderDetailModalProps {
 }
 
 export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ isOpen, onClose, order }) => {
+  const { showToast } = useContent();
   const [zoomReceipt, setZoomReceipt] = useState<boolean>(false);
+  const [isAwardingPoints, setIsAwardingPoints] = useState<boolean>(false);
+
+  const handleAwardPoints = async () => {
+    if (!order) return;
+    setIsAwardingPoints(true);
+    try {
+      const res = await processOrderPointsEarning(order);
+      if (res.success) {
+        showToast(`Poin berhasil diberikan ke customer! (+${res.pointsEarned || 0} poin) 🌟`, 'success');
+      } else {
+        showToast(res.error || 'Gagal memberikan poin.', 'error');
+      }
+    } catch (err: any) {
+      console.error('[Manual Award Points in Detail Modal Error]:', err);
+      showToast('Gagal memberikan poin: ' + (err?.message || 'Error'), 'error');
+    } finally {
+      setIsAwardingPoints(false);
+    }
+  };
 
   if (!order) return null;
 
@@ -386,6 +409,18 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ isOpen, onCl
 
             {/* Modal Footer Controls */}
             <div className="px-6 py-4 border-t border-slate-800 bg-slate-900 flex items-center justify-end gap-3">
+              {order.customerId && (
+                <button
+                  type="button"
+                  disabled={isAwardingPoints}
+                  onClick={handleAwardPoints}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-display font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-amber-600/20 transition-all cursor-pointer"
+                  title="Berikan poin loyalty ke akun member customer"
+                >
+                  <Sparkles className="w-4 h-4 text-white animate-pulse" />
+                  <span>{isAwardingPoints ? 'Memproses...' : 'Beri Customer Point'}</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onClose}

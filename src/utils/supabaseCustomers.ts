@@ -71,7 +71,7 @@ export async function fetchRegisteredCustomers(adminRole?: string): Promise<Regi
       throw new Error(errJson?.error || errJson?.message || `HTTP ${res.status}: Gagal memuat customer`);
     }
   } catch (err: any) {
-    console.error('[API /api/admin/customers exception]:', err);
+    console.warn('[API /api/admin/customers exception]:', err);
     // Keep trying direct query fallback but warn
   }
 
@@ -81,10 +81,10 @@ export async function fetchRegisteredCustomers(adminRole?: string): Promise<Regi
 
     const customerMap = new Map<string, RegisteredCustomer>();
 
-    // Query customers table with correct columns
+    // Query customers table with correct columns and password_hash
     const { data: custData, error: custErr } = await client
       .from('customers')
-      .select('id, nama_lengkap, nomor_hp, tanggal_lahir, points_balance, total_points_earned, total_points_redeemed, created_at, updated_at');
+      .select('id, nama_lengkap, nomor_hp, tanggal_lahir, points_balance, total_points_earned, total_points_redeemed, created_at, updated_at, password_hash');
 
     if (custErr) {
       console.error('[Supabase direct customers fetch error]:', custErr);
@@ -93,41 +93,15 @@ export async function fetchRegisteredCustomers(adminRole?: string): Promise<Regi
 
     if (Array.isArray(custData)) {
       custData.forEach((row) => {
+        // Only include customers with a valid password_hash (registered customers/members)
+        if (!row.password_hash) {
+          return;
+        }
+
         const normalized = normalizeCustomerRow(row);
         const cleanPhone = normalized.nomorHp.replace(/[^0-9]/g, '');
         const key = cleanPhone && cleanPhone.length >= 8 ? cleanPhone : (normalized.id || normalized.namaLengkap.toLowerCase());
         if (key) customerMap.set(key, normalized);
-      });
-    }
-
-    // Query orders table fallback to merge missing customer info
-    const { data: orderData } = await client
-      .from('orders')
-      .select('customer_id, customer_name, customer_phone, created_at')
-      .order('created_at', { ascending: false });
-
-    if (Array.isArray(orderData)) {
-      orderData.forEach((ord) => {
-        const name = (ord.customer_name || '').trim();
-        const phone = (ord.customer_phone || '').trim();
-        const cleanPhone = phone.replace(/[^0-9]/g, '');
-        const id = ord.customer_id || '';
-
-        if (!name && !phone) return;
-
-        const key = cleanPhone && cleanPhone.length >= 8 ? cleanPhone : (id || name.toLowerCase());
-
-        if (!customerMap.has(key)) {
-          customerMap.set(key, {
-            id: id || `cust-${key}`,
-            namaLengkap: name || 'Pelanggan Leton',
-            nomorHp: phone || '-',
-            pointsBalance: 0,
-            totalPointsEarned: 0,
-            totalPointsRedeemed: 0,
-            createdAt: ord.created_at || new Date().toISOString(),
-          });
-        }
       });
     }
 

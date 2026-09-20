@@ -90,7 +90,7 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
   const totalCartAmount = useMemo(() => {
     return cart.reduce(
       (acc, item) =>
-        acc + calculateItemUnitPrice(item.product.price, item.topping, item.syrup) * item.quantity,
+        acc + calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup, item.customOptions) * item.quantity,
       0
     );
   }, [cart]);

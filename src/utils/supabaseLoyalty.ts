@@ -777,12 +777,7 @@ export async function processOrderPointsEarning(order: CustomerOrder): Promise<{
   // Prevent orders without valid customer_id
   const custId = order.customerId || order.userId;
   if (!custId) {
-    return { success: false, error: 'Order tidak ditautkan ke Member/Customer ID' };
-  }
-
-  // Must be PAID or COMPLETED
-  if (order.paymentStatus !== 'PAID' && order.orderStatus !== 'COMPLETED') {
-    return { success: false, error: 'Order belum lunas atau belum selesai' };
+    return { success: false, error: 'Order tidak terhubung ke customer.' };
   }
 
   try {

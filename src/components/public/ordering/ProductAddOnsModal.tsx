@@ -102,12 +102,27 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
   // Dynamic Customization Groups enabled for this specific product
   const activeCustomGroups = useMemo(() => {
     if (!product || !Array.isArray(data.customizationGroups)) return [];
-    return data.customizationGroups.filter((group) => {
-      if (!group.options || group.options.length === 0) return false;
-      if (!product.customizations || product.customizations.length === 0) return true;
-      const setting = product.customizations.find((c) => c.groupId === group.id);
-      return setting ? setting.enabled !== false : true;
-    });
+    return data.customizationGroups
+      .filter((group) => {
+        // Must have options
+        if (!group.options || group.options.length === 0) return false;
+        // Only show if explicitly enabled for this product in product.customizations
+        if (!Array.isArray(product.customizations)) return false;
+        const setting = product.customizations.find((c) => c.groupId === group.id);
+        return setting ? setting.enabled === true : false;
+      })
+      .map((group) => {
+        // Filter: only show ACTIVE options, and sort them by order
+        const activeOpts = (group.options || [])
+          .filter((o) => o.isActive !== false)
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+        return {
+          ...group,
+          options: activeOpts,
+        };
+      })
+      .filter((group) => group.options.length > 0) // Only show groups that have at least one active option
+      .sort((a, b) => (a.order || 0) - (b.order || 0)); // Sort customization groups by order
   }, [product, data.customizationGroups]);
 
   const hasSizeOption = product?.hasSize !== false && availableSizes.length > 0;
@@ -215,7 +230,24 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
     const finalSize = hasSizeOption ? selectedSize : { name: 'Regular', price: 0 };
     const finalTopping = hasToppingOption ? selectedTopping : { name: 'No Topping', price: 0 };
     const finalSyrup = hasSyrupOption ? selectedSyrup : { name: 'No Syrup', price: 0 };
-    const finalCustoms = Object.values(selectedCustoms);
+    
+    // Validate each customization option selection against actual active groups & active options
+    const finalCustoms = Object.values(selectedCustoms)
+      .filter((custom) => {
+        const matchingGroup = activeCustomGroups.find((g) => g.id === custom.groupId);
+        if (!matchingGroup) return false;
+        const matchingOption = matchingGroup.options.find((o) => o.id === custom.optionId);
+        return matchingOption ? true : false;
+      })
+      .map((custom) => {
+        const matchingGroup = activeCustomGroups.find((g) => g.id === custom.groupId)!;
+        const matchingOption = matchingGroup.options.find((o) => o.id === custom.optionId)!;
+        return {
+          ...custom,
+          optionName: matchingOption.name,
+          price: matchingOption.price,
+        };
+      });
 
     onConfirm(
       product,

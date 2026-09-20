@@ -19,6 +19,7 @@ import CustomerAuthForm from './CustomerAuthForm';
 import CustomerProfileTab from './CustomerProfileTab';
 import { createNewOrder, generateOrderNumber } from '../../../utils/supabaseOrders';
 import { getCurrentCustomerProfile, getSupabase, logoutCustomer } from '../../../utils/supabase';
+import { getCustomerLoyalty } from '../../../utils/supabaseLoyalty';
 import {
   DEFAULT_SIZE,
   DEFAULT_TOPPING,
@@ -346,6 +347,18 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
 
       const result = await createNewOrder(newOrder);
       if (result.success) {
+        // Retrieve and log the updated loyalty balance from Supabase
+        if (newOrder.customerId) {
+          try {
+            const updatedLoyalty = await getCustomerLoyalty(newOrder.customerId);
+            console.log('[Loyalty Balance Synced]: New balance is:', updatedLoyalty.pointsBalance);
+          } catch (loyaltyErr) {
+            console.error('[Loyalty Earning Sync Error]: Failed to refresh loyalty balance from Supabase:', loyaltyErr);
+          }
+        } else {
+          console.warn('[Loyalty Earning Note]: Order tidak terhubung ke customer.');
+        }
+
         setCompletedOrder(newOrder);
         setCart([]); // Clear cart
         localStorage.removeItem('leton_ordering_cart');

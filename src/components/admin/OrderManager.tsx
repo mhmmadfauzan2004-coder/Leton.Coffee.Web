@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { KitchenSlipModal } from './KitchenSlipModal';
+import { OrderDetailModal } from './OrderDetailModal';
 
 export const OrderManager: React.FC = () => {
   const { auth, showToast } = useContent();
@@ -68,6 +69,10 @@ export const OrderManager: React.FC = () => {
   // Kitchen Slip / Checker modal states
   const [selectedOrderForSlip, setSelectedOrderForSlip] = useState<CustomerOrder | null>(null);
   const [isSlipModalOpen, setIsSlipModalOpen] = useState<boolean>(false);
+
+  // Order Detail modal states
+  const [selectedOrderDetail, setSelectedOrderDetail] = useState<CustomerOrder | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
 
   // Play synthetic chime when new order arrives
   const playOrderChime = () => {
@@ -547,7 +552,11 @@ export const OrderManager: React.FC = () => {
                 layout
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-slate-900/95 border transition-all ${
+                onClick={() => {
+                  setSelectedOrderDetail(order);
+                  setIsDetailModalOpen(true);
+                }}
+                className={`p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-slate-900/95 border transition-all cursor-pointer hover:bg-slate-900/70 hover:border-slate-700/80 hover:shadow-xl ${
                   order.paymentStatus === 'WAITING VERIFICATION'
                     ? 'border-amber-500/80 shadow-lg shadow-amber-500/10'
                     : order.orderStatus === 'NEW'
@@ -560,7 +569,8 @@ export const OrderManager: React.FC = () => {
                   <div className="flex flex-wrap items-center gap-2.5">
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setSelectedOrderForSlip(order);
                         setIsSlipModalOpen(true);
                       }}
@@ -573,7 +583,8 @@ export const OrderManager: React.FC = () => {
 
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setSelectedOrderForSlip(order);
                         setIsSlipModalOpen(true);
                       }}
@@ -679,6 +690,7 @@ export const OrderManager: React.FC = () => {
                             href={customerWaLink}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
                             className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:underline"
                           >
                             <MessageCircle className="w-3 h-3" />
@@ -740,9 +752,12 @@ export const OrderManager: React.FC = () => {
                     {order.paymentReceiptUrl ? (
                       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-1">
                         <div className="flex items-center gap-3.5">
-                          {/* Thumbnail */}
+                           {/* Thumbnail */}
                           <div
-                            onClick={() => setPreviewImageUrl(order.paymentReceiptUrl || null)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewImageUrl(order.paymentReceiptUrl || null);
+                            }}
                             className="w-20 h-20 rounded-xl bg-slate-900 border border-slate-700 overflow-hidden shrink-0 cursor-pointer relative group"
                             title="Klik untuk memperbesar bukti transfer"
                           >
@@ -763,7 +778,10 @@ export const OrderManager: React.FC = () => {
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => setPreviewImageUrl(order.paymentReceiptUrl || null)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewImageUrl(order.paymentReceiptUrl || null);
+                                }}
                                 className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] font-mono inline-flex items-center gap-1 cursor-pointer"
                               >
                                 <Eye className="w-3 h-3 text-[#00E5FF]" />
@@ -773,6 +791,7 @@ export const OrderManager: React.FC = () => {
                                 href={order.paymentReceiptUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
                                 className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] font-mono inline-flex items-center gap-1"
                               >
                                 <ExternalLink className="w-3 h-3 text-slate-400" />
@@ -788,7 +807,10 @@ export const OrderManager: React.FC = () => {
                             <button
                               type="button"
                               disabled={isUpdating}
-                              onClick={() => handleVerifyPayment(order)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleVerifyPayment(order);
+                              }}
                               className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                             >
                               <CheckCircle2 className="w-4 h-4" />
@@ -800,7 +822,10 @@ export const OrderManager: React.FC = () => {
                             <button
                               type="button"
                               disabled={isUpdating}
-                              onClick={() => handleOpenRejectDialog(order)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenRejectDialog(order);
+                              }}
                               className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                             >
                               <XCircle className="w-4 h-4 text-rose-400" />
@@ -845,7 +870,10 @@ export const OrderManager: React.FC = () => {
                       <button
                         type="button"
                         disabled={isUpdating}
-                        onClick={() => handleVerifyPayment(order)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleVerifyPayment(order);
+                        }}
                         className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                       >
                         <CheckCircle2 className="w-4 h-4" />
@@ -969,7 +997,10 @@ export const OrderManager: React.FC = () => {
                       <button
                         type="button"
                         disabled={isUpdating}
-                        onClick={() => handleUpdateStatus(order.id, 'READY')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateStatus(order.id, 'READY');
+                        }}
                         className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-display font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
                       >
                         <CheckCircle2 className="w-4 h-4 text-white" />
@@ -984,7 +1015,10 @@ export const OrderManager: React.FC = () => {
                         <button
                           type="button"
                           disabled={isUpdating}
-                          onClick={() => handleUpdateStatus(order.id, 'COMPLETED')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUpdateStatus(order.id, 'COMPLETED');
+                          }}
                           className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs uppercase font-bold transition-all cursor-pointer border border-slate-700"
                         >
                           Tandai Selesai
@@ -1004,7 +1038,10 @@ export const OrderManager: React.FC = () => {
                             <button
                               key={st}
                               disabled={isUpdating}
-                              onClick={() => handleUpdateStatus(order.id, st)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUpdateStatus(order.id, st);
+                              }}
                               className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all cursor-pointer ${
                                 isCurrent
                                   ? 'bg-[#00E5FF] text-slate-950 font-black shadow-md shadow-cyan-500/30'
@@ -1025,13 +1062,15 @@ export const OrderManager: React.FC = () => {
                     <select
                       disabled={isUpdating}
                       value={order.paymentStatus}
-                      onChange={(e) =>
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        e.stopPropagation();
                         handleUpdateStatus(
                           order.id,
                           order.orderStatus,
                           e.target.value as PaymentStatus
-                        )
-                      }
+                        );
+                      }}
                       className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-xs font-mono text-slate-200 focus:outline-none focus:border-[#00E5FF] cursor-pointer"
                     >
                       <option value="WAITING VERIFICATION">WAITING VERIFICATION</option>
@@ -1211,6 +1250,16 @@ export const OrderManager: React.FC = () => {
           setSelectedOrderForSlip(null);
         }}
         order={selectedOrderForSlip}
+      />
+
+      {/* Order Detail Modal */}
+      <OrderDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={() => {
+          setIsDetailModalOpen(false);
+          setSelectedOrderDetail(null);
+        }}
+        order={orders.find((o) => o.id === selectedOrderDetail?.id) || selectedOrderDetail}
       />
     </div>
   );

@@ -241,6 +241,339 @@ USING (bucket_id = 'leton-images');
 
 -- 9. Aktifkan Realtime Replication untuk Tabel Orders
 ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
+
+-- ==============================================================================
+-- LETON COFFEE DUMAI - LOYALTY SYSTEM SCHEMA
+-- ==============================================================================
+
+-- 10. Table: Loyalty Settings
+CREATE TABLE IF NOT EXISTS public.loyalty_settings (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  earning_amount_per_point NUMERIC NOT NULL DEFAULT 10000,
+  calculation_basis TEXT NOT NULL DEFAULT 'SUBTOTAL', -- 'SUBTOTAL' | 'TOTAL' (after discount)
+  expiration_mode TEXT NOT NULL DEFAULT 'NEVER', -- 'NEVER' | 'DAYS'
+  expiration_days INTEGER NOT NULL DEFAULT 365,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Seed default settings
+INSERT INTO public.loyalty_settings (id, is_active, earning_amount_per_point, calculation_basis, expiration_mode, expiration_days)
+VALUES ('default', true, 10000, 'SUBTOTAL', 'NEVER', 365)
+ON CONFLICT (id) DO NOTHING;
+
+-- 11. Table: Loyalty Rewards
+CREATE TABLE IF NOT EXISTS public.loyalty_rewards (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  points_required INTEGER NOT NULL,
+  reward_type TEXT NOT NULL, -- 'DISCOUNT_PERCENT' | 'DISCOUNT_NOMINAL' | 'FREE_ITEM'
+  reward_value NUMERIC NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  redeem_limit INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Seed default rewards
+INSERT INTO public.loyalty_rewards (id, name, description, points_required, reward_type, reward_value, is_active)
+VALUES 
+  ('rwd-1', 'Potongan Rp5.000', 'Diskon langsung Rp5.000 untuk transaksi berikutnya.', 15, 'DISCOUNT_NOMINAL', 5000, true),
+  ('rwd-2', 'Potongan Rp10.000', 'Diskon langsung Rp10.000 untuk transaksi berikutnya.', 28, 'DISCOUNT_NOMINAL', 10000, true),
+  ('rwd-3', 'Free Redvelvet Leton', 'Klaim 1x Cup Redvelvet Leton gratis.', 40, 'FREE_ITEM', 22000, true)
+ON CONFLICT (id) DO NOTHING;
+
+-- 12. Ensure columns in public.customers for loyalty balances
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS points_balance INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS total_points_earned INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS total_points_redeemed INTEGER NOT NULL DEFAULT 0;
+
+-- 13. Table: Loyalty Point Transactions
+CREATE TABLE IF NOT EXISTS public.loyalty_transactions (
+  id TEXT PRIMARY KEY,
+  customer_id TEXT REFERENCES public.customers(id) ON DELETE CASCADE,
+  transaction_type TEXT NOT NULL, -- 'EARN' | 'REDEEM' | 'MANUAL_ADD' | 'MANUAL_SUB' | 'EXPIRED'
+  points INTEGER NOT NULL, -- positive for credit, negative for debit
+  balance_before INTEGER NOT NULL,
+  balance_after INTEGER NOT NULL,
+  reference_order_id TEXT REFERENCES public.orders(id) ON DELETE SET NULL,
+  reference_reward_id TEXT REFERENCES public.loyalty_rewards(id) ON DELETE SET NULL,
+  reason TEXT,
+  admin_username TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 14. Table: Reward Redemptions (Vouchers)
+CREATE TABLE IF NOT EXISTS public.reward_redemptions (
+  id TEXT PRIMARY KEY,
+  customer_id TEXT REFERENCES public.customers(id) ON DELETE CASCADE,
+  reward_id TEXT REFERENCES public.loyalty_rewards(id) ON DELETE CASCADE,
+  reward_name TEXT NOT NULL,
+  reward_type TEXT NOT NULL,
+  reward_value NUMERIC NOT NULL,
+  points_spent INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ACTIVE', -- 'ACTIVE' | 'USED' | 'EXPIRED'
+  reference_order_id TEXT REFERENCES public.orders(id) ON DELETE SET NULL, -- order where it was used
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ,
+  used_at TIMESTAMPTZ
+);
+
+-- 15. Create secure function for manual adjustments and automatic point earnings
+-- Ensures atomic updates to customer points balance and records transaction securely.
+-- All operations are executed within a database transaction.
+CREATE OR REPLACE FUNCTION public.adjust_customer_points(
+  p_customer_id TEXT,
+  p_points INTEGER, -- can be positive (earn/add) or negative (redeem/sub)
+  p_type TEXT,
+  p_reason TEXT,
+  p_ref_order_id TEXT DEFAULT NULL,
+  p_ref_reward_id TEXT DEFAULT NULL,
+  p_admin TEXT DEFAULT NULL
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_current_bal INTEGER := 0;
+  v_new_bal INTEGER := 0;
+  v_tx_id TEXT;
+  v_earned_inc INTEGER := 0;
+  v_redeemed_inc INTEGER := 0;
+  v_customer_exists BOOLEAN;
+BEGIN
+  -- 1. Check if customer exists
+  SELECT EXISTS(SELECT 1 FROM public.customers WHERE id = p_customer_id) INTO v_customer_exists;
+  IF NOT v_customer_exists THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Customer tidak ditemukan');
+  END IF;
+
+  -- 2. Lock customer row and get current balance
+  SELECT points_balance INTO v_current_bal
+  FROM public.customers
+  WHERE id = p_customer_id
+  FOR UPDATE;
+
+  -- Calculate new balance
+  v_new_bal := v_current_bal + p_points;
+
+  -- Prevent negative balance
+  IF v_new_bal < 0 THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Saldo point tidak mencukupi');
+  END IF;
+
+  -- Set increments
+  IF p_points > 0 THEN
+    v_earned_inc := p_points;
+  ELSE
+    v_redeemed_inc := ABS(p_points);
+  END IF;
+
+  -- 3. Update customer table
+  UPDATE public.customers
+  SET 
+    points_balance = v_new_bal,
+    total_points_earned = total_points_earned + v_earned_inc,
+    total_points_redeemed = total_points_redeemed + v_redeemed_inc,
+    updated_at = NOW()
+  WHERE id = p_customer_id;
+
+  -- Generate transaction ID
+  v_tx_id := 'TX-' || floor(random() * 900000 + 100000)::text;
+
+  -- 4. Record transaction history
+  INSERT INTO public.loyalty_transactions (
+    id, customer_id, transaction_type, points, balance_before, balance_after,
+    reference_order_id, reference_reward_id, reason, admin_username, created_at
+  ) VALUES (
+    v_tx_id, p_customer_id, p_type, p_points, v_current_bal, v_new_bal,
+    p_ref_order_id, p_ref_reward_id, p_reason, p_admin, NOW()
+  );
+
+  RETURN jsonb_build_object(
+    'success', true, 
+    'transaction_id', v_tx_id, 
+    'points_balance', v_new_bal,
+    'points_adjusted', p_points
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+-- 16. Create secure function for reward redemption (atomic check-then-redeem)
+CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
+  p_customer_id TEXT,
+  p_reward_id TEXT
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_points_required INTEGER;
+  v_reward_name TEXT;
+  v_reward_type TEXT;
+  v_reward_value NUMERIC;
+  v_is_active BOOLEAN;
+  v_current_bal INTEGER;
+  v_new_bal INTEGER;
+  v_redemption_id TEXT;
+  v_tx_res JSONB;
+BEGIN
+  -- 1. Get reward detail
+  SELECT name, points_required, reward_type, reward_value, is_active
+  INTO v_reward_name, v_points_required, v_reward_type, v_reward_value, v_is_active
+  FROM public.loyalty_rewards
+  WHERE id = p_reward_id;
+
+  IF v_reward_name IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Reward tidak ditemukan');
+  END IF;
+
+  IF NOT v_is_active THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Reward sedang tidak aktif');
+  END IF;
+
+  -- 2. Call adjust_customer_points to securely deduct points
+  v_tx_res := public.adjust_customer_points(
+    p_customer_id,
+    -v_points_required,
+    'REDEEM',
+    'Redeem Reward: ' || v_reward_name,
+    NULL,
+    p_reward_id,
+    NULL
+  );
+
+  IF NOT (v_tx_res->>'success')::boolean THEN
+    RETURN jsonb_build_object('success', false, 'error', COALESCE(v_tx_res->>'error', 'Redeem gagal'));
+  END IF;
+
+  -- 3. Create redemption voucher record
+  v_redemption_id := 'VCH-' || floor(random() * 900000 + 100000)::text;
+  
+  INSERT INTO public.reward_redemptions (
+    id, customer_id, reward_id, reward_name, reward_type, reward_value, 
+    points_spent, status, created_at, expires_at
+  ) VALUES (
+    v_redemption_id, p_customer_id, p_reward_id, v_reward_name, v_reward_type, v_reward_value,
+    v_points_required, 'ACTIVE', NOW(), NOW() + INTERVAL '30 days' -- standard 30 days validation
+  );
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'redemption_id', v_redemption_id,
+    'reward_name', v_reward_name,
+    'points_spent', v_points_required,
+    'points_balance', (v_tx_res->>'points_balance')::integer
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+-- 17. Create secure function to trigger automatic point earning for a PAID/COMPLETED order.
+-- Ensures that an order only awards points once.
+CREATE OR REPLACE FUNCTION public.process_order_points_earning(
+  p_order_id TEXT
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_order_exists BOOLEAN;
+  v_customer_id TEXT;
+  v_total_amount NUMERIC;
+  v_payment_status TEXT;
+  v_order_status TEXT;
+  v_is_active BOOLEAN;
+  v_earning_amount NUMERIC;
+  v_calc_basis TEXT;
+  v_points_to_earn INTEGER;
+  v_points_calculated NUMERIC;
+  v_already_earned BOOLEAN;
+  v_res JSONB;
+BEGIN
+  -- 1. Check if points earning already processed for this order
+  SELECT EXISTS(
+    SELECT 1 FROM public.loyalty_transactions 
+    WHERE reference_order_id = p_order_id AND transaction_type = 'EARN'
+  ) INTO v_already_earned;
+
+  IF v_already_earned THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Poin untuk pesanan ini sudah pernah diproses');
+  END IF;
+
+  -- 2. Fetch order details
+  SELECT EXISTS(SELECT 1 FROM public.orders WHERE id = p_order_id) INTO v_order_exists;
+  IF NOT v_order_exists THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Order tidak ditemukan');
+  END IF;
+
+  SELECT customer_id, total_amount, payment_status, order_status
+  INTO v_customer_id, v_total_amount, v_payment_status, v_order_status
+  FROM public.orders
+  WHERE id = p_order_id;
+
+  -- Must have a valid customer_id linked
+  IF v_customer_id IS NULL OR v_customer_id = '' THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Pesanan tidak ditautkan ke member customer_id');
+  END IF;
+
+  -- Order must be PAID or COMPLETED
+  IF v_payment_status <> 'PAID' AND v_order_status <> 'COMPLETED' THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Poin hanya diberikan untuk pesanan dengan status PAID atau COMPLETED');
+  END IF;
+
+  -- 3. Fetch loyalty settings
+  SELECT is_active, earning_amount_per_point, calculation_basis
+  INTO v_is_active, v_earning_amount, v_calc_basis
+  FROM public.loyalty_settings
+  WHERE id = 'default';
+
+  IF v_is_active IS NULL OR NOT v_is_active THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Sistem Loyalty Point sedang dinonaktifkan oleh Admin');
+  END IF;
+
+  -- 4. Calculate points
+  -- Since orders subtotal is not a standalone DB numeric column, we use order total_amount
+  v_points_calculated := floor(v_total_amount / v_earning_amount);
+  v_points_to_earn := v_points_calculated::integer;
+
+  IF v_points_to_earn <= 0 THEN
+    RETURN jsonb_build_object('success', true, 'points_earned', 0, 'message', 'Nominal transaksi tidak mencapai batas minimum perolehan poin');
+  END IF;
+
+  -- 5. Credit points via adjust_customer_points
+  v_res := public.adjust_customer_points(
+    v_customer_id,
+    v_points_to_earn,
+    'EARN',
+    'Earn point dari Pesanan #' || p_order_id,
+    p_order_id,
+    NULL,
+    NULL
+  );
+
+  RETURN v_res;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+-- 18. Enable RLS and create public policies
+ALTER TABLE public.loyalty_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.loyalty_rewards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.loyalty_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.reward_redemptions ENABLE ROW LEVEL SECURITY;
+
+-- Allow reading loyalty settings and rewards for anyone
+CREATE POLICY "Allow read loyalty_settings" ON public.loyalty_settings FOR SELECT USING (true);
+CREATE POLICY "Allow read loyalty_rewards" ON public.loyalty_rewards FOR SELECT USING (true);
+
+-- Allow admins full access to settings, rewards, and transactions
+CREATE POLICY "Admins manage loyalty_settings" ON public.loyalty_settings 
+  FOR ALL USING (get_current_admin_role() = 'super_admin');
+
+CREATE POLICY "Admins manage loyalty_rewards" ON public.loyalty_rewards 
+  FOR ALL USING (get_current_admin_role() = 'super_admin');
+
+CREATE POLICY "Admins manage loyalty_transactions" ON public.loyalty_transactions 
+  FOR ALL USING (get_current_admin_role() = 'super_admin');
+
+CREATE POLICY "Admins manage reward_redemptions" ON public.reward_redemptions 
+  FOR ALL USING (get_current_admin_role() = 'super_admin');
 `;
 
 /**
@@ -553,6 +886,15 @@ export async function createNewOrder(
     if (!insertError) {
       console.log('[Supabase Orders] Order inserted successfully into public.orders:', orderData.orderNumber);
 
+      // Award loyalty points securely if PAID or COMPLETED
+      if (orderData.paymentStatus === 'PAID' || orderData.orderStatus === 'COMPLETED') {
+        try {
+          await client.rpc('process_order_points_earning', { p_order_id: orderData.id });
+        } catch (ptsErr) {
+          console.warn('[Order Points Earning Error in createNewOrder]:', ptsErr);
+        }
+      }
+
       // Try inserting into order_items table
       try {
         const itemRows = orderData.items.map((it, idx) => ({
@@ -760,6 +1102,15 @@ export async function updateOrderStatus(
     const { error } = await client.from('orders').update(updatePayload).eq('id', orderId);
     if (error) {
       console.warn('[Supabase updateOrderStatus Notice]:', error.message);
+    } else {
+      // Award loyalty points securely if PAID or COMPLETED
+      if (newPaymentStatus === 'PAID' || newOrderStatus === 'COMPLETED') {
+        try {
+          await client.rpc('process_order_points_earning', { p_order_id: orderId });
+        } catch (ptsErr) {
+          console.warn('[Order Points Earning Error in updateOrderStatus]:', ptsErr);
+        }
+      }
     }
   } catch (err) {
     console.warn('[Supabase updateOrderStatus Exception]:', err);

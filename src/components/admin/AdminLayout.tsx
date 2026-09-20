@@ -15,6 +15,7 @@ import { QrisPaymentEditor } from './QrisPaymentEditor';
 import { OrderManager } from './OrderManager';
 import { StockManager } from './StockManager';
 import { SalesReportManager } from './SalesReportManager';
+import { LoyaltyManager } from './LoyaltyManager';
 import {
   LayoutDashboard,
   Home,
@@ -42,6 +43,7 @@ import {
   Search,
   Calendar,
   Coffee,
+  Gift,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -68,6 +70,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
     { id: 'orders', label: 'AUDIT PESANAN', icon: ShoppingBag },
     { id: 'stock', label: 'KONTROL STOK', icon: Boxes },
     { id: 'menu', label: 'MENU & KATEGORI', icon: UtensilsCrossed },
+    { id: 'loyalty', label: 'LOYALTY / POINT', icon: Gift },
   ];
 
   const contentItems = [
@@ -414,6 +417,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
             <DashboardOverview onNavigateTab={(tab) => setActiveTab(tab)} />
           )}
           {activeTab === 'sales' && !isOutletAdmin && <SalesReportManager />}
+          {activeTab === 'loyalty' && !isOutletAdmin && <LoyaltyManager />}
           {activeTab === 'orders' && <OrderManager />}
           {activeTab === 'stock' && <StockManager />}
           {activeTab === 'home' && !isOutletAdmin && <HomeEditor />}

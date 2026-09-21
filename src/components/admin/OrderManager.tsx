@@ -233,6 +233,57 @@ export const OrderManager: React.FC = () => {
     };
   }, [soundEnabled, effectiveOutletScope]);
 
+  // Support deep link from push notification click and service worker messages
+  useEffect(() => {
+    if (orders.length === 0) return;
+    
+    const checkDeepLink = () => {
+      const hashPart = window.location.hash || '';
+      const queryIdx = hashPart.indexOf('?');
+      if (queryIdx === -1) return;
+      
+      const queryString = hashPart.substring(queryIdx + 1);
+      const searchParams = new URLSearchParams(queryString);
+      const deepOrderId = searchParams.get('orderId');
+      if (deepOrderId) {
+        const foundOrder = orders.find(o => o.id === deepOrderId);
+        if (foundOrder) {
+          setSelectedOrderDetail(foundOrder);
+          setIsDetailModalOpen(true);
+          
+          // Clean orderId from URL hash/search to prevent modal popping up on page refreshes
+          const cleanHash = hashPart.substring(0, queryIdx);
+          window.history.replaceState(null, '', cleanHash);
+        }
+      }
+    };
+
+    checkDeepLink();
+
+    // Listen to messages from service worker
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'NOTIFICATION_CLICKED') {
+        const oId = event.data.orderId;
+        if (oId) {
+          const foundOrder = orders.find(o => o.id === oId);
+          if (foundOrder) {
+            setSelectedOrderDetail(foundOrder);
+            setIsDetailModalOpen(true);
+          }
+        }
+      }
+    };
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleMessage);
+    }
+    return () => {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleMessage);
+      }
+    };
+  }, [orders]);
+
 
   // Handle status update - Awaits database confirmation before updating UI to prevent optimistic UI discrepancy
   const handleUpdateStatus = async (

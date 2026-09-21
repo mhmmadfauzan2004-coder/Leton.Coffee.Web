@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+import webpush from 'web-push';
 import { initialLetonData } from './src/data/initialData';
 import { LetonData } from './src/types';
 
@@ -1112,6 +1113,11 @@ app.post('/api/orders', (req, res) => {
 
   saveOrders(orders.slice(0, 500)); // retain last 500 orders
   broadcastOrderEvent('ORDER_CREATED', order);
+  
+  // Trigger background push notification to matching admin devices asynchronously
+  sendBackgroundPushNotificationForOrder(order).catch((pErr) => {
+    console.error('[WebPush] Error triggering push notification:', pErr);
+  });
 
   res.status(201).json({ success: true, order });
 });
@@ -1514,10 +1520,361 @@ app.post('/api/admin/cleanup-receipts', async (req, res) => {
 setInterval(runPaymentProofCleanup, 30 * 60 * 1000);
 setTimeout(runPaymentProofCleanup, 10 * 1000);
 
+// =============================================
+// WEB PUSH NOTIFICATION BACKEND IMPLEMENTATION
+// =============================================
+let vapidPublicKey = '';
+let vapidPrivateKey = '';
+
+async function initVapid() {
+  const keysFile = path.join(DATA_DIR, 'vapid_keys.json');
+  let keys;
+
+  // 1. Try from environment first
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
+    vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+    console.log('[WebPush] VAPID keys loaded from environment variables.');
+  } else {
+    // 2. Try Supabase leton_content with ID 'vapid_keys'
+    try {
+      const { data, error } = await supabase
+        .from('leton_content')
+        .select('content')
+        .eq('id', 'vapid_keys')
+        .maybeSingle();
+      if (!error && data?.content) {
+        keys = data.content;
+        vapidPublicKey = keys.publicKey;
+        vapidPrivateKey = keys.privateKey;
+        console.log('[WebPush] VAPID keys loaded from Supabase leton_content table.');
+      }
+    } catch (e) {
+      console.warn('[WebPush] Supabase VAPID keys warning:', e);
+    }
+
+    // 3. Try local file fallback
+    if (!vapidPublicKey || !vapidPrivateKey) {
+      try {
+        if (fs.existsSync(keysFile)) {
+          const raw = fs.readFileSync(keysFile, 'utf-8');
+          keys = JSON.parse(raw);
+          vapidPublicKey = keys.publicKey;
+          vapidPrivateKey = keys.privateKey;
+          console.log('[WebPush] VAPID keys loaded from local file.');
+        }
+      } catch (e) {
+        console.error('[WebPush] Local VAPID keys error:', e);
+      }
+    }
+
+    // 4. Generate new keys if still empty
+    if (!vapidPublicKey || !vapidPrivateKey) {
+      console.log('[WebPush] Generating new stable VAPID keys...');
+      keys = webpush.generateVAPIDKeys();
+      vapidPublicKey = keys.publicKey;
+      vapidPrivateKey = keys.privateKey;
+
+      // Save locally
+      try {
+        if (!fs.existsSync(DATA_DIR)) {
+          fs.mkdirSync(DATA_DIR, { recursive: true });
+        }
+        fs.writeFileSync(keysFile, JSON.stringify(keys, null, 2), 'utf-8');
+      } catch (e) {}
+
+      // Save to Supabase
+      try {
+        await supabase
+          .from('leton_content')
+          .upsert({
+            id: 'vapid_keys',
+            content: keys,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+        console.log('[WebPush] Saved new VAPID keys to Supabase database.');
+      } catch (e) {}
+    }
+  }
+
+  webpush.setVapidDetails(
+    'mailto:admin@letoncoffee.com',
+    vapidPublicKey,
+    vapidPrivateKey
+  );
+}
+
+// Fetch all active subscriptions
+async function getPushSubscriptions(): Promise<any[]> {
+  try {
+    const { data, error } = await supabase
+      .from('leton_content')
+      .select('content')
+      .eq('id', 'push_subscriptions')
+      .maybeSingle();
+
+    if (!error && data?.content && Array.isArray(data.content.subscriptions)) {
+      return data.content.subscriptions;
+    }
+  } catch (err) {
+    console.error('[WebPush] Error fetching subscriptions from Supabase:', err);
+  }
+
+  // Local file fallback
+  const subFile = path.join(DATA_DIR, 'push_subscriptions.json');
+  try {
+    if (fs.existsSync(subFile)) {
+      const raw = fs.readFileSync(subFile, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed.subscriptions) ? parsed.subscriptions : [];
+    }
+  } catch (err) {}
+
+  return [];
+}
+
+// Save active subscriptions
+async function savePushSubscriptions(subscriptions: any[]): Promise<boolean> {
+  const payload = { subscriptions };
+  
+  // Local save
+  const subFile = path.join(DATA_DIR, 'push_subscriptions.json');
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(subFile, JSON.stringify(payload, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[WebPush] Error saving subscriptions locally:', err);
+  }
+
+  // Supabase save
+  try {
+    const { error } = await supabase
+      .from('leton_content')
+      .upsert({
+        id: 'push_subscriptions',
+        content: payload,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+    if (error) {
+      console.error('[WebPush] Error saving subscriptions to Supabase:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('[WebPush] Supabase save error:', err);
+    return false;
+  }
+}
+
+// Set to track sent order push notifications for idempotency
+const processedPushOrderIds = new Set<string>();
+
+/**
+ * Robust server-side utility to check if an order matches a subscription outlet ID.
+ * Handles variations like 'letgo-mpp' vs 'letgo', 'kelakap_7' vs 'kelakap', etc.
+ */
+function serverMatchesOutlet(orderOutletId: string | null | undefined, targetOutletId: string | null | undefined): boolean {
+  if (!targetOutletId || !orderOutletId) return false;
+
+  const o = orderOutletId.toLowerCase().trim();
+  const t = targetOutletId.toLowerCase().trim();
+
+  if (o === t) return true;
+
+  // Sudirman check
+  if (
+    (t === 'sudirman' || t.includes('sudirman')) &&
+    (o === 'sudirman' || o.includes('sudirman'))
+  ) {
+    return true;
+  }
+
+  // Ratusima / Kelakap 7 check
+  if (
+    (t === 'kelakap_7' || t === 'kelakap' || t === 'ratusima' || t.includes('kelakap') || t.includes('ratusima')) &&
+    (o === 'kelakap_7' || o === 'kelakap' || o === 'ratusima' || o.includes('kelakap') || o.includes('ratusima'))
+  ) {
+    return true;
+  }
+
+  // LetGo check
+  if (
+    (t === 'letgo' || t === 'letgo-mpp' || t.includes('letgo') || t.includes('mpp')) &&
+    (o === 'letgo' || o === 'letgo-mpp' || o.includes('letgo') || o.includes('mpp'))
+  ) {
+    return true;
+  }
+
+  return o.includes(t) || t.includes(o);
+}
+
+async function sendBackgroundPushNotificationForOrder(order: any) {
+  if (!order || !order.id) return;
+  if (processedPushOrderIds.has(order.id)) {
+    console.log(`[WebPush] Background Push already triggered for order ${order.id}. Skipping.`);
+    return;
+  }
+
+  processedPushOrderIds.add(order.id);
+
+  // Bound set size
+  if (processedPushOrderIds.size > 1000) {
+    const firstElement = processedPushOrderIds.values().next().value;
+    if (firstElement !== undefined) {
+      processedPushOrderIds.delete(firstElement);
+    }
+  }
+
+  try {
+    const subscriptions = await getPushSubscriptions();
+    if (subscriptions.length === 0) {
+      console.log('[WebPush] No active push subscriptions found in storage.');
+      return;
+    }
+
+    const orderOutletId = String(order.outletId || order.outlet_id || '').toLowerCase();
+    
+    // Filter matching subscriptions. Only route to specific outlet admins!
+    // CENTRAL ADMIN / super_admin: TIDAK menerima operational order push.
+    const matchingSubs = subscriptions.filter(sub => {
+      const subRole = String(sub.role || '').toLowerCase();
+      const subUsername = String(sub.username || '').toLowerCase();
+      const subOutlet = String(sub.outletId || '').toLowerCase();
+
+      // Central admin / super_admin: TIDAK menerima operational order push.
+      if (
+        subRole === 'super_admin' || 
+        subOutlet === 'all' || 
+        subUsername === 'admin' || 
+        subUsername === 'superadmin'
+      ) {
+        return false;
+      }
+
+      return serverMatchesOutlet(orderOutletId, subOutlet);
+    });
+
+    if (matchingSubs.length === 0) {
+      console.log(`[WebPush] No matching admin subscriptions found for outlet ID: ${orderOutletId}`);
+      return;
+    }
+
+    const totalFormatted = typeof order.totalAmount === 'number' 
+      ? `Rp${order.totalAmount.toLocaleString('id-ID')}`
+      : `Rp${(order.total || 0).toLocaleString('id-ID')}`;
+
+    const payload = JSON.stringify({
+      title: '🔔 Pesanan Baru — Leton Coffee',
+      body: `#${order.orderNumber || order.id} • ${order.customerName || 'Pelanggan'} • ${totalFormatted}\nOutlet: ${order.outletName || 'Outlet'}`,
+      icon: '/logo_icon.jpg',
+      badge: '/logo_icon.jpg',
+      data: {
+        orderId: order.id,
+        outletId: order.outletId || ''
+      }
+    });
+
+    console.log(`[WebPush] Sending background push for order ${order.orderNumber || order.id} to ${matchingSubs.length} device(s).`);
+
+    const staleEndpoints: string[] = [];
+
+    await Promise.all(
+      matchingSubs.map(async (sub) => {
+        try {
+          const pushSubscription = {
+            endpoint: sub.endpoint,
+            keys: {
+              p256dh: sub.keys.p256dh,
+              auth: sub.keys.auth
+            }
+          };
+          await webpush.sendNotification(pushSubscription, payload);
+        } catch (err: any) {
+          console.warn(`[WebPush] Error sending push to endpoint: ${sub.endpoint}. Status code: ${err.statusCode}`);
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            staleEndpoints.push(sub.endpoint);
+          }
+        }
+      })
+    );
+
+    // Prune stale subscriptions
+    if (staleEndpoints.length > 0) {
+      console.log(`[WebPush] Pruning ${staleEndpoints.length} stale/expired subscription(s).`);
+      const activeSubs = subscriptions.filter(sub => !staleEndpoints.includes(sub.endpoint));
+      await savePushSubscriptions(activeSubs);
+    }
+  } catch (err) {
+    console.error('[WebPush] Error sending background push:', err);
+  }
+}
+
+// ---------------------------------------------
+// PUSH ENDPOINTS
+// ---------------------------------------------
+app.get('/api/push/vapid-public-key', (req, res) => {
+  res.json({ publicKey: vapidPublicKey });
+});
+
+app.post('/api/push/subscribe', async (req, res) => {
+  const { subscription, username, outletId, role } = req.body;
+  if (!subscription || !subscription.endpoint || !subscription.keys) {
+    return res.status(400).json({ error: 'Subscription data is invalid.' });
+  }
+
+  try {
+    const currentSubs = await getPushSubscriptions();
+    // Filter out existing subscription with the same endpoint to avoid duplicates
+    const cleanSubs = currentSubs.filter(sub => sub.endpoint !== subscription.endpoint);
+    
+    // Add the new / updated subscription
+    cleanSubs.push({
+      endpoint: subscription.endpoint,
+      keys: subscription.keys,
+      username: username || 'unknown_admin',
+      outletId: outletId || 'all',
+      role: role || 'outlet_admin',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    // Retain only the last 100 devices
+    const finalSubs = cleanSubs.slice(Math.max(0, cleanSubs.length - 100));
+
+    await savePushSubscriptions(finalSubs);
+    console.log(`[WebPush] Subscription saved successfully for admin ${username} at outlet ${outletId}.`);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to save subscription.' });
+  }
+});
+
+app.post('/api/push/unsubscribe', async (req, res) => {
+  const { endpoint } = req.body;
+  if (!endpoint) {
+    return res.status(400).json({ error: 'Endpoint is required.' });
+  }
+
+  try {
+    const currentSubs = await getPushSubscriptions();
+    const cleanSubs = currentSubs.filter(sub => sub.endpoint !== endpoint);
+    await savePushSubscriptions(cleanSubs);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to unsubscribe.' });
+  }
+});
+
 // ---------------------------------------------
 // VITE / STATIC SERVING
 // ---------------------------------------------
 async function start() {
+  // Initialize Web Push VAPID keys
+  await initVapid();
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },

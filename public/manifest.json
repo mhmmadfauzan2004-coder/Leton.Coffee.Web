@@ -1,0 +1,31 @@
+{
+  "id": "/",
+  "name": "Leton Coffee",
+  "short_name": "LetonCoffee",
+  "description": "Website Profil & Online Ordering Leton Coffee dengan fitur push notification pesanan baru.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F8FBFF",
+  "theme_color": "#0B1524",
+  "icons": [
+    {
+      "src": "/logo_icon.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo_icon.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo_icon.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "maskable"
+    }
+  ]
+}

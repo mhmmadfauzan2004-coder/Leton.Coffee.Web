@@ -3,20 +3,17 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
-// Clean up any stale service workers or browser cache storages that cause differences between Safari and Chrome
+// Register production Service Worker for background push notifications
 if (typeof window !== 'undefined') {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then((registrations) => {
-      for (const registration of registrations) {
-        registration.unregister().catch(() => {});
-      }
-    });
-  }
-  if ('caches' in window) {
-    caches.keys().then((keys) => {
-      for (const key of keys) {
-        caches.delete(key).catch(() => {});
-      }
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        .then((reg) => {
+          console.log('Service Worker registered successfully with scope:', reg.scope);
+        })
+        .catch((err) => {
+          console.error('Service Worker registration failed:', err);
+        });
     });
   }
 }

@@ -158,7 +158,7 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
       if (initialTopping) {
         setSelectedTopping(initialTopping);
       } else {
-        const noTop = availableToppings.find((t) => t.name.toLowerCase().includes('no topping'));
+        const noTop = availableToppings.find((t) => (t?.name || '').toLowerCase().includes('no topping'));
         setSelectedTopping(noTop || availableToppings[0] || DEFAULT_TOPPING);
       }
 
@@ -166,7 +166,7 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
       if (initialSyrup) {
         setSelectedSyrup(initialSyrup);
       } else {
-        const noSyr = availableSyrups.find((s) => s.name.toLowerCase().includes('no syrup'));
+        const noSyr = availableSyrups.find((s) => (s?.name || '').toLowerCase().includes('no syrup'));
         setSelectedSyrup(noSyr || availableSyrups[0] || DEFAULT_SYRUP);
       }
 
@@ -506,10 +506,11 @@ export const ProductAddOnsModal: React.FC<ProductAddOnsModalProps> = ({
             {/* DYNAMIC CUSTOMIZATION GROUPS SECTIONS */}
             {activeCustomGroups
               .filter((group) => {
-                if (group.name.toLowerCase().includes('toping donat')) {
+                const groupName = (group?.name || '').toLowerCase();
+                if (groupName.includes('toping donat')) {
                   return product.use_topping_donut === true;
                 }
-                if (group.name.toLowerCase().includes('toping maincourse')) {
+                if (groupName.includes('toping maincourse')) {
                   return product.use_topping_maincourse === true;
                 }
                 return true;

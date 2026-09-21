@@ -324,18 +324,18 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ isOpen, onCl
                     <div>
                       <h4 className="font-display font-black text-xs text-white uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2">
                         <ShoppingBag className="w-4 h-4 text-[#00E5FF]" />
-                        <span>Rincian Item Belanja ({order.items.reduce((a, b) => a + b.quantity, 0)} Pcs)</span>
+                        <span>Rincian Item Belanja ({(order.items || []).reduce((a, b) => a + (b?.quantity || 0), 0)} Pcs)</span>
                       </h4>
 
                       {/* Items loop */}
                       <div className="divide-y divide-slate-800/80 max-h-[35vh] overflow-y-auto pr-1 mt-3 space-y-3">
-                        {order.items.map((it, idx) => {
+                        {(order.items || []).map((it, idx) => {
                           const sizePrice = it.size?.price || 0;
                           const topPrice = it.topping?.price || 0;
                           const syrPrice = it.syrup?.price || 0;
                           const customsPrice = (it.customOptions || []).reduce((sum, c) => sum + (c.price || 0), 0);
                           const unitPrice = it.unitPrice || (it.price + sizePrice + topPrice + syrPrice + customsPrice);
-                          const itemSubtotal = unitPrice * it.quantity;
+                          const itemSubtotal = unitPrice * (it.quantity || 1);
 
                           return (
                             <div key={idx} className="pt-3 first:pt-0 space-y-1.5">

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { OrderOutlet, CartItem, MenuItem, AddOnOption } from '../../../types';
+import { OrderOutlet, CartItem, MenuItem, AddOnOption, SelectedCustomOption } from '../../../types';
 import { useContent } from '../../../context/ContentContext';
 import { formatRupiah } from '../../../utils/formatters';
 import { resolveMediaUrl } from '../../../utils/api';
@@ -31,7 +31,8 @@ interface OrderMenuProps {
     topping?: AddOnOption,
     syrup?: AddOnOption,
     quantity?: number,
-    note?: string
+    note?: string,
+    customOptions?: SelectedCustomOption[]
   ) => void;
   onUpdateCartQuantity: (cartItemId: string, delta: number) => void;
   onOpenCart: () => void;
@@ -84,13 +85,14 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
 
   // Filtered menu
   const filteredItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return (menuItems || [])
       .filter((item) => {
+        if (!item) return false;
         const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory;
-        const matchesSearch =
-          !searchQuery.trim() ||
-          item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          item.description.toLowerCase().includes(searchQuery.toLowerCase());
+        const itemName = (item.name || '').toLowerCase();
+        const itemDesc = (item.description || '').toLowerCase();
+        const matchesSearch = !q || itemName.includes(q) || itemDesc.includes(q);
         return matchesCategory && matchesSearch;
       })
       .sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -98,21 +100,21 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
 
   // Cart summary
   const totalCartCount = useMemo(() => {
-    return cart.reduce((acc, item) => acc + item.quantity, 0);
+    return (cart || []).reduce((acc, item) => acc + (item?.quantity || 0), 0);
   }, [cart]);
 
   const totalCartAmount = useMemo(() => {
-    return cart.reduce(
+    return (cart || []).reduce(
       (acc, item) =>
-        acc + calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup, item.customOptions) * item.quantity,
+        acc + calculateItemUnitPrice(item?.product?.price ?? 0, item?.size, item?.topping, item?.syrup, item?.customOptions) * (item?.quantity || 1),
       0
     );
   }, [cart]);
 
   const getProductQuantityInCart = (productId: string): number => {
-    return cart
-      .filter((it) => it.product.id === productId)
-      .reduce((sum, it) => sum + it.quantity, 0);
+    return (cart || [])
+      .filter((it) => it?.product?.id === productId)
+      .reduce((sum, it) => sum + (it?.quantity || 0), 0);
   };
 
   const handleOpenAddOns = (item: MenuItem) => {
@@ -125,9 +127,10 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
     topping: AddOnOption,
     syrup: AddOnOption,
     quantity: number,
-    note?: string
+    note?: string,
+    customOptions?: SelectedCustomOption[]
   ) => {
-    onAddToCart(product, size, topping, syrup, quantity, note);
+    onAddToCart(product, size, topping, syrup, quantity, note, customOptions);
   };
 
   return (
@@ -282,7 +285,7 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
 
                       {/* Stock Out Overlay */}
                       {!isAvailable && (
-                        <div className="absolute inset-0 bg-[#041d32]/75 backdrop-blur-2xs flex items-center justify-center p-2 text-center">
+                        <div className="absolute inset-0 bg-[#041d32]/75 backdrop-blur-xs flex items-center justify-center p-2 text-center">
                           <span className="px-2 py-1 rounded bg-rose-900/90 text-white text-[10px] font-bold uppercase tracking-wider shadow-xs">
                             HABIS
                           </span>
@@ -362,7 +365,7 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
               <div className="flex items-center gap-3">
                 <div className="relative w-9 h-9 rounded-lg bg-[#004c6b] flex items-center justify-center text-white shrink-0">
                   <ShoppingBag className="w-4 h-4" />
-                  <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.2 rounded-full bg-[#ffddb8] text-[#2a1700] text-[10px] font-black">
+                  <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-full bg-[#ffddb8] text-[#2a1700] text-[10px] font-black">
                     {totalCartCount}
                   </span>
                 </div>

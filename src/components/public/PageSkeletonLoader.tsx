@@ -72,15 +72,24 @@ export const PageSkeletonLoader: React.FC<PageSkeletonLoaderProps> = ({ onComple
     };
   }, []);
 
-  // 2. Complete loading only when all beans are 100% lit AND Supabase data is fully ready
+  // 2. Complete loading when all beans are 100% lit AND Supabase data is fully ready (with safe fallback)
   useEffect(() => {
-    if (isAnimationFinished && isDataReady) {
-      const timer = setTimeout(() => {
-        if (onComplete) {
-          onComplete();
-        }
-      }, 300); // Elegant 300ms pause when 100% full before starting smooth fade out
-      return () => clearTimeout(timer);
+    if (isAnimationFinished) {
+      if (isDataReady) {
+        const timer = setTimeout(() => {
+          if (onComplete) {
+            onComplete();
+          }
+        }, 300);
+        return () => clearTimeout(timer);
+      } else {
+        const fallbackTimer = setTimeout(() => {
+          if (onComplete) {
+            onComplete();
+          }
+        }, 1500);
+        return () => clearTimeout(fallbackTimer);
+      }
     }
   }, [isAnimationFinished, isDataReady, onComplete]);
 

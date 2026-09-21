@@ -31,7 +31,7 @@ export const KitchenSlipModal: React.FC<KitchenSlipModalProps> = ({ isOpen, onCl
     if (!frameDoc) return;
 
     // Build printer-friendly styled HTML matching thermal roll printers (58mm or 80mm)
-    const itemsHtml = order.items
+    const itemsHtml = (order.items || [])
       .map((it) => {
         const sizeText = it.size && it.size.name ? `[Size: ${it.size.name}]` : '';
         const toppingText = it.topping && it.topping.name !== 'No Topping' ? `+ Topping: ${it.topping.name}` : '';
@@ -310,7 +310,7 @@ export const KitchenSlipModal: React.FC<KitchenSlipModalProps> = ({ isOpen, onCl
 
                   {/* Items list with robust customizations and notes */}
                   <div className="space-y-3.5 pb-3 border-b border-dashed border-slate-300 mb-3">
-                    {order.items.map((it, idx) => {
+                    {(order.items || []).map((it, idx) => {
                       const hasSize = it.size && it.size.name;
                       const hasTopping = it.topping && it.topping.name !== 'No Topping';
                       const hasSyrup = it.syrup && it.syrup.name !== 'No Syrup';

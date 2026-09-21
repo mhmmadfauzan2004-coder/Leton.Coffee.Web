@@ -450,19 +450,19 @@ Halo Barista ${currentOrder.outletName}, saya ingin menanyakan status pesanan no
               DETAIL PESANAN
             </h3>
             <span className="text-xs font-mono text-[#64748B]">
-              {currentOrder.items.reduce((acc, it) => acc + it.quantity, 0)} Total Item
+              {(currentOrder.items || []).reduce((acc, it) => acc + (it?.quantity || 0), 0)} Total Item
             </span>
           </div>
 
           <div className="space-y-4">
-            {currentOrder.items.map((item, idx) => {
-              const basePrice = item.price;
+            {(currentOrder.items || []).map((item, idx) => {
+              const basePrice = item.price || 0;
               const sizePrice = item.size?.price || 0;
               const toppingPrice = item.topping?.price || 0;
               const syrupPrice = item.syrup?.price || 0;
               const customizationAddonPrice = sizePrice + toppingPrice + syrupPrice;
               const unitPrice = item.unitPrice || (basePrice + customizationAddonPrice);
-              const itemSubtotal = unitPrice * item.quantity;
+              const itemSubtotal = unitPrice * (item.quantity || 1);
 
               const hasSize = item.size && item.size.name;
               const hasTopping = item.topping && item.topping.name !== 'No Topping';

@@ -44,12 +44,13 @@ export const StockManager: React.FC = () => {
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
 
   const filteredItems = useMemo(() => {
-    return menuItems.filter((item) => {
+    const q = searchQuery.trim().toLowerCase();
+    return (menuItems || []).filter((item) => {
+      if (!item) return false;
       const matchCat = selectedCat === 'all' || item.categoryId === selectedCat;
-      const matchSearch =
-        !searchQuery.trim() ||
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.description.toLowerCase().includes(searchQuery.toLowerCase());
+      const itemName = (item.name || '').toLowerCase();
+      const itemDesc = (item.description || '').toLowerCase();
+      const matchSearch = !q || itemName.includes(q) || itemDesc.includes(q);
       return matchCat && matchSearch;
     });
   }, [menuItems, selectedCat, searchQuery]);

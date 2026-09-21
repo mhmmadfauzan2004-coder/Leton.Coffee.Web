@@ -607,12 +607,16 @@ export const MenuManager: React.FC = () => {
   };
 
   // Filter items
-  const filteredMenuItems = menuItems.filter((item) => {
+  const qFilter = searchFilter.trim().toLowerCase();
+  const filteredMenuItems = (menuItems || []).filter((item) => {
+    if (!item) return false;
     const matchesCat = selectedCatFilter === 'all' || item.categoryId === selectedCatFilter;
+    const itemName = (item.name || '').toLowerCase();
+    const itemDesc = (item.description || '').toLowerCase();
     const matchesSearch =
-      !searchFilter.trim() ||
-      item.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchFilter.toLowerCase());
+      !qFilter ||
+      itemName.includes(qFilter) ||
+      itemDesc.includes(qFilter);
     return matchesCat && matchesSearch;
   });
 

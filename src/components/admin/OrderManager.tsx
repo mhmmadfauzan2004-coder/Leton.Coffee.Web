@@ -38,12 +38,58 @@ import {
   Building2,
   Lock,
   Trash2,
+  Coffee,
+  Bell,
+  User,
+  Info,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { KitchenSlipModal } from './KitchenSlipModal';
 import { OrderDetailModal } from './OrderDetailModal';
 import { processOrderPointsEarning } from '../../utils/supabaseLoyalty';
 import { Sparkles } from 'lucide-react';
+
+// Compact item customization summary helper (Stitch Design)
+const getItemCustomizationSummary = (it: any): string => {
+  const parts: string[] = [];
+  if (it.size && it.size.name) parts.push(it.size.name);
+  if (it.topping && it.topping.name && it.topping.name !== 'No Topping') parts.push(it.topping.name);
+  if (it.syrup && it.syrup.name && it.syrup.name !== 'No Syrup') parts.push(it.syrup.name);
+  if (it.customOptions && Array.isArray(it.customOptions) && it.customOptions.length > 0) {
+    it.customOptions.forEach((c: any) => {
+      if (c && c.optionName) parts.push(c.optionName);
+    });
+  }
+  if (it.note) {
+    parts.push(`Note: ${it.note}`);
+  }
+  return parts.join(' • ');
+};
+
+// Compact relative timestamp helper (Stitch Design)
+const getOrderTimestamp = (createdAt: string) => {
+  try {
+    const d = new Date(createdAt);
+    const now = new Date();
+    const diffMs = Math.max(0, now.getTime() - d.getTime());
+    const diffMins = Math.floor(diffMs / 60000);
+    const timeStr = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+    let relStr = '';
+    if (diffMins < 1) {
+      relStr = '(baru saja)';
+    } else if (diffMins < 60) {
+      relStr = `(${diffMins}m lalu)`;
+    } else {
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) {
+        relStr = `(${diffHours}j lalu)`;
+      }
+    }
+    return { timeStr, relStr };
+  } catch {
+    return { timeStr: '', relStr: '' };
+  }
+};
 
 export const OrderManager: React.FC = () => {
   const { auth, showToast } = useContent();
@@ -224,7 +270,62 @@ export const OrderManager: React.FC = () => {
     }
   };
 
-  // Action 1: [ SIAP ]
+  // Action: [ TERIMA PESANAN ]
+  const handleAcceptOrder = async (order: CustomerOrder) => {
+    if (isOutletAdmin && !matchesOutlet(order.outletId, assignedOutletId)) {
+      showToast('Akses Ditolak: Anda hanya dapat memproses pesanan di cabang Anda.', 'error');
+      return;
+    }
+    setUpdatingOrderId(order.id);
+    try {
+      const nextPayment =
+        (order.paymentMethod === 'QRIS' && order.paymentReceiptUrl) || order.paymentStatus === 'PAID'
+          ? 'PAID'
+          : order.paymentStatus;
+      await handleUpdateStatus(order.id, 'ACCEPTED', nextPayment);
+      showToast(`Pesanan #${order.orderNumber} diterima! Siap diseduh.`, 'success');
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  // Action: [ MULAI DISEDUH ]
+  const handleStartBrewing = async (order: CustomerOrder) => {
+    if (isOutletAdmin && !matchesOutlet(order.outletId, assignedOutletId)) {
+      showToast('Akses Ditolak: Anda hanya dapat memproses pesanan di cabang Anda.', 'error');
+      return;
+    }
+    setUpdatingOrderId(order.id);
+    try {
+      await handleUpdateStatus(order.id, 'PREPARING');
+      showToast(`Pesanan #${order.orderNumber} mulai diseduh.`, 'success');
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  // Action: [ SELESAIKAN ]
+  const handleCompleteOrder = async (order: CustomerOrder) => {
+    if (isOutletAdmin && !matchesOutlet(order.outletId, assignedOutletId)) {
+      showToast('Akses Ditolak: Anda hanya dapat memproses pesanan di cabang Anda.', 'error');
+      return;
+    }
+    setUpdatingOrderId(order.id);
+    try {
+      const nextPayment =
+        order.paymentStatus === 'PAID'
+          ? 'PAID'
+          : order.paymentMethod === 'TUNAI'
+          ? 'PAID'
+          : order.paymentStatus;
+      await handleUpdateStatus(order.id, 'COMPLETED', nextPayment);
+      showToast(`Pesanan #${order.orderNumber} selesai disajikan!`, 'success');
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  // Action 1: [ SIAP DISAJIKAN ]
   const handleMarkReady = async (order: CustomerOrder) => {
     // Strict Outlet Isolation Check
     if (isOutletAdmin && !matchesOutlet(order.outletId, assignedOutletId)) {
@@ -695,6 +796,72 @@ export const OrderManager: React.FC = () => {
         </div>
       </div>
 
+      {/* Live Kitchen Pulse & Summary Banner (Stitch Design) */}
+      <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-[#eef4ff] border border-[#dbe9ff] shadow-[0_2px_8px_rgba(0,99,137,0.05)]">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#006389] opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#006389]"></span>
+          </span>
+          <span className="text-xs sm:text-sm text-[#041d32] font-bold">
+            {isOutletAdmin ? assignedOutletName : 'Barista Bar Dumai - Monitoring Pesanan'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-[#3e484f] font-medium">
+          <span className="text-[#006389] font-bold">{stats.newCount} Baru</span>
+          <span>•</span>
+          <span>Total: <strong className="text-[#041d32] font-bold">{stats.total} Pesanan</strong></span>
+        </div>
+      </div>
+
+      {/* Segmented Scrollable Filter Pills (Stitch Design) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5" id="orderFilterTabs">
+        <button
+          type="button"
+          onClick={() => setSelectedStatusFilter('ALL')}
+          className={`filter-btn flex items-center justify-center px-3.5 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            selectedStatusFilter === 'ALL'
+              ? 'active bg-[#006389] text-white shadow-sm'
+              : 'bg-white text-[#3e484f] border border-[#dbe9ff] hover:bg-[#eef4ff]'
+          }`}
+        >
+          Semua <span className="ml-1 opacity-90 text-[11px] font-semibold">({stats.total})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setSelectedStatusFilter('NEW')}
+          className={`filter-btn flex items-center justify-center px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+            selectedStatusFilter === 'NEW'
+              ? 'active bg-[#006389] text-white shadow-sm'
+              : 'bg-white text-[#3e484f] border border-[#dbe9ff] hover:bg-[#eef4ff]'
+          }`}
+        >
+          Baru <span className="ml-1 text-[#006389] font-bold text-[11px]">({stats.newCount})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setSelectedStatusFilter('PREPARING')}
+          className={`filter-btn flex items-center justify-center px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+            selectedStatusFilter === 'PREPARING'
+              ? 'active bg-[#006389] text-white shadow-sm'
+              : 'bg-white text-[#3e484f] border border-[#dbe9ff] hover:bg-[#eef4ff]'
+          }`}
+        >
+          Proses <span className="ml-1 text-[#825100] font-bold text-[11px]">({stats.preparingCount})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setSelectedStatusFilter('READY')}
+          className={`filter-btn flex items-center justify-center px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+            selectedStatusFilter === 'READY'
+              ? 'active bg-[#006389] text-white shadow-sm'
+              : 'bg-white text-[#3e484f] border border-[#dbe9ff] hover:bg-[#eef4ff]'
+          }`}
+        >
+          Siap <span className="ml-1 text-[#525e79] font-bold text-[11px]">({orders.filter((o) => o.orderStatus === 'READY').length})</span>
+        </button>
+      </div>
+
       {/* Orders List */}
       {isLoading ? (
         <div className="py-20 text-center flex flex-col items-center justify-center">
@@ -710,19 +877,19 @@ export const OrderManager: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div
+          id="orderCardsContainer"
+          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5 pb-8"
+        >
           {filteredOrders.map((order) => {
             const isUpdating = updatingOrderId === order.id;
-
-            // Notification message for customer WhatsApp
-            const notifyWaText = `Halo Kak ${order.customerName}, pesanan Leton Coffee dengan nomor *${order.orderNumber}* saat ini berstatus: *${order.orderStatus}* (Status Pembayaran: *${order.paymentStatus}*). Terima kasih!`;
-            const customerWaLink = order.customerPhone
-              ? createWhatsAppLink(order.customerPhone, notifyWaText)
-              : null;
+            const { timeStr, relStr } = getOrderTimestamp(order.createdAt);
 
             return (
               <motion.div
                 key={order.id}
+                id={`order-${order.orderNumber}`}
+                data-status={order.orderStatus.toLowerCase()}
                 layout
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -730,17 +897,22 @@ export const OrderManager: React.FC = () => {
                   setSelectedOrderDetail(order);
                   setIsDetailModalOpen(true);
                 }}
-                className={`p-5 sm:p-6 rounded-2xl bg-white text-[#041d32] border transition-all cursor-pointer hover:shadow-lg ${
+                className={`order-card group flex flex-col p-3.5 rounded-xl bg-white shadow-[0_2px_10px_rgba(0,99,137,0.06)] border transition-all duration-200 cursor-pointer hover:shadow-md hover:border-[#006389]/30 ${
                   order.paymentStatus === 'WAITING VERIFICATION'
-                    ? 'border-amber-400 shadow-md shadow-amber-500/10 ring-1 ring-amber-400/30'
+                    ? 'border-amber-300 ring-1 ring-amber-400/30'
                     : order.orderStatus === 'NEW'
-                    ? 'border-[#006389] shadow-md shadow-[#006389]/10 ring-1 ring-[#006389]/20'
-                    : 'border-[#e4efff] shadow-xs'
+                    ? 'border-[#006389]/30 ring-1 ring-[#006389]/20'
+                    : 'border-[#e4efff]'
                 }`}
               >
-                {/* Header Row */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-[#e4efff]">
-                  <div className="flex flex-wrap items-center gap-2">
+                {/* 1. Top Row: Order Number + Status Badge + Timestamp */}
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#f1f5f9]">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-extrabold text-[15px] sm:text-base text-[#041d32] tracking-tight truncate">
+                      {order.orderNumber}
+                    </span>
+
+                    {/* Quick Kitchen Slip Print Icon */}
                     <button
                       type="button"
                       onClick={(e) => {
@@ -748,436 +920,176 @@ export const OrderManager: React.FC = () => {
                         setSelectedOrderForSlip(order);
                         setIsSlipModalOpen(true);
                       }}
-                      className="font-mono font-black text-lg sm:text-xl text-[#006389] hover:text-[#004f6e] tracking-tight flex items-center gap-1.5 transition-colors cursor-pointer group text-left focus:outline-none bg-transparent border-0 p-0"
-                      title="Klik untuk membuka Slip Dapur / Barista"
+                      title="Cetak Slip Dapur"
+                      className="p-1 rounded-md text-[#006389] hover:bg-[#eef4ff] transition-colors cursor-pointer shrink-0"
                     >
-                      <span>{order.orderNumber}</span>
-                      <ClipboardList className="w-4 h-4 text-[#006389]/70 group-hover:text-[#006389] transition-all group-hover:scale-110" />
+                      <Printer className="w-3.5 h-3.5" />
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedOrderForSlip(order);
-                        setIsSlipModalOpen(true);
-                      }}
-                      className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-[#eef4ff] hover:bg-[#dbe9ff] text-[#006389] border border-[#dbe9ff] flex items-center gap-1 transition-colors cursor-pointer uppercase tracking-wider"
-                      title="Cetak atau Lihat Slip Dapur"
-                    >
-                      <Printer className="w-3 h-3" />
-                      <span>SLIP DAPUR</span>
-                    </button>
-
-                    {/* Order Status Badge */}
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                        order.orderStatus === 'NEW'
-                          ? 'bg-[#c6e7ff] text-[#004c6b] animate-pulse'
-                          : order.orderStatus === 'ACCEPTED'
-                          ? 'bg-[#dbe9ff] text-[#004c6b]'
-                          : order.orderStatus === 'PREPARING'
-                          ? 'bg-[#ffddb8] text-[#653e00]'
-                          : order.orderStatus === 'READY'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : order.orderStatus === 'COMPLETED'
-                          ? 'bg-slate-100 text-slate-700'
-                          : 'bg-rose-100 text-rose-800'
-                      }`}
-                    >
-                      {order.orderStatus}
-                    </span>
-
-                    {/* Payment Status Badge */}
-                    <span
-                      className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
-                        order.paymentStatus === 'PAID'
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                          : order.paymentStatus === 'WAITING VERIFICATION'
-                          ? 'bg-amber-50 border-amber-300 text-amber-900 animate-pulse font-black'
-                          : order.paymentStatus === 'PAY AT STORE'
-                          ? 'bg-blue-50 border-blue-200 text-blue-800'
-                          : order.paymentStatus === 'PAYMENT REJECTED'
-                          ? 'bg-rose-50 border-rose-200 text-rose-800'
-                          : 'bg-slate-100 border-slate-200 text-slate-700'
-                      }`}
-                    >
-                      {order.paymentStatus}
-                    </span>
+                    {/* Status Badge (Stitch Design) */}
+                    {order.orderStatus === 'NEW' ? (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#c6e7ff] text-[#004c6b] shrink-0">
+                        BARU
+                      </span>
+                    ) : order.orderStatus === 'ACCEPTED' ? (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#dbe9ff] text-[#004c6b] flex items-center gap-1 shrink-0">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>DITERIMA</span>
+                      </span>
+                    ) : order.orderStatus === 'PREPARING' ? (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#ffddb8] text-[#653e00] flex items-center gap-1 shrink-0">
+                        <Coffee className="w-3 h-3 animate-pulse" />
+                        <span>DISEDUH</span>
+                      </span>
+                    ) : order.orderStatus === 'READY' ? (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#d7e2ff] text-[#0e1b32] flex items-center gap-1 shrink-0">
+                        <Bell className="w-3 h-3" />
+                        <span>SIAP</span>
+                      </span>
+                    ) : order.orderStatus === 'COMPLETED' ? (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#eef4ff] text-[#525e79] flex items-center gap-1 shrink-0">
+                        <Check className="w-3 h-3 text-[#006389]" />
+                        <span>SELESAI</span>
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#ffdad6] text-[#93000a] flex items-center gap-1 shrink-0">
+                        <X className="w-3 h-3" />
+                        <span>DITOLAK</span>
+                      </span>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-1.5 text-xs text-[#52606d] font-mono">
-                    <Clock className="w-3.5 h-3.5 text-[#52606d]" />
+                  <div className="flex items-center gap-1 text-[#3e484f] text-[11px] shrink-0 font-mono">
+                    <Clock className="w-3 h-3 text-[#6e7880]" />
                     <span>
-                      {new Date(order.createdAt).toLocaleDateString('id-ID', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {timeStr} {relStr && <span className="text-[#006389] font-medium">{relStr}</span>}
                     </span>
                   </div>
                 </div>
 
-                {/* Details Grid */}
-                <div className="py-3.5 grid grid-cols-1 md:grid-cols-3 gap-3.5 text-xs">
-                  {/* Outlet & Table */}
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-mono uppercase text-[#52606d] block font-bold">
-                      OUTLET & MEJA
-                    </span>
-                    <div className="flex items-center gap-1.5 font-bold text-[#041d32] text-sm">
-                      <Store className="w-4 h-4 text-[#006389] shrink-0" />
-                      <span>{order.outletName}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[#3e484f]">
-                      {order.orderType === 'DINE IN' ? (
-                        <>
-                          <Utensils className="w-3.5 h-3.5 text-[#006389]" />
-                          <span className="font-bold text-[#041d32]">
-                            Dine In (Meja: {order.tableNumber || '-'})
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <Package className="w-3.5 h-3.5 text-[#52606d]" />
-                          <span>Take Away (Bawa Pulang)</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Customer Info */}
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-mono uppercase text-[#52606d] block font-bold">
-                      PEMESAN
-                    </span>
-                    <p className="font-bold text-[#041d32] text-sm">
+                {/* 2. Customer & Dining Context Bar */}
+                <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-[#eef4ff] my-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <User className="w-3.5 h-3.5 text-[#006389] shrink-0" />
+                    <span className="text-xs text-[#041d32] font-bold truncate">
                       {order.customerName}
-                    </p>
-                    {order.customerPhone ? (
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[#52606d]">{order.customerPhone}</span>
-                        {customerWaLink && (
-                          <a
-                            href={customerWaLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded hover:bg-emerald-100 transition-colors"
-                          >
-                            <MessageCircle className="w-3 h-3" />
-                            <span>WhatsApp</span>
-                          </a>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-[#52606d] italic">No. HP tidak diisi</span>
-                    )}
-                  </div>
-
-                  {/* Payment & Total */}
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-mono uppercase text-[#52606d] block font-bold">
-                      METODE & TOTAL
                     </span>
-                    <div className="flex items-center gap-1.5 text-[#3e484f]">
-                      {order.paymentMethod === 'QRIS' ? (
-                        <QrCode className="w-4 h-4 text-[#006389]" />
-                      ) : (
-                        <Banknote className="w-4 h-4 text-[#006389]" />
-                      )}
-                      <span className="font-bold text-[#041d32]">
-                        {order.paymentMethod}
-                      </span>
-                      <span className="text-[11px] text-[#52606d]">
-                        ({order.paymentMethod === 'QRIS' ? 'Upload QRIS' : 'Bayar Kasir'})
-                      </span>
-                    </div>
-                    <div className="font-mono font-black text-lg text-[#006389]">
-                      Total: {formatRupiah(order.totalAmount)}
-                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 text-[#007dad] text-xs font-bold shrink-0">
+                    {order.orderType === 'DINE IN' ? (
+                      <>
+                        <Utensils className="w-3.5 h-3.5" />
+                        <span>Dine In • Meja {order.tableNumber || '-'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShoppingBag className="w-3.5 h-3.5 text-[#525e79]" />
+                        <span className="text-[#525e79]">Take Away</span>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {/* QRIS PAYMENT PROOF DETAIL & THUMBNAIL (For QRIS) */}
-                {order.paymentMethod === 'QRIS' && (
-                  <div className="mb-3.5 p-3.5 rounded-xl bg-[#f8f9ff] border border-[#e4efff] space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <QrCode className="w-4 h-4 text-[#006389]" />
-                        <span className="font-bold text-xs uppercase text-[#041d32] tracking-wider">
-                          BUKTI PEMBAYARAN QRIS CUSTOMER
-                        </span>
-                      </div>
-
-                      {order.paymentReceiptUrl ? (
-                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
-                          ✓ File Bukti Tersedia
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-bold text-rose-800 bg-rose-100 px-2 py-0.5 rounded border border-rose-300">
-                          ⚠️ Bukti Belum Terlampir
-                        </span>
-                      )}
-                    </div>
-
-                    {order.paymentReceiptUrl ? (
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
-                        <div className="flex items-center gap-3">
-                          {/* Thumbnail (Clickable to view full preview) */}
-                          <div
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPreviewImageUrl(order.paymentReceiptUrl || null);
-                            }}
-                            className="w-16 h-16 rounded-xl bg-white border border-[#dbe9ff] overflow-hidden shrink-0 cursor-pointer relative group shadow-2xs"
-                            title="Klik untuk memperbesar bukti transfer"
-                          >
-                            <img
-                              src={order.paymentReceiptUrl}
-                              alt="Bukti Transfer"
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            />
-                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                              <Eye className="w-5 h-5 text-white" />
-                            </div>
-                          </div>
-
-                          <div className="space-y-1">
-                            <span className="font-mono text-xs text-[#52606d] block">
-                              File tersimpan di Cloud Storage
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPreviewImageUrl(order.paymentReceiptUrl || null);
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#eef4ff] border border-[#dbe9ff] text-[#006389] text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                              >
-                                <Eye className="w-3 h-3 text-[#006389]" />
-                                <span>Perbesar Foto</span>
-                              </button>
-                              <a
-                                href={order.paymentReceiptUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#eef4ff] border border-[#dbe9ff] text-[#52606d] text-[11px] font-medium inline-flex items-center gap-1 transition-colors shadow-2xs"
-                              >
-                                <ExternalLink className="w-3 h-3 text-[#52606d]" />
-                                <span>Buka Tab Baru</span>
-                              </a>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-[#52606d]">
-                        Customer belum mengunggah file bukti transfer untuk pesanan ini.
-                      </p>
-                    )}
-
-                    {/* Rejection Note Alert if rejected */}
-                    {(order.orderStatus === 'CANCELLED' || order.paymentStatus === 'PAYMENT REJECTED' || order.paymentStatus === 'REJECTED') && (
-                      <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                        <div>
-                          <strong className="block text-rose-900 uppercase font-mono">
-                            Status Penolakan:
-                          </strong>
-                          <span>{order.rejectionReason || 'Alasan tidak dispesifikasikan.'}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* TUNAI PAYMENT INFO BAR (For Cash at Store) */}
-                {order.paymentMethod === 'TUNAI' && (
-                  <div className="mb-3.5 p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2 text-xs">
-                    <Banknote className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span className="text-emerald-950 font-medium">
-                      Pembayaran Tunai di Kasir. Status:{' '}
-                      <strong className="font-mono text-emerald-800 font-bold">{order.paymentStatus}</strong>
-                    </span>
-                  </div>
-                )}
-
-                {/* Items Breakdown */}
-                <div className="p-3.5 rounded-xl bg-[#f8f9ff] border border-[#e4efff] space-y-2">
-                  <span className="text-[10px] font-mono uppercase text-[#52606d] block font-bold">
-                    RINCIAN MENU ({order.items.reduce((a, b) => a + b.quantity, 0)} Item)
-                  </span>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    {order.items.map((it, idx) => {
-                      const sizePrice = it.size?.price || 0;
-                      const topPrice = it.topping?.price || 0;
-                      const syrPrice = it.syrup?.price || 0;
-                      const customsPrice = (it.customOptions || []).reduce((sum, c) => sum + (c.price || 0), 0);
-                      const unitPrice = it.unitPrice || (it.price + sizePrice + topPrice + syrPrice + customsPrice);
-                      const itemSubtotal = unitPrice * it.quantity;
-                      const hasSize = it.size && it.size.name;
-                      const hasTopping = it.topping && it.topping.name !== 'No Topping';
-                      const hasSyrup = it.syrup && it.syrup.name !== 'No Syrup';
-
-                      return (
-                        <div
-                          key={idx}
-                          className="flex flex-col justify-between p-3 rounded-xl bg-white border border-[#e4efff] space-y-2 shadow-2xs"
+                {/* 3. Compact Menu Item Specs */}
+                <div className="flex flex-col gap-1 py-1">
+                  {(order.items || []).slice(0, 3).map((it, idx) => {
+                    const customSummary = getItemCustomizationSummary(it);
+                    return (
+                      <div key={idx} className="flex items-start gap-1.5 text-[#041d32] text-xs">
+                        <span
+                          className={`font-bold min-w-[20px] shrink-0 ${
+                            order.orderStatus === 'PREPARING'
+                              ? 'text-[#825100]'
+                              : order.orderStatus === 'READY'
+                              ? 'text-[#525e79]'
+                              : 'text-[#006389]'
+                          }`}
                         >
-                          <div className="space-y-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="font-mono font-black text-[#006389] bg-[#eef4ff] px-1.5 py-0.5 rounded border border-[#dbe9ff] shrink-0 text-xs">
-                                  {it.quantity}x
-                                </span>
-                                <span className="font-bold text-[#041d32] text-sm truncate">
-                                  {it.name}
-                                </span>
-                              </div>
-                              <span className="font-mono text-[#52606d] text-[11px] whitespace-nowrap shrink-0">
-                                {formatRupiah(it.price)}
-                              </span>
-                            </div>
-
-                            {/* Size Details */}
-                            {hasSize && (
-                              <div className="text-[11px] text-[#006389] font-medium flex items-center justify-between pl-1">
-                                <span>Size: {it.size!.name}</span>
-                                <span>{sizePrice > 0 ? `+${formatRupiah(sizePrice)}` : 'Rp0'}</span>
-                              </div>
-                            )}
-
-                            {/* Topping Details */}
-                            {hasTopping ? (
-                              <div className="text-[11px] text-[#006389] font-medium flex items-center justify-between pl-1">
-                                <span>Topping: {it.topping!.name}</span>
-                                <span>+{formatRupiah(topPrice)}</span>
-                              </div>
-                            ) : (
-                              <div className="text-[10px] text-[#85929d] pl-1">
-                                Topping: No Topping (Rp0)
-                              </div>
-                            )}
-
-                            {/* Syrup Details */}
-                            {hasSyrup ? (
-                              <div className="text-[11px] text-[#006389] font-medium flex items-center justify-between pl-1">
-                                <span>Syrup: {it.syrup!.name}</span>
-                                <span>+{formatRupiah(syrPrice)}</span>
-                              </div>
-                            ) : (
-                              <div className="text-[10px] text-[#85929d] pl-1">
-                                Syrup: No Syrup (Rp0)
-                              </div>
-                            )}
-
-                            {/* Dynamic Customization Options */}
-                            {it.customOptions && it.customOptions.length > 0 && (
-                              it.customOptions.map((co) => (
-                                <div key={co.groupId} className="text-[11px] text-[#006389] font-medium flex items-center justify-between pl-1">
-                                  <span>{co.groupName}: {co.optionName}</span>
-                                  <span>{co.price > 0 ? `+${formatRupiah(co.price)}` : 'Rp0'}</span>
-                                </div>
-                              ))
-                            )}
-
-                            {it.note && (
-                              <div className="text-amber-800 text-[11px] italic bg-amber-50 px-2 py-1 rounded border border-amber-200">
-                                Catatan: "{it.note}"
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="pt-1.5 border-t border-[#e4efff] flex items-center justify-between font-mono text-xs">
-                            <span className="text-[#52606d] text-[10px] uppercase">
-                              Subtotal Item
+                          {it.quantity}x
+                        </span>
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span className="font-semibold text-[#041d32] leading-snug truncate">
+                            {it.name}
+                          </span>
+                          {customSummary ? (
+                            <span className="text-[11px] text-[#3e484f] truncate" title={customSummary}>
+                              {customSummary}
                             </span>
-                            <span className="font-bold text-[#006389]">
-                              {formatRupiah(itemSubtotal)}
-                            </span>
-                          </div>
+                          ) : null}
                         </div>
-                      );
-                    })}
-                  </div>
-
-                  {order.customerNote && (
-                    <div className="pt-2 text-xs text-amber-800 font-medium bg-amber-50 p-2 rounded-lg border border-amber-200">
-                      Catatan Pemesan: "{order.customerNote}"
+                      </div>
+                    );
+                  })}
+                  {(order.items || []).length > 3 && (
+                    <div className="text-[11px] text-[#006389] font-medium pl-6 pt-0.5">
+                      + {(order.items || []).length - 3} menu lainnya...
                     </div>
                   )}
                 </div>
 
-                {/* SIMPLIFIED ADMIN OUTLET ACTIONS: [ SIAP ] [ TOLAK ] [ HAPUS PESANAN ] */}
-                <div className="pt-3.5 mt-3.5 border-t border-[#e4efff] flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* 1. [ SIAP ] ACTION */}
-                    {order.orderStatus !== 'READY' && order.orderStatus !== 'COMPLETED' && order.orderStatus !== 'CANCELLED' ? (
-                      <button
-                        type="button"
-                        disabled={isUpdating}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleMarkReady(order);
-                        }}
-                        className="px-5 py-2.5 rounded-xl bg-[#006389] hover:bg-[#004f6e] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
-                      >
-                        <CheckCircle2 className="w-4 h-4 text-white" />
-                        <span>SIAP</span>
-                      </button>
-                    ) : order.orderStatus === 'READY' ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-xs flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          <span>Pesanan Sudah Siap (Menunggu Customer Ambil)</span>
-                        </span>
-                        <button
-                          type="button"
-                          disabled={isUpdating}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleMarkReady(order);
-                          }}
-                          className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono text-xs uppercase font-bold transition-colors cursor-pointer border border-slate-700"
-                        >
-                          Selesai
-                        </button>
+                {/* 4. Total & Payment Verification Status */}
+                <div className="flex items-center justify-between pt-2 pb-2.5 mt-1 border-t border-[#f1f5f9]">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase tracking-wider text-[#6e7880] font-bold">
+                      Total Pembayaran
+                    </span>
+                    <span className="text-sm sm:text-[15px] font-extrabold text-[#041d32]">
+                      {formatRupiah(order.totalAmount)}
+                    </span>
+                  </div>
+
+                  {/* Payment Verification Status Badge */}
+                  {order.paymentMethod === 'QRIS' ? (
+                    order.paymentStatus === 'PAID' ? (
+                      <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-[#dbe9ff] text-[#006389] text-[11px] font-bold">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-[#006389]" />
+                        <span>QRIS • Lunas</span>
                       </div>
-                    ) : order.orderStatus === 'CANCELLED' ? (
-                      <span className="px-3.5 py-2 rounded-xl bg-rose-50 border border-rose-300 text-rose-800 font-bold text-xs flex items-center gap-1.5">
-                        <XCircle className="w-4 h-4 text-rose-600" />
-                        <span>Pesanan Ditolak</span>
-                      </span>
+                    ) : order.paymentStatus === 'PAYMENT REJECTED' || order.paymentStatus === 'REJECTED' ? (
+                      <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-[#ffdad6] text-[#93000a] text-[11px] font-bold">
+                        <X className="w-3.5 h-3.5" />
+                        <span>QRIS • Ditolak</span>
+                      </div>
                     ) : (
-                      <span className="px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5">
-                        <Check className="w-4 h-4 text-emerald-600" />
-                        <span>Pesanan Selesai</span>
-                      </span>
-                    )}
+                      <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-[#ffddb8] text-[#2a1700] text-[11px] font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#825100] animate-pulse"></span>
+                        <span>QRIS • Menunggu Cek</span>
+                      </div>
+                    )
+                  ) : (
+                    // TUNAI
+                    order.paymentStatus === 'PAID' ? (
+                      <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-[#dbe9ff] text-[#041d32] text-[11px] font-bold">
+                        <Banknote className="w-3.5 h-3.5 text-[#006389]" />
+                        <span>Tunai • Lunas</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-[#eef4ff] text-[#006389] text-[11px] font-bold">
+                        <Banknote className="w-3.5 h-3.5 text-[#006389]" />
+                        <span>Tunai • Kasir</span>
+                      </div>
+                    )
+                  )}
+                </div>
 
-                    {/* 2. [ TOLAK ] ACTION */}
-                    {order.orderStatus !== 'CANCELLED' && order.orderStatus !== 'COMPLETED' && (
-                      <button
-                        type="button"
-                        disabled={isUpdating}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenRejectDialog(order);
-                        }}
-                        className="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                      >
-                        <XCircle className="w-4 h-4 text-rose-600" />
-                        <span>TOLAK</span>
-                      </button>
-                    )}
+                {/* 5. Compact Action Buttons */}
+                <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-[#f1f5f9]">
+                  {/* Left: Detail button & tools */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedOrderDetail(order);
+                        setIsDetailModalOpen(true);
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg border border-[#c6d7e8] bg-white text-[#041d32] text-xs font-bold hover:bg-[#eef4ff] transition-colors cursor-pointer inline-flex items-center gap-1 shrink-0"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-[#52606d]" />
+                      <span>Detail</span>
+                    </button>
 
-                    {/* 3. [ HAPUS PESANAN ] ACTION */}
+                    {/* Delete button (small icon) */}
                     <button
                       type="button"
                       disabled={isUpdating}
@@ -1185,14 +1097,13 @@ export const OrderManager: React.FC = () => {
                         e.stopPropagation();
                         handleOpenDeleteDialog(order);
                       }}
-                      className="px-3.5 py-2.5 rounded-xl bg-slate-50 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-600 hover:text-rose-700 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                      title="Hapus pesanan dari antrean"
+                      title="Hapus Pesanan"
+                      className="p-1.5 rounded-lg border border-[#c6d7e8] bg-white text-[#52606d] hover:text-[#ba1a1a] hover:bg-[#ffdad6]/30 transition-colors cursor-pointer shrink-0"
                     >
-                      <Trash2 className="w-4 h-4" />
-                      <span>HAPUS PESANAN</span>
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
 
-                    {/* 4. [ BERI CUSTOMER POINT ] ACTION */}
+                    {/* Member points if eligible */}
                     {order.customerId && (
                       <button
                         type="button"
@@ -1201,42 +1112,85 @@ export const OrderManager: React.FC = () => {
                           e.stopPropagation();
                           handleAwardPoints(order);
                         }}
-                        className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                        title="Berikan poin loyalty ke akun member customer"
+                        title="Beri Poin Loyalty"
+                        className="p-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer shrink-0"
                       >
-                        <Sparkles className="w-4 h-4 text-white animate-pulse" />
-                        <span>{isAwardingPointsId === order.id ? 'Memproses...' : 'Beri Customer Point'}</span>
+                        <Sparkles className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
 
-                  {/* Operational Utilities: Slip & Detail */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedOrderForSlip(order);
-                        setIsSlipModalOpen(true);
-                      }}
-                      className="px-3 py-2 rounded-xl bg-white hover:bg-[#eef4ff] border border-[#dbe9ff] text-[#006389] text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
-                    >
-                      <Printer className="w-3.5 h-3.5 text-[#006389]" />
-                      <span>Slip Dapur</span>
-                    </button>
+                  {/* Right: Operational Barista / Admin Workflow Buttons */}
+                  <div className="flex items-center gap-1.5">
+                    {/* Tolak Button (Available when order can still be rejected) */}
+                    {order.orderStatus !== 'CANCELLED' && order.orderStatus !== 'COMPLETED' && (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenRejectDialog(order);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg border border-[#ffdad6] bg-[#fff8f7] text-[#ba1a1a] text-xs font-bold hover:bg-[#ffdad6] transition-colors cursor-pointer shrink-0"
+                      >
+                        Tolak
+                      </button>
+                    )}
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedOrderDetail(order);
-                        setIsDetailModalOpen(true);
-                      }}
-                      className="px-3 py-2 rounded-xl bg-white hover:bg-[#eef4ff] border border-[#dbe9ff] text-[#3e484f] text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
-                    >
-                      <Eye className="w-3.5 h-3.5 text-[#52606d]" />
-                      <span>Detail</span>
-                    </button>
+                    {/* Primary Status Progression Button */}
+                    {order.orderStatus === 'NEW' ? (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAcceptOrder(order);
+                        }}
+                        className="px-3.5 py-1.5 rounded-lg bg-[#006389] text-white text-xs font-bold hover:bg-[#004f6e] transition-colors shadow-xs cursor-pointer inline-flex items-center gap-1 shrink-0"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Terima</span>
+                      </button>
+                    ) : order.orderStatus === 'ACCEPTED' ? (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartBrewing(order);
+                        }}
+                        className="px-3.5 py-1.5 rounded-lg bg-[#006389] text-white text-xs font-bold hover:bg-[#004f6e] transition-colors shadow-xs cursor-pointer inline-flex items-center gap-1 shrink-0"
+                      >
+                        <Coffee className="w-3.5 h-3.5" />
+                        <span>Mulai Diseduh</span>
+                      </button>
+                    ) : order.orderStatus === 'PREPARING' ? (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMarkReady(order);
+                        }}
+                        className="px-3.5 py-1.5 rounded-lg bg-[#006389] text-white text-xs font-bold hover:bg-[#004f6e] transition-colors shadow-xs cursor-pointer inline-flex items-center gap-1 shrink-0"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Siap</span>
+                      </button>
+                    ) : order.orderStatus === 'READY' ? (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCompleteOrder(order);
+                        }}
+                        className="px-3.5 py-1.5 rounded-lg bg-[#041d32] text-white text-xs font-bold hover:bg-[#1a3349] transition-colors shadow-xs cursor-pointer inline-flex items-center gap-1 shrink-0"
+                      >
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Selesai</span>
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </motion.div>

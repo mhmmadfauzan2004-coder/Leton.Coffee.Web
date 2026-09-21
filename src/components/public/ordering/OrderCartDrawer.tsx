@@ -54,17 +54,18 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
   };
 
   const getItemUnitPrice = (item: CartItem): number => {
-    return calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup, item.customOptions);
+    return calculateItemUnitPrice(item?.product?.price ?? 0, item?.size, item?.topping, item?.syrup, item?.customOptions);
   };
 
-  const subtotal = cart.reduce(
-    (acc, item) => acc + getItemUnitPrice(item) * item.quantity,
+  const safeCart = cart || [];
+  const subtotal = safeCart.reduce(
+    (acc, item) => acc + getItemUnitPrice(item) * (item?.quantity || 1),
     0
   );
-  const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
+  const totalItems = safeCart.reduce((acc, item) => acc + (item?.quantity || 0), 0);
 
-  const hasUnavailableItems = cart.some(
-    (item) => !isMenuItemAvailableForOutlet(item.product, outlet.id)
+  const hasUnavailableItems = safeCart.some(
+    (item) => item?.product && !isMenuItemAvailableForOutlet(item.product, outlet?.id)
   );
 
   return (
@@ -88,7 +89,7 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
               </h2>
               <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-400 font-mono">
                 <Store className="w-3 h-3 text-[#00E5FF]" />
-                <span className="truncate max-w-[200px]">{outlet.shortName || outlet.name}</span>
+                <span className="truncate max-w-[200px]">{outlet?.shortName || outlet?.name || 'Leton Coffee'}</span>
               </div>
             </div>
           </div>
@@ -131,7 +132,7 @@ export const OrderCartDrawer: React.FC<OrderCartDrawerProps> = ({
                   const hasSize = item.size && item.size.name;
                   const hasTopping = item.topping && item.topping.name !== 'No Topping';
                   const hasSyrup = item.syrup && item.syrup.name !== 'No Syrup';
-                  const isItemAvailableInOutlet = isMenuItemAvailableForOutlet(item.product, outlet.id);
+                  const isItemAvailableInOutlet = isMenuItemAvailableForOutlet(item.product, outlet?.id);
 
                   return (
                     <div

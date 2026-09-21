@@ -18,18 +18,19 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ onOpenOrder }) => {
 
   // Sorted categories
   const sortedCategories = useMemo(() => {
-    return [...menuCategories].sort((a, b) => (a.order || 0) - (b.order || 0));
+    return [...(menuCategories || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
   }, [menuCategories]);
 
   // Filtered menu items
   const filteredItems = useMemo(() => {
-    return menuItems
+    const q = searchQuery.trim().toLowerCase();
+    return (menuItems || [])
       .filter((item) => {
+        if (!item) return false;
         const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory;
-        const matchesSearch =
-          !searchQuery.trim() ||
-          item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          item.description.toLowerCase().includes(searchQuery.toLowerCase());
+        const itemName = (item.name || '').toLowerCase();
+        const itemDesc = (item.description || '').toLowerCase();
+        const matchesSearch = !q || itemName.includes(q) || itemDesc.includes(q);
         return matchesCategory && matchesSearch;
       })
       .sort((a, b) => (a.order || 0) - (b.order || 0));

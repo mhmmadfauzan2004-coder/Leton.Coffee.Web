@@ -43,16 +43,32 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
   onClose,
   preSelectedMenuItem,
 }) => {
-  const [selectedOutlet, setSelectedOutlet] = useState<OrderOutlet | null>(null);
+  const [selectedOutlet, setSelectedOutlet] = useState<OrderOutlet | null>(() => {
+    try {
+      const saved = localStorage.getItem('leton_selected_outlet');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.id === 'string') {
+          return parsed;
+        }
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  });
 
   const [cart, setCart] = useState<CartItem[]>(() => {
-    const saved = localStorage.getItem('leton_ordering_cart');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return [];
+    try {
+      const saved = localStorage.getItem('leton_ordering_cart');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((item) => item && item.product && typeof item.product.id === 'string');
+        }
       }
+    } catch {
+      return [];
     }
     return [];
   });

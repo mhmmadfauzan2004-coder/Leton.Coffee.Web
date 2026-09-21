@@ -175,12 +175,12 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
     setFormError('');
 
     // Outlet Stock Validation
-    const unavailableItem = cart.find(
-      (it) => !isMenuItemAvailableForOutlet(it.product, outlet.id)
+    const unavailableItem = (cart || []).find(
+      (it) => it?.product && !isMenuItemAvailableForOutlet(it.product, outlet?.id)
     );
     if (unavailableItem) {
       setFormError(
-        `Menu "${unavailableItem.product.name}" saat ini sedang HABIS di cabang ${outlet.shortName || outlet.name}. Silakan kembali ke keranjang untuk menghapusnya.`
+        `Menu "${unavailableItem.product.name}" saat ini sedang HABIS di cabang ${outlet?.shortName || outlet?.name || 'ini'}. Silakan kembali ke keranjang untuk menghapusnya.`
       );
       return;
     }

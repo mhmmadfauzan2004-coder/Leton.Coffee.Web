@@ -1067,8 +1067,8 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
 
       if (regRow?.content?.orders && Array.isArray(regRow.content.orders)) {
         regRow.content.orders.forEach((o: CustomerOrder) => {
-          if (!ordersMap.has(o.id)) {
-            ordersMap.set(o.id, o);
+          if (o && o.id && !ordersMap.has(o.id)) {
+            ordersMap.set(o.id, { ...o, items: Array.isArray(o.items) ? o.items : [] });
           }
         });
       }
@@ -1084,8 +1084,8 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
       const parsed: CustomerOrder[] = JSON.parse(cached);
       if (Array.isArray(parsed)) {
         parsed.forEach((o) => {
-          if (!ordersMap.has(o.id)) {
-            ordersMap.set(o.id, o);
+          if (o && o.id && !ordersMap.has(o.id)) {
+            ordersMap.set(o.id, { ...o, items: Array.isArray(o.items) ? o.items : [] });
           }
         });
       }

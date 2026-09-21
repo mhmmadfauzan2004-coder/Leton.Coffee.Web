@@ -40,19 +40,20 @@ export const DEFAULT_TOPPING: AddOnOption = { id: 'top-no-topping', name: 'No To
 export const DEFAULT_SYRUP: AddOnOption = { id: 'syr-no-syrup', name: 'No Syrup', price: 0 };
 
 export function calculateItemUnitPrice(
-  basePrice: number,
+  basePrice?: number | null,
   size?: AddOnOption | null,
   topping?: AddOnOption | null,
   syrup?: AddOnOption | null,
   customOptions?: SelectedCustomOption[] | null
 ): number {
-  const sizePrice = size?.price || 0;
-  const topPrice = topping?.price || 0;
-  const syrPrice = syrup?.price || 0;
+  const safeBase = typeof basePrice === 'number' && !isNaN(basePrice) ? basePrice : 0;
+  const sizePrice = typeof size?.price === 'number' && !isNaN(size.price) ? size.price : 0;
+  const topPrice = typeof topping?.price === 'number' && !isNaN(topping.price) ? topping.price : 0;
+  const syrPrice = typeof syrup?.price === 'number' && !isNaN(syrup.price) ? syrup.price : 0;
   const customPrices = Array.isArray(customOptions)
-    ? customOptions.reduce((sum, c) => sum + (c.price || 0), 0)
+    ? customOptions.reduce((sum, c) => sum + (typeof c?.price === 'number' && !isNaN(c.price) ? c.price : 0), 0)
     : 0;
-  return basePrice + sizePrice + topPrice + syrPrice + customPrices;
+  return safeBase + sizePrice + topPrice + syrPrice + customPrices;
 }
 
 export function generateCartItemId(

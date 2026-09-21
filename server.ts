@@ -31,14 +31,17 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-// Request logging middleware for tracking method, path, origin, and response status
+// Request logging middleware for tracking method, path, origin, and response status for API endpoints
 app.use((req, res, next) => {
-  const origin = req.headers.origin || '';
-  const start = Date.now();
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    console.log(`[API_LOG] ${req.method} ${req.originalUrl || req.url} | Origin: ${origin || 'none'} | Status: ${res.statusCode} | Duration: ${duration}ms`);
-  });
+  const url = req.originalUrl || req.url || '';
+  if (url.startsWith('/api')) {
+    const origin = req.headers.origin || '';
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      console.log(`[API_LOG] ${req.method} ${url} | Origin: ${origin || 'none'} | Status: ${res.statusCode} | Duration: ${duration}ms`);
+    });
+  }
   next();
 });
 

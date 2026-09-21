@@ -46,6 +46,26 @@ app.use((req, res, next) => {
   next();
 });
 
+// Enforce explicit, robust CORS headers for Cloudflare Pages production frontend and preflight options requests
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', 'https://leton-coffee-web.pages.dev');
+  }
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With, X-Accel-Buffering, x-admin-role, x-outlet-id, X-Admin-Role, X-Outlet-Id');
+  res.setHeader('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
+
+  // Instantly handle OPTIONS preflight request
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
+
 // CORS configuration supporting external frontend hosting (Cloudflare Pages https://leton-coffee-web.pages.dev) with credentials support
 app.use(
   cors({

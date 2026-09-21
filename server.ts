@@ -1607,6 +1607,32 @@ async function initVapid() {
 
 // Fetch all active subscriptions
 async function getPushSubscriptions(): Promise<any[]> {
+  // 1. Try querying structured push_subscriptions table first
+  try {
+    const { data, error } = await supabase
+      .from('push_subscriptions')
+      .select('*');
+
+    if (!error && Array.isArray(data)) {
+      console.log(`[WebPush] Successfully retrieved ${data.length} subscription(s) from push_subscriptions table.`);
+      return data.map(row => ({
+        endpoint: row.endpoint,
+        keys: {
+          p256dh: row.p256dh,
+          auth: row.auth
+        },
+        username: row.username,
+        outletId: row.outlet_id,
+        role: row.role,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }));
+    }
+  } catch (err) {
+    // Graceful fallback to legacy leton_content
+  }
+
+  // 2. Fallback to leton_content single-row array
   try {
     const { data, error } = await supabase
       .from('leton_content')
@@ -1618,10 +1644,10 @@ async function getPushSubscriptions(): Promise<any[]> {
       return data.content.subscriptions;
     }
   } catch (err) {
-    console.error('[WebPush] Error fetching subscriptions from Supabase:', err);
+    console.error('[WebPush] Error fetching subscriptions from Supabase fallback:', err);
   }
 
-  // Local file fallback
+  // 3. Local file fallback
   const subFile = path.join(DATA_DIR, 'push_subscriptions.json');
   try {
     if (fs.existsSync(subFile)) {
@@ -1649,7 +1675,34 @@ async function savePushSubscriptions(subscriptions: any[]): Promise<boolean> {
     console.error('[WebPush] Error saving subscriptions locally:', err);
   }
 
-  // Supabase save
+  // 1. Try saving to structured push_subscriptions table for each subscription
+  let tableSuccess = false;
+  try {
+    if (subscriptions.length > 0) {
+      const dbPayloads = subscriptions.map(sub => ({
+        endpoint: sub.endpoint,
+        p256dh: sub.keys?.p256dh || '',
+        auth: sub.keys?.auth || '',
+        username: sub.username || 'unknown_admin',
+        outlet_id: sub.outletId || 'all',
+        role: sub.role || 'outlet_admin',
+        updated_at: new Date().toISOString()
+      }));
+
+      const { error } = await supabase
+        .from('push_subscriptions')
+        .upsert(dbPayloads, { onConflict: 'endpoint' });
+
+      if (!error) {
+        tableSuccess = true;
+        console.log('[WebPush] Successfully upserted subscriptions into push_subscriptions table.');
+      }
+    }
+  } catch (err) {
+    // Graceful fallback to legacy save
+  }
+
+  // 2. Fallback to leton_content save to keep both in sync and always working
   try {
     const { error } = await supabase
       .from('leton_content')
@@ -1660,13 +1713,13 @@ async function savePushSubscriptions(subscriptions: any[]): Promise<boolean> {
       }, { onConflict: 'id' });
 
     if (error) {
-      console.error('[WebPush] Error saving subscriptions to Supabase:', error);
-      return false;
+      console.error('[WebPush] Error saving subscriptions to Supabase fallback:', error);
+      return tableSuccess;
     }
     return true;
   } catch (err) {
     console.error('[WebPush] Supabase save error:', err);
-    return false;
+    return tableSuccess;
   }
 }
 
@@ -1863,6 +1916,17 @@ app.post('/api/push/unsubscribe', async (req, res) => {
     const currentSubs = await getPushSubscriptions();
     const cleanSubs = currentSubs.filter(sub => sub.endpoint !== endpoint);
     await savePushSubscriptions(cleanSubs);
+
+    // Explicitly delete from the structured table as well
+    try {
+      await supabase
+        .from('push_subscriptions')
+        .delete()
+        .eq('endpoint', endpoint);
+    } catch (dbErr) {
+      // Graceful fallback
+    }
+
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to unsubscribe.' });

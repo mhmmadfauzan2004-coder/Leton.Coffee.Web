@@ -994,6 +994,15 @@ export async function createNewOrder(
     console.warn('[Backend API Order Note]:', err);
   }
 
+  // 4. Automatically award loyalty points immediately on order creation (Checkout)
+  if (orderData.customerId || orderData.userId) {
+    try {
+      await processOrderPointsEarning(orderData);
+    } catch (earnErr) {
+      console.warn('[Loyalty Points Earning Note]:', earnErr);
+    }
+  }
+
   return {
     success: true,
     order: orderData,

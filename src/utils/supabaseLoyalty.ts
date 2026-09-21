@@ -388,7 +388,24 @@ export async function getCustomerLoyalty(customerId: string): Promise<CustomerLo
   try {
     const client = getSupabase();
 
-    // 1. Primary: query customers table directly (authorized via session/role or security policies)
+    // 0. Primary: call secure SECURITY DEFINER RPC function to bypass RLS restrictions
+    try {
+      const { data: rpcData, error: rpcErr } = await client.rpc('get_customer_loyalty_summary_rpc', {
+        p_customer_id: customerId
+      });
+      if (!rpcErr && rpcData && typeof rpcData === 'object') {
+        const res = rpcData as any;
+        if (res.success) {
+          return {
+            pointsBalance: Number(res.pointsBalance || 0),
+            totalPointsEarned: Number(res.totalPointsEarned || 0),
+            totalPointsRedeemed: Number(res.totalPointsRedeemed || 0),
+          };
+        }
+      }
+    } catch {}
+
+    // 1. Secondary: query customers table directly
     try {
       const { data: custData, error: custErr } = await client
         .from('customers')

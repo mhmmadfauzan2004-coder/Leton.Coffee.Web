@@ -408,9 +408,11 @@ SET search_path = public
 AS $$
 DECLARE
   v_exists BOOLEAN;
+  v_role TEXT;
 BEGIN
-  -- Security check: only allow if current admin role is super_admin
-  IF public.get_current_admin_role() <> 'super_admin' THEN
+  v_role := public.get_current_admin_role();
+  -- Security check: allow if super_admin role or internal backend service role
+  IF v_role <> 'super_admin' AND current_user NOT IN ('postgres', 'supabase_admin', 'authenticator') THEN
     RETURN jsonb_build_object('success', false, 'error', 'Akses Ditolak: Hanya Super Admin / Admin Pusat yang dapat menghapus member.');
   END IF;
 
@@ -442,6 +444,41 @@ $$;
 
 REVOKE ALL ON FUNCTION public.delete_registered_customer_rpc(UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.delete_registered_customer_rpc(UUID) TO anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.get_customer_loyalty_summary_rpc(p_customer_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_balance INTEGER := 0;
+  v_earned INTEGER := 0;
+  v_redeemed INTEGER := 0;
+BEGIN
+  SELECT COALESCE(current_balance, 0), COALESCE(total_points_earned, 0), COALESCE(total_points_redeemed, 0)
+  INTO v_balance, v_earned, v_redeemed
+  FROM public.customer_points
+  WHERE customer_id = p_customer_id;
+
+  IF NOT FOUND THEN
+    SELECT COALESCE(points_balance, 0), COALESCE(total_points_earned, 0), COALESCE(total_points_redeemed, 0)
+    INTO v_balance, v_earned, v_redeemed
+    FROM public.customers
+    WHERE id = p_customer_id;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'pointsBalance', v_balance,
+    'totalPointsEarned', v_earned,
+    'totalPointsRedeemed', v_redeemed
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_customer_loyalty_summary_rpc(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_customer_loyalty_summary_rpc(UUID) TO anon, authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.get_registered_customers()
 RETURNS TABLE (

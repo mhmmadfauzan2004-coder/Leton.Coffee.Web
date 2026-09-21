@@ -96,6 +96,52 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
     checkPushSupport();
   }, [auth.username, isOutletAdmin, auth.outletId]);
 
+  const handleTogglePushNotifications = async (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[WebPush UI] Notification toggle button triggered via event type:', e.type);
+    
+    if (isSubscribing) {
+      console.warn('[WebPush UI] Already processing subscription. Ignoring trigger.');
+      return;
+    }
+
+    setIsSubscribing(true);
+    try {
+      if (isPushActive) {
+        console.log('[WebPush UI] User requested unsubscription.');
+        const success = await unsubscribeAdminPush();
+        if (success) {
+          setIsPushActive(false);
+          alert('Notifikasi pesanan dinonaktifkan untuk perangkat ini.');
+        } else {
+          alert('Gagal mematikan notifikasi. Silakan coba lagi.');
+        }
+      } else {
+        console.log('[WebPush UI] User requested subscription. Checking browser capabilities...');
+        const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
+        const res = await subscribeAdminPush(auth.username || 'Admin', outletContext, auth.role);
+        
+        console.log('[WebPush UI] Subscription result response:', res);
+        if (res.success) {
+          setIsPushActive(true);
+          alert('Selamat! Perangkat Anda berhasil didaftarkan. Anda akan menerima notifikasi sistem untuk setiap pesanan baru!');
+        } else {
+          if (res.error === 'PERMISSION_DENIED') {
+            alert('Izin Notifikasi Ditolak!\n\nUntuk menerima notifikasi pesanan baru, Anda harus mengizinkan permission notifikasi di HP Anda:\n1. Buka pengaturan browser atau ikon gembok di sebelah URL.\n2. Ubah Izin Notifikasi menjadi "Izinkan/Allow".');
+          } else {
+            alert(`Gagal mengaktifkan notifikasi:\n${res.error || 'Terjadi kesalahan sistem.'}`);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('[WebPush UI] Error handling toggle event:', err);
+      alert(`Error: ${err?.message || String(err)}`);
+    } finally {
+      setIsSubscribing(false);
+    }
+  };
+
   useEffect(() => {
     if (isOutletAdmin && !['orders', 'stock', 'dashboard'].includes(activeTab)) {
       setActiveTab('orders');
@@ -226,18 +272,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
             {isPushCapable ? (
               <button
                 disabled={isSubscribing}
-                onClick={async () => {
-                  setIsSubscribing(true);
-                  if (isPushActive) {
-                    const success = await unsubscribeAdminPush();
-                    if (success) setIsPushActive(false);
-                  } else {
-                    const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
-                    const success = await subscribeAdminPush(auth.username || 'Admin', outletContext, auth.role);
-                    if (success) setIsPushActive(true);
-                  }
-                  setIsSubscribing(false);
-                }}
+                onClick={handleTogglePushNotifications}
+                onTouchEnd={handleTogglePushNotifications}
                 className={`w-full py-1.5 px-3 rounded-lg text-[11px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   isPushActive
                     ? 'bg-red-50 text-red-600 hover:bg-red-100'
@@ -483,18 +519,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
             {isPushCapable ? (
               <button
                 disabled={isSubscribing}
-                onClick={async () => {
-                  setIsSubscribing(true);
-                  if (isPushActive) {
-                    const success = await unsubscribeAdminPush();
-                    if (success) setIsPushActive(false);
-                  } else {
-                    const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
-                    const success = await subscribeAdminPush(auth.username || 'Admin', outletContext, auth.role);
-                    if (success) setIsPushActive(true);
-                  }
-                  setIsSubscribing(false);
-                }}
+                onClick={handleTogglePushNotifications}
+                onTouchEnd={handleTogglePushNotifications}
                 className={`w-full py-1.5 px-3 rounded-lg text-[11px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   isPushActive
                     ? 'bg-red-50 text-red-600 hover:bg-red-100'

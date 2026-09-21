@@ -40,35 +40,57 @@ export async function getPushSubscription(): Promise<PushSubscription | null> {
   }
 }
 
+export interface SubscriptionResult {
+  success: boolean;
+  error?: string;
+  permission?: NotificationPermission;
+}
+
 /**
  * Requests Notification permission and subscribes to Web Push
  */
-export async function subscribeAdminPush(username: string, outletId: string, role?: string): Promise<boolean> {
+export async function subscribeAdminPush(username: string, outletId: string, role?: string): Promise<SubscriptionResult> {
+  console.log('[WebPush] subscribeAdminPush invoked with parameters:', { username, outletId, role });
+
   if (!isPushSupported()) {
     console.warn('[WebPush] Push notifications are not supported on this browser/device.');
-    return false;
+    return { success: false, error: 'Push notifications are not supported on this browser/device.' };
   }
 
   try {
-    // 1. Request notification permission
+    // 1. Check current permission & Request notification permission
+    const currentPermission = Notification.permission;
+    console.log('[WebPush] Current browser notification permission state:', currentPermission);
+
+    if (currentPermission === 'denied') {
+      console.warn('[WebPush] Notification permission already denied by browser settings.');
+      return { success: false, error: 'PERMISSION_DENIED', permission: 'denied' };
+    }
+
     const permission = await Notification.requestPermission();
+    console.log('[WebPush] Notification.requestPermission result:', permission);
+    
     if (permission !== 'granted') {
-      console.warn('[WebPush] Notification permission denied by user.');
-      return false;
+      console.warn('[WebPush] Notification permission denied/ignored by user.');
+      return { success: false, error: 'PERMISSION_DENIED', permission };
     }
 
     // 2. Fetch VAPID public key from backend
+    console.log('[WebPush] Contacting backend to retrieve VAPID public key...');
     const vapidRes = await fetch(getApiUrl('/api/push/vapid-public-key'));
     if (!vapidRes.ok) {
-      throw new Error('Failed to fetch VAPID public key from backend.');
+      throw new Error(`HTTP ${vapidRes.status}: Failed to fetch VAPID public key from backend.`);
     }
     const { publicKey } = await vapidRes.json();
     if (!publicKey) {
-      throw new Error('VAPID public key received is empty.');
+      throw new Error('VAPID public key retrieved is empty or invalid.');
     }
+    console.log('[WebPush] VAPID public key successfully retrieved.');
 
     // 3. Register or get the ready Service Worker
+    console.log('[WebPush] Checking Service Worker readiness...');
     const reg = await navigator.serviceWorker.ready;
+    console.log('[WebPush] Service Worker is active and ready inside scope:', reg.scope);
 
     // 4. Subscribe the browser device to Push Manager
     const subscribeOptions = {
@@ -76,12 +98,18 @@ export async function subscribeAdminPush(username: string, outletId: string, rol
       applicationServerKey: urlBase64ToUint8Array(publicKey)
     };
 
+    console.log('[WebPush] Checking existing push subscription on browser...');
     let subscription = await reg.pushManager.getSubscription();
     if (!subscription) {
+      console.log('[WebPush] No active subscription found. Initiating subscription from push manager...');
       subscription = await reg.pushManager.subscribe(subscribeOptions);
+      console.log('[WebPush] Device successfully subscribed to browser Push Service.');
+    } else {
+      console.log('[WebPush] Active device subscription already exists.');
     }
 
     // 5. Send subscription details to backend
+    console.log('[WebPush] Synchronizing device subscription object with backend server...');
     const subRes = await fetch(getApiUrl('/api/push/subscribe'), {
       method: 'POST',
       headers: {
@@ -96,15 +124,16 @@ export async function subscribeAdminPush(username: string, outletId: string, rol
     });
 
     if (!subRes.ok) {
-      const errorData = await subRes.json();
-      throw new Error(errorData.error || 'Failed to save subscription on backend.');
+      const errorData = await subRes.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${subRes.status}: Failed to register subscription on Express backend.`);
     }
 
-    console.log('[WebPush] Admin push subscription registered successfully.');
-    return true;
-  } catch (err) {
-    console.error('[WebPush] Error during subscription registration:', err);
-    return false;
+    console.log('[WebPush] Backend registration fully synchronized.');
+    return { success: true, permission };
+  } catch (err: any) {
+    const errorMsg = err?.message || String(err);
+    console.error('[WebPush] Error during subscription registration flow:', err);
+    return { success: false, error: errorMsg };
   }
 }
 

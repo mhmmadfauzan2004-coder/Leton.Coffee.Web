@@ -4,11 +4,27 @@
  */
 
 // Base API URL from environment variables VITE_API_URL or VITE_API_BASE_URL for production split-domain deployment (e.g. Cloudflare Pages)
-export const API_BASE_URL = (
+let rawApiUrl = (
   import.meta.env.VITE_API_URL || 
   import.meta.env.VITE_API_BASE_URL || 
   ''
-).replace(/\/+$/, '');
+).trim();
+
+// Robust fallback: If VITE_API_URL is empty or points to the static pages.dev domain (which cannot host the API),
+// or if the browser is currently running on the static Cloudflare Pages domain,
+// we automatically route API requests to the active production Express backend on Cloud Run.
+const isPagesHost = typeof window !== 'undefined' && (
+  window.location.hostname.includes('pages.dev') || 
+  window.location.host.includes('leton-coffee-web')
+);
+
+const isApiPagesUrl = rawApiUrl.includes('pages.dev') || rawApiUrl === '';
+
+if (isPagesHost || isApiPagesUrl) {
+  rawApiUrl = 'https://ais-pre-gfncvyyhq4omamytu5kgc4-866159737618.asia-southeast1.run.app';
+}
+
+export const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
 
 /**
  * Returns the full API URL for a given endpoint path.

@@ -283,10 +283,14 @@ export async function findOrCreateCustomerMember(
 
 /**
  * Delete a registered customer by ID (Super Admin only).
- * Uses two-tier approach: Server API proxy first, with Direct Supabase fallback if network fails.
+ * Performs DELETE via Server API Proxy and executes a VERIFICATION SELECT from Supabase database before declaring success.
+ * Includes direct Supabase fallback if server API endpoint is unreachable or returns a load error.
  */
 export async function deleteRegisteredCustomer(customerId: string, adminRole?: string): Promise<{ success: boolean; error?: string }> {
-  // 1. Try server-side API proxy first
+  let apiSuccess = false;
+  let apiError = '';
+
+  // 1. Send DELETE request to Server API Proxy
   try {
     const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
     const res = await fetch(getApiUrl(`/api/admin/customers/${customerId}`), {
@@ -297,72 +301,117 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
       },
     });
 
-    if (res.ok) {
-      return { success: true };
+    const errText = await res.text();
+    let resJson;
+    try { resJson = JSON.parse(errText); } catch {}
+
+    if (res.ok && resJson?.success !== false) {
+      apiSuccess = true;
     } else {
-      const errText = await res.text();
-      let errJson;
-      try { errJson = JSON.parse(errText); } catch {}
-      // If server returns error, we can also try direct fallback or return error
-      const errMsg = errJson?.error || errJson?.message || `HTTP ${res.status}: Gagal menghapus member`;
-      console.warn('[deleteRegisteredCustomer] Server API error, attempting direct Supabase fallback:', errMsg);
+      apiError = resJson?.error || resJson?.message || `HTTP ${res.status}: Gagal menghapus member dari database.`;
+      console.warn('[deleteRegisteredCustomer] Server API error:', apiError);
     }
   } catch (netErr: any) {
-    console.warn('[deleteRegisteredCustomer] Network exception / Load failed, attempting direct Supabase fallback:', netErr?.message || netErr);
+    apiError = netErr?.message || 'Gagal terhubung ke server untuk proses hapus member.';
+    console.warn('[deleteRegisteredCustomer] Network exception:', netErr);
   }
 
-  // 2. Direct Supabase Client fallback
-  try {
-    const client = getSupabase(adminRole || 'super_admin');
+  // 2. Direct Supabase Fallback if Server API Proxy call was not successful
+  if (!apiSuccess) {
+    console.warn('[deleteRegisteredCustomer] API Proxy failed/unreachable. Attempting direct Supabase deletion fallback...');
+    try {
+      const client = getSupabase(adminRole || 'super_admin');
 
-    // Try RPC function first
-    const { data: rpcData, error: rpcErr } = await client.rpc('delete_registered_customer_rpc', {
-      p_customer_id: customerId
+      let idsToClean: string[] = [customerId];
+      let targetPhone: string | null = null;
+
+      const { data: matchedRows } = await client
+        .from('customers')
+        .select('id, nomor_hp');
+
+      if (Array.isArray(matchedRows) && matchedRows.length > 0) {
+        const cleanNum = customerId.replace(/[^0-9]/g, '');
+        const target = matchedRows.find((row: any) => {
+          const rId = String(row.id || '');
+          const rPhone = String(row.nomor_hp || '').replace(/[^0-9]/g, '');
+          if (rId === customerId) return true;
+          if (cleanNum && cleanNum.length >= 8 && (rPhone === cleanNum || rPhone.endsWith(cleanNum))) return true;
+          return false;
+        });
+        if (target) {
+          if (target.id) idsToClean.push(String(target.id));
+          if (target.nomor_hp) targetPhone = String(target.nomor_hp);
+        }
+      }
+
+      const uniqueIds = Array.from(new Set(idsToClean));
+
+      // Unlink orders so history is preserved
+      for (const idToDel of uniqueIds) {
+        try {
+          await client.from('orders').update({ customer_id: null }).eq('customer_id', idToDel);
+        } catch {}
+      }
+
+      // Delete auxiliary records
+      for (const idToDel of uniqueIds) {
+        try { await client.from('customer_sessions').delete().eq('customer_id', idToDel); } catch {}
+        try { await client.from('reward_redemptions').delete().eq('customer_id', idToDel); } catch {}
+        try { await client.from('loyalty_transactions').delete().eq('customer_id', idToDel); } catch {}
+        try { await client.from('customer_points').delete().eq('customer_id', idToDel); } catch {}
+      }
+
+      // Clear password_hash & delete customer row
+      for (const idToDel of uniqueIds) {
+        try {
+          await client.from('customers').update({ password_hash: null, updated_at: new Date().toISOString() }).eq('id', idToDel);
+          await client.from('customers').delete().eq('id', idToDel);
+        } catch {}
+      }
+
+      if (targetPhone) {
+        try {
+          await client.from('customers').update({ password_hash: null, updated_at: new Date().toISOString() }).eq('nomor_hp', targetPhone);
+          await client.from('customers').delete().eq('nomor_hp', targetPhone);
+        } catch {}
+      }
+
+      // Try RPC fallback
+      for (const idToDel of uniqueIds) {
+        try {
+          await client.rpc('delete_registered_customer_rpc', { p_customer_id: idToDel });
+        } catch {}
+      }
+    } catch (directErr: any) {
+      console.warn('[deleteRegisteredCustomer] Direct Supabase fallback exception:', directErr);
+    }
+  }
+
+  // 3. VERIFICATION SELECT: Re-query active registered customers directly from database
+  try {
+    const freshList = await fetchRegisteredCustomers(adminRole || 'super_admin');
+    const stillExists = freshList.some((c) => {
+      const cleanCustId = c.id.toLowerCase().trim();
+      const cleanTargetId = customerId.toLowerCase().trim();
+      const cleanPhone = c.nomorHp.replace(/[^0-9]/g, '');
+      const cleanTargetNum = customerId.replace(/[^0-9]/g, '');
+
+      if (cleanCustId === cleanTargetId) return true;
+      if (cleanTargetNum && cleanTargetNum.length >= 8 && cleanPhone === cleanTargetNum) return true;
+      return false;
     });
 
-    if (!rpcErr && rpcData && typeof rpcData === 'object') {
-      const resObj = rpcData as any;
-      if (resObj.success) {
-        return { success: true };
-      } else {
-        return { success: false, error: resObj.error || 'Gagal menghapus member via Supabase RPC.' };
-      }
-    }
-
-    // Unlink orders
-    await client.from('orders').update({ customer_id: null }).eq('customer_id', customerId);
-
-    // Delete related records
-    await client.from('customer_sessions').delete().eq('customer_id', customerId);
-    await client.from('reward_redemptions').delete().eq('customer_id', customerId);
-    await client.from('loyalty_transactions').delete().eq('customer_id', customerId);
-    await client.from('customer_points').delete().eq('customer_id', customerId);
-
-    // Delete customer
-    const { error: delErr } = await client.from('customers').delete().eq('id', customerId);
-    if (delErr) {
-      return { success: false, error: `Gagal menghapus dari database: ${delErr.message}` };
-    }
-
-    // VERIFICATION SELECT: Ensure record is truly gone from public.customers
-    const { data: checkData, error: checkErr } = await client
-      .from('customers')
-      .select('id')
-      .eq('id', customerId)
-      .maybeSingle();
-
-    if (checkErr) {
-      console.warn('[deleteRegisteredCustomer] Verification select warning:', checkErr);
-    }
-
-    if (checkData) {
-      return { success: false, error: 'Gagal menghapus member: Record masih tersimpan di database Supabase.' };
+    if (stillExists) {
+      return {
+        success: false,
+        error: 'Gagal menghapus member: Record masih tersimpan di database Supabase.'
+      };
     }
 
     return { success: true };
-  } catch (dbErr: any) {
-    console.error('[deleteRegisteredCustomer] Direct Supabase fallback exception:', dbErr);
-    return { success: false, error: dbErr?.message || 'Terjadi kesalahan sistem saat menghapus member.' };
+  } catch (verifyErr: any) {
+    console.error('[deleteRegisteredCustomer] Verification re-query failed:', verifyErr);
+    return { success: false, error: 'Gagal memverifikasi status hapus di database Supabase.' };
   }
 }
 

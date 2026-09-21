@@ -252,6 +252,7 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     function connectSSE() {
       try {
+        if (typeof window === 'undefined' || !window.EventSource) return;
         eventSource = new EventSource(getApiUrl('/api/events'));
 
         eventSource.onopen = () => {
@@ -268,13 +269,22 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
               setLastUpdated(Date.now());
             }
           } catch (err) {
-            console.error('Error parsing SSE event:', err);
+            console.warn('Error parsing SSE event:', err);
           }
         };
 
-        eventSource.onerror = () => {
-          eventSource?.close();
-          retryTimeout = setTimeout(connectSSE, 10000);
+        eventSource.onerror = (e) => {
+          try {
+            if (e && typeof (e as any).preventDefault === 'function') {
+              (e as any).preventDefault();
+            }
+          } catch {}
+          try {
+            eventSource?.close();
+          } catch {}
+          if (!retryTimeout) {
+            retryTimeout = setTimeout(connectSSE, 15000);
+          }
         };
       } catch (err) {
         // SSE optional notice

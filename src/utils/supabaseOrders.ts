@@ -1453,21 +1453,31 @@ export function subscribeToOrdersRealtime(
 
   // 2. Server-Sent Events (SSE) Listener for Backend events
   try {
-    sseSource = new EventSource(getApiUrl('/api/events'));
-    sseSource.onmessage = (e) => {
-      try {
-        const payload = JSON.parse(e.data);
-        if (payload && (payload.type === 'ORDER_CREATED' || payload.type === 'ORDER_UPDATED')) {
-          if (payload.type === 'ORDER_CREATED' && payload.order) {
-            refresh(payload.order);
-          } else {
-            refresh();
+    if (typeof window !== 'undefined' && window.EventSource) {
+      sseSource = new EventSource(getApiUrl('/api/events'));
+      sseSource.onerror = (e) => {
+        try {
+          if (e && typeof (e as any).preventDefault === 'function') {
+            (e as any).preventDefault();
           }
+        } catch {}
+        try { sseSource?.close(); } catch {}
+      };
+      sseSource.onmessage = (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload && (payload.type === 'ORDER_CREATED' || payload.type === 'ORDER_UPDATED')) {
+            if (payload.type === 'ORDER_CREATED' && payload.order) {
+              refresh(payload.order);
+            } else {
+              refresh();
+            }
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
-      }
-    };
+      };
+    }
   } catch (sseErr) {
     // SSE optional notice
   }
@@ -1672,27 +1682,37 @@ export function subscribeToSingleOrder(
 
   // 3. SSE Listener
   try {
-    sseSource = new EventSource(getApiUrl('/api/events'));
-    sseSource.onmessage = (e) => {
-      try {
-        const payload = JSON.parse(e.data);
-        if (
-          payload &&
-          (payload.type === 'ORDER_UPDATED' ||
-            payload.type === 'ORDER_STATUS_UPDATED' ||
-            payload.type === 'ORDER_CREATED')
-        ) {
-          if (
-            payload.order?.id === orderIdOrNumber ||
-            payload.order?.orderNumber === orderIdOrNumber
-          ) {
-            checkOrder();
+    if (typeof window !== 'undefined' && window.EventSource) {
+      sseSource = new EventSource(getApiUrl('/api/events'));
+      sseSource.onerror = (e) => {
+        try {
+          if (e && typeof (e as any).preventDefault === 'function') {
+            (e as any).preventDefault();
           }
+        } catch {}
+        try { sseSource?.close(); } catch {}
+      };
+      sseSource.onmessage = (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (
+            payload &&
+            (payload.type === 'ORDER_UPDATED' ||
+              payload.type === 'ORDER_STATUS_UPDATED' ||
+              payload.type === 'ORDER_CREATED')
+          ) {
+            if (
+              payload.order?.id === orderIdOrNumber ||
+              payload.order?.orderNumber === orderIdOrNumber
+            ) {
+              checkOrder();
+            }
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
-      }
-    };
+      };
+    }
   } catch {
     // ignore
   }

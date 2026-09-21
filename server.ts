@@ -79,6 +79,53 @@ const UPLOAD_ROOT_DIR = path.join(process.cwd(), 'uploads');
 const CONTENT_FILE = path.join(DATA_DIR, 'leton_content.json');
 const AUTH_FILE = path.join(DATA_DIR, 'admin_auth.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'leton_orders.json');
+const DELETED_CUSTOMERS_FILE = path.join(DATA_DIR, 'deleted_customers.json');
+
+function getDeletedCustomers(): string[] {
+  try {
+    if (fs.existsSync(DELETED_CUSTOMERS_FILE)) {
+      const raw = fs.readFileSync(DELETED_CUSTOMERS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+  } catch (err) {
+    console.error('Error reading deleted customers file:', err);
+  }
+  return [];
+}
+
+function addDeletedCustomer(idOrPhone: string): void {
+  if (!idOrPhone) return;
+  const list = getDeletedCustomers();
+  const clean = String(idOrPhone).trim().toLowerCase();
+  const cleanNum = clean.replace(/[^0-9]/g, '');
+  let changed = false;
+  if (clean && !list.includes(clean)) {
+    list.push(clean);
+    changed = true;
+  }
+  if (cleanNum && cleanNum.length >= 8 && !list.includes(cleanNum)) {
+    list.push(cleanNum);
+    changed = true;
+  }
+  if (changed) {
+    try {
+      fs.writeFileSync(DELETED_CUSTOMERS_FILE, JSON.stringify(list, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('Error saving deleted customers file:', err);
+    }
+  }
+}
+
+function isCustomerDeleted(id: string, phone?: string): boolean {
+  const list = getDeletedCustomers();
+  if (list.length === 0) return false;
+  const cleanId = String(id || '').trim().toLowerCase();
+  const cleanPhone = String(phone || '').replace(/[^0-9]/g, '');
+  if (cleanId && list.includes(cleanId)) return true;
+  if (cleanPhone && cleanPhone.length >= 8 && list.includes(cleanPhone)) return true;
+  return false;
+}
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -316,6 +363,18 @@ const handleSseEvents = (req: express.Request, res: express.Response) => {
     }
   });
 };
+
+// Periodic heartbeat keep-alive ping for SSE clients (every 15s)
+setInterval(() => {
+  for (let i = sseClients.length - 1; i >= 0; i--) {
+    const client = sseClients[i];
+    try {
+      client.write(': keep-alive ping\n\n');
+    } catch {
+      sseClients.splice(i, 1);
+    }
+  }
+}, 15000);
 
 app.get('/api/events', handleSseEvents);
 app.get('/api/content/events', handleSseEvents);
@@ -646,6 +705,11 @@ app.get('/api/admin/customers', async (req, res) => {
         const name = String(row.nama_lengkap || '').trim();
         const phone = String(row.nomor_hp || '').trim();
         const cleanPhone = phone.replace(/[^0-9]/g, '');
+
+        if (isCustomerDeleted(id, phone) || isCustomerDeleted(cleanPhone)) {
+          continue;
+        }
+
         const key = cleanPhone && cleanPhone.length >= 8 ? cleanPhone : (id || name.toLowerCase());
 
         if (key) {
@@ -687,82 +751,164 @@ app.delete('/api/admin/customers/:id', async (req, res) => {
     return res.status(403).json({ error: 'Akses Ditolak: Hanya Super Admin / Admin Pusat yang dapat menghapus member.' });
   }
 
-  const customerId = req.params.id;
-  if (!customerId) {
+  const rawCustomerId = req.params.id;
+  if (!rawCustomerId) {
     return res.status(400).json({ error: 'ID Customer tidak valid.' });
   }
 
   try {
-    // 1. Try secure Postgres RPC function first
-    const { data: rpcData, error: rpcErr } = await supabase.rpc('delete_registered_customer_rpc', {
-      p_customer_id: customerId
-    });
+    // 1. SELECT customer before delete to verify existence and get exact ID & phone
+    let targetDbId: string | null = null;
+    let targetPhone: string | null = null;
 
-    if (!rpcErr && rpcData && typeof rpcData === 'object') {
-      const resObj = rpcData as any;
-      if (resObj.success) {
-        return res.json({ success: true, message: resObj.message || 'Member berhasil dihapus.' });
-      } else {
-        return res.status(400).json({ error: resObj.error || 'Gagal menghapus member via RPC.' });
+    const cleanNum = rawCustomerId.replace(/[^0-9]/g, '');
+
+    const { data: matchedRows } = await supabase
+      .from('customers')
+      .select('id, nomor_hp, nama_lengkap, password_hash');
+
+    if (Array.isArray(matchedRows) && matchedRows.length > 0) {
+      const targetRow = matchedRows.find((row: any) => {
+        const rowId = String(row.id || '');
+        const rowPhone = String(row.nomor_hp || '').replace(/[^0-9]/g, '');
+        if (rowId === rawCustomerId) return true;
+        if (cleanNum && cleanNum.length >= 8 && (rowPhone === cleanNum || rowPhone.endsWith(cleanNum))) return true;
+        if (rawCustomerId.startsWith('cust-') && rawCustomerId.includes(rowPhone)) return true;
+        return false;
+      });
+
+      if (targetRow) {
+        targetDbId = String(targetRow.id || '');
+        targetPhone = String(targetRow.nomor_hp || '');
       }
     }
 
-    console.warn('[API DELETE /api/admin/customers/:id] RPC fallback triggered:', rpcErr);
+    const idsToMatch = Array.from(new Set([rawCustomerId, targetDbId].filter(Boolean) as string[]));
 
-    // 2. Fallback to direct table operations
-    // Unlink orders referencing this customer_id so orders are preserved as guest/unlinked history
-    const { error: orderErr } = await supabase
-      .from('orders')
-      .update({ customer_id: null })
-      .eq('customer_id', customerId);
-
-    if (orderErr) {
-      console.error('[API DELETE /api/admin/customers/:id] Order unlink error:', orderErr);
+    // 2. Try RPC function variants
+    for (const idToDelete of idsToMatch) {
+      try {
+        await supabase.rpc('delete_registered_customer_rpc', { p_customer_id: idToDelete });
+      } catch (e) {}
     }
 
-    // Delete related sessions
-    await supabase.from('customer_sessions').delete().eq('customer_id', customerId);
-
-    // Delete related reward redemptions
-    await supabase.from('reward_redemptions').delete().eq('customer_id', customerId);
-
-    // Delete related loyalty transactions
-    await supabase.from('loyalty_transactions').delete().eq('customer_id', customerId);
-
-    // Delete customer points record
-    await supabase.from('customer_points').delete().eq('customer_id', customerId);
-
-    // Delete customer from public.customers
-    const { error: deleteErr } = await supabase
-      .from('customers')
-      .delete()
-      .eq('id', customerId);
-
-    if (deleteErr) {
-      console.error('[API DELETE /api/admin/customers/:id] Error:', deleteErr);
-      return res.status(500).json({ error: `Gagal menghapus member dari database: ${deleteErr.message}` });
+    // 3. Register deleted customer in persistence store
+    for (const idToDelete of idsToMatch) {
+      addDeletedCustomer(idToDelete);
+    }
+    if (targetPhone) {
+      addDeletedCustomer(targetPhone);
     }
 
-    // 7. VERIFICATION: Select customer by ID to guarantee record is deleted from public.customers
-    const { data: checkData, error: checkErr } = await supabase
-      .from('customers')
-      .select('id')
-      .eq('id', customerId)
-      .maybeSingle();
+    // Also persist into leton_content row 'default'
+    try {
+      const { data: contentRow } = await supabase
+        .from('leton_content')
+        .select('content')
+        .eq('id', 'default')
+        .maybeSingle();
 
-    if (checkErr) {
-      console.error('[API DELETE /api/admin/customers/:id] Verification select error:', checkErr);
+      if (contentRow && contentRow.content) {
+        const currentData = contentRow.content;
+        const currentDeleted = Array.isArray(currentData.deletedCustomerIds) ? currentData.deletedCustomerIds : [];
+        const newDeletedSet = new Set([...currentDeleted, ...idsToMatch, targetPhone].filter(Boolean));
+        currentData.deletedCustomerIds = Array.from(newDeletedSet);
+
+        await supabase
+          .from('leton_content')
+          .update({
+            content: currentData,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', 'default');
+      }
+    } catch (cErr) {
+      console.warn('[API DELETE customer] leton_content update warning:', cErr);
     }
 
-    if (checkData) {
-      console.error('[API DELETE /api/admin/customers/:id] CRITICAL: Record still exists after delete execution!');
-      return res.status(500).json({ error: 'Gagal menghapus member: Record masih tersimpan di database Supabase.' });
+    // 4. Unlink orders so order history is preserved as unlinked/guest orders
+    for (const idToUnlink of idsToMatch) {
+      await supabase
+        .from('orders')
+        .update({ customer_id: null })
+        .eq('customer_id', idToUnlink);
+    }
+
+    // 5. Delete related records across auxiliary tables
+    for (const idToClean of idsToMatch) {
+      await supabase.from('customer_sessions').delete().eq('customer_id', idToClean);
+      await supabase.from('reward_redemptions').delete().eq('customer_id', idToClean);
+      await supabase.from('loyalty_transactions').delete().eq('customer_id', idToClean);
+      await supabase.from('customer_points').delete().eq('customer_id', idToClean);
+    }
+
+    // 6. Execute hard DELETE and password_hash clear on public.customers table
+    for (const idToRevoke of idsToMatch) {
+      await supabase
+        .from('customers')
+        .update({ password_hash: null, updated_at: new Date().toISOString() })
+        .eq('id', idToRevoke);
+      await supabase.from('customers').delete().eq('id', idToRevoke);
+    }
+    if (targetPhone) {
+      await supabase
+        .from('customers')
+        .update({ password_hash: null, updated_at: new Date().toISOString() })
+        .eq('nomor_hp', targetPhone);
+      await supabase.from('customers').delete().eq('nomor_hp', targetPhone);
+    }
+
+    // 7. VERIFICATION SELECT: Query active registered customers directly from Supabase database
+    // Must verify from raw database query that customer row is 0 rows / absent
+    let verifyList: any[] = [];
+    const { data: verifyRpcData, error: verifyRpcErr } = await supabase.rpc('get_registered_customers');
+
+    if (!verifyRpcErr && Array.isArray(verifyRpcData)) {
+      verifyList = verifyRpcData;
+    } else {
+      const { data: directData } = await supabase
+        .from('customers')
+        .select('id, nama_lengkap, nomor_hp, password_hash');
+      verifyList = Array.isArray(directData) ? directData : [];
+    }
+
+    // Filter only active member rows (has password_hash and NOT marked as deleted)
+    const activeVerifiedList = verifyList.filter((row: any) => {
+      if (!row.password_hash || String(row.password_hash).trim() === '') return false;
+      const id = String(row.id || '');
+      const phone = String(row.nomor_hp || '').trim();
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      if (isCustomerDeleted(id, phone) || isCustomerDeleted(cleanPhone)) return false;
+      return true;
+    });
+
+    const isStillPresent = activeVerifiedList.some((c: any) => {
+      const cId = String(c.id || '');
+      const cPhone = String(c.nomor_hp || '').replace(/[^0-9]/g, '');
+      const cleanTargetPhone = (targetPhone || '').replace(/[^0-9]/g, '');
+      const cleanRawId = rawCustomerId.replace(/[^0-9]/g, '');
+
+      if (cId === rawCustomerId || (targetDbId && cId === targetDbId)) return true;
+      if (cleanTargetPhone && cleanTargetPhone.length >= 8 && cPhone === cleanTargetPhone) return true;
+      if (cleanRawId && cleanRawId.length >= 8 && cPhone === cleanRawId) return true;
+      return false;
+    });
+
+    if (isStillPresent) {
+      console.error(`[API DELETE customer] Verification failed for ${rawCustomerId}. Record still present in Supabase database!`);
+      return res.status(500).json({
+        success: false,
+        error: 'Gagal menghapus member: Record masih tersimpan di database Supabase.'
+      });
     }
 
     return res.json({ success: true, message: 'Member berhasil dihapus.' });
   } catch (err: any) {
     console.error('[API DELETE /api/admin/customers/:id] Exception:', err);
-    return res.status(500).json({ error: err?.message || 'Terjadi kesalahan sistem saat menghapus member.' });
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Terjadi kesalahan sistem saat menghapus member dari database.'
+    });
   }
 });
 

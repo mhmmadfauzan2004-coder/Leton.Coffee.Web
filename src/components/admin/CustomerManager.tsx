@@ -64,22 +64,22 @@ export const CustomerManager: React.FC = () => {
     try {
       const result = await deleteRegisteredCustomer(customerId, auth.role);
       if (result.success) {
-        // 1. Remove member from local list immediately
-        setCustomers((prev) => prev.filter((c) => c.id !== customerId));
-        // 2. Close detail modal if open for this customer
+        // 1. Close detail modal if open for this customer
         if (selectedCustomer?.id === customerId) {
           setSelectedCustomer(null);
         }
-        // 3. Close confirmation modal
+        // 2. Close confirmation modal
         setConfirmingCustomer(null);
-        // 4. Show success toast
+
+        // 3. Re-query customer data directly from Supabase database
+        await loadCustomers();
+
+        // 4. Show success toast only after database verification confirmed record is gone
         setSuccessToast('Member berhasil dihapus');
         setTimeout(() => setSuccessToast(null), 3500);
-        // 5. Re-fetch customer data to ensure sync with source of truth
-        await loadCustomers();
       } else {
-        console.error('[CustomerManager] Gagal menghapus:', result);
-        alert(result.error || 'Gagal menghapus member dari database.');
+        console.warn('[CustomerManager] Gagal menghapus:', result);
+        alert(result.error || 'Gagal menghapus member: Record masih tersimpan di database Supabase.');
       }
     } catch (err: any) {
       alert(err?.message || 'Terjadi kesalahan sistem saat menghapus member.');
@@ -96,7 +96,7 @@ export const CustomerManager: React.FC = () => {
       const data = await fetchRegisteredCustomers(auth.role);
       setCustomers(data);
     } catch (err: any) {
-      console.error('[CustomerManager] Gagal memuat data customer:', err);
+      console.warn('[CustomerManager] Gagal memuat data customer:', err);
       setErrorMessage(err?.message || 'Gagal menyinkronkan data customer dari database Supabase.');
     } finally {
       setIsLoading(false);

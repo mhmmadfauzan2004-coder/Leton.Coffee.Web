@@ -422,7 +422,11 @@ BEGIN
   END IF;
 
   -- Unlink orders referencing this customer_id so orders are preserved as history
-  UPDATE public.orders SET customer_id = NULL WHERE customer_id = p_customer_id;
+  BEGIN
+    UPDATE public.orders SET customer_id = NULL WHERE customer_id = p_customer_id;
+  EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Gagal memutus link pesanan: ' || SQLERRM);
+  END;
 
   -- Delete related customer sessions and loyalty records
   DELETE FROM public.customer_sessions WHERE customer_id = p_customer_id;
@@ -456,16 +460,28 @@ DECLARE
   v_earned INTEGER := 0;
   v_redeemed INTEGER := 0;
 BEGIN
+  -- 1. Try customer_points first
   SELECT COALESCE(current_balance, 0), COALESCE(total_points_earned, 0), COALESCE(total_points_redeemed, 0)
   INTO v_balance, v_earned, v_redeemed
   FROM public.customer_points
   WHERE customer_id = p_customer_id;
 
-  IF NOT FOUND THEN
+  -- 2. If not found or zero, try public.customers columns
+  IF (v_balance = 0 AND v_earned = 0 AND v_redeemed = 0) THEN
     SELECT COALESCE(points_balance, 0), COALESCE(total_points_earned, 0), COALESCE(total_points_redeemed, 0)
     INTO v_balance, v_earned, v_redeemed
     FROM public.customers
     WHERE id = p_customer_id;
+  END IF;
+
+  -- 3. If still zero, calculate from loyalty_transactions if any
+  IF (v_balance = 0 AND v_earned = 0) THEN
+    SELECT COALESCE(SUM(CASE WHEN transaction_type = 'EARN' THEN points ELSE -points END), 0),
+           COALESCE(SUM(CASE WHEN transaction_type = 'EARN' THEN points ELSE 0 END), 0),
+           COALESCE(SUM(CASE WHEN transaction_type IN ('REDEEM', 'ADJUST_MINUS') THEN points ELSE 0 END), 0)
+    INTO v_balance, v_earned, v_redeemed
+    FROM public.loyalty_transactions
+    WHERE customer_id = p_customer_id;
   END IF;
 
   RETURN jsonb_build_object(

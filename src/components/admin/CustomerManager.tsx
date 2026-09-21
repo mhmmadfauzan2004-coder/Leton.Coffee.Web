@@ -78,6 +78,7 @@ export const CustomerManager: React.FC = () => {
         // 5. Re-fetch customer data to ensure sync with source of truth
         await loadCustomers();
       } else {
+        console.error('[CustomerManager] Gagal menghapus:', result);
         alert(result.error || 'Gagal menghapus member dari database.');
       }
     } catch (err: any) {

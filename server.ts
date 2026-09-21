@@ -46,7 +46,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Enforce explicit, robust CORS headers for Cloudflare Pages production frontend and preflight options requests
+// Explicit, robust and unified CORS engine supporting credentials and OPTIONS preflight instantly with no duplicate headers
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin) {
@@ -65,30 +65,6 @@ app.use((req, res, next) => {
   }
   next();
 });
-
-// CORS configuration supporting external frontend hosting (Cloudflare Pages https://leton-coffee-web.pages.dev) with credentials support
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      callback(null, true);
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'Cache-Control',
-      'X-Requested-With',
-      'X-Accel-Buffering',
-      'x-admin-role',
-      'x-outlet-id',
-      'X-Admin-Role',
-      'X-Outlet-Id'
-    ],
-    credentials: true,
-    optionsSuccessStatus: 200,
-  })
-);
-app.options('*', cors());
 
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));

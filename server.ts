@@ -1597,6 +1597,11 @@ async function initVapid() {
     }
   }
 
+  // Sanitize keys to remove any surrounding quotes, newlines, or whitespace
+  const cleanVapidKeyStr = (val: string) => val ? val.trim().replace(/^["']|["']$/g, '').trim() : '';
+  vapidPublicKey = cleanVapidKeyStr(vapidPublicKey);
+  vapidPrivateKey = cleanVapidKeyStr(vapidPrivateKey);
+
   webpush.setVapidDetails(
     'mailto:admin@letoncoffee.com',
     vapidPublicKey,

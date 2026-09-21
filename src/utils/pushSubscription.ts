@@ -4,8 +4,21 @@ import { getApiUrl } from './api';
 
 // Convert URL safe base64 to Uint8Array for VAPID applicationServerKey
 function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding)
+  if (!base64String) {
+    throw new Error('VAPID public key string is empty.');
+  }
+  
+  // Sanitize any quotes, spaces, or formatting leftovers (e.g. from environment variable storage)
+  const cleanString = base64String.trim().replace(/^["']|["']$/g, '').trim();
+  
+  console.log('[WebPush Conversion] Processing public key string:', {
+    originalLength: base64String.length,
+    cleanedLength: cleanString.length,
+    hasQuotes: base64String.includes('"') || base64String.includes("'")
+  });
+
+  const padding = '='.repeat((4 - cleanString.length % 4) % 4);
+  const base64 = (cleanString + padding)
     .replace(/\-/g, '+')
     .replace(/_/g, '/');
 
@@ -15,6 +28,12 @@ function urlBase64ToUint8Array(base64String: string) {
   for (let i = 0; i < rawData.length; ++i) {
     outputArray[i] = rawData.charCodeAt(i);
   }
+  
+  console.log('[WebPush Conversion] Uint8Array successfully generated:', {
+    byteLength: outputArray.byteLength,
+    is65Bytes: outputArray.byteLength === 65
+  });
+
   return outputArray;
 }
 

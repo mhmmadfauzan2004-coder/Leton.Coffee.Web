@@ -65,10 +65,11 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
   // Fetch all loyalty data for the logged-in customer
   const loadLoyaltyData = async () => {
     const targetUserId = profile?.userId || profile?.id;
-    if (!targetUserId) return;
+    const targetPhone = profile?.nomorHp;
+    if (!targetUserId && !targetPhone) return;
     setLoadingLoyalty(true);
     try {
-      const custLoyalty = await getCustomerLoyalty(targetUserId);
+      const custLoyalty = await getCustomerLoyalty(targetUserId, targetPhone);
       setLoyaltyData(custLoyalty);
 
       const rewardsRes = await getLoyaltyRewards();
@@ -78,7 +79,7 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
       const vchList = await getRewardRedemptions(targetUserId);
       setVouchers(vchList);
 
-      const txList = await getLoyaltyTransactions(targetUserId);
+      const txList = await getLoyaltyTransactions(targetUserId, targetPhone);
       setTransactions(txList);
     } catch (err) {
       console.error('Error loading loyalty data:', err);

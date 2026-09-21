@@ -448,6 +448,79 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
             </button>
           </div>
 
+          {/* Background Push Notification Toggle Card (Mobile) */}
+          <div className="mt-4 p-3 rounded-xl bg-white border border-[#E0F2FE] shadow-2xs space-y-2">
+            <div className="flex items-start gap-2.5">
+              <div className="p-1.5 rounded-lg bg-[#F0F7FF] text-[#0284C7] shrink-0">
+                <Bell className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0 font-medium">
+                <p className="text-[10px] font-mono font-bold text-[#172033] uppercase">
+                  BACKGROUND NOTIFICATION
+                </p>
+                {isPushCapable ? (
+                  <p className="text-[10px] font-semibold mt-0.5">
+                    {isPushActive ? (
+                      <span className="text-emerald-600 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Notifikasi aktif
+                      </span>
+                    ) : (
+                      <span className="text-amber-500 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                        Belum aktif
+                      </span>
+                    )}
+                  </p>
+                ) : (
+                  <p className="text-[10px] font-semibold mt-0.5 text-red-500">
+                    Tidak Didukung
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {isPushCapable ? (
+              <button
+                disabled={isSubscribing}
+                onClick={async () => {
+                  setIsSubscribing(true);
+                  if (isPushActive) {
+                    const success = await unsubscribeAdminPush();
+                    if (success) setIsPushActive(false);
+                  } else {
+                    const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
+                    const success = await subscribeAdminPush(auth.username || 'Admin', outletContext, auth.role);
+                    if (success) setIsPushActive(true);
+                  }
+                  setIsSubscribing(false);
+                }}
+                className={`w-full py-1.5 px-3 rounded-lg text-[11px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  isPushActive
+                    ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                    : 'bg-[#0284C7] text-white hover:bg-[#0369a1]'
+                }`}
+              >
+                {isSubscribing ? 'Memproses...' : isPushActive ? 'Matikan Notifikasi' : 'Aktifkan Notifikasi'}
+              </button>
+            ) : (
+              <div className="space-y-1">
+                {/iPad|iPhone|iPod/.test(typeof navigator !== 'undefined' ? navigator.userAgent : '') ? (
+                  <button
+                    onClick={() => setShowIosGuide(true)}
+                    className="w-full py-1.5 px-3 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    Instruksi iPhone / iOS
+                  </button>
+                ) : (
+                  <p className="text-[9px] text-[#64748B] text-center italic">
+                    Gunakan browser modern & HTTPS untuk mengaktifkan push.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="py-4 space-y-1">
             {(isOutletAdmin ? outletAdminNavItems : [...mainSystemItems, ...contentItems]).map(
               (item) => {

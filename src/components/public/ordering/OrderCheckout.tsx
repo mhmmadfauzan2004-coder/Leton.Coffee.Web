@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useContent } from '../../../context/ContentContext';
 import { resolveMediaUrl } from '../../../utils/api';
 import {
@@ -24,11 +24,16 @@ import {
   Bolt,
   ShieldCheck,
   Trash2,
-  Layers,
   Sparkles,
-  Droplets,
   Award,
   User,
+  Coffee,
+  Check,
+  Copy,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Plus,
 } from 'lucide-react';
 
 interface OrderCheckoutProps {
@@ -71,6 +76,8 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   const [orderNote, setOrderNote] = useState<string>(generalNote || '');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('QRIS');
   const [formError, setFormError] = useState<string>('');
+  const [copiedAmount, setCopiedAmount] = useState<boolean>(false);
+  const [showQrisInstructions, setShowQrisInstructions] = useState<boolean>(false);
 
   // QRIS Receipt Upload State
   const [uploadedReceiptUrl, setUploadedReceiptUrl] = useState<string | null>(null);
@@ -80,6 +87,22 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [uploadedFileSize, setUploadedFileSize] = useState<string | null>(null);
 
+  // Timer countdown
+  const [timeLeft, setTimeLeft] = useState<number>(15 * 60);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const subtotal = cart.reduce(
     (acc, item) =>
       acc + calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup, item.customOptions) * item.quantity,
@@ -87,6 +110,26 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   );
   const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
   const grandTotal = subtotal;
+
+  const handleCopyAmount = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(grandTotal.toString());
+      setCopiedAmount(true);
+      setTimeout(() => setCopiedAmount(false), 2000);
+    }
+  };
+
+  // Quick note chips
+  const quickNotes = [
+    'Pisahkan es batu',
+    'Less sugar (50%)',
+    'Sedotan ramah lingkungan',
+    'Label nama di cup',
+  ];
+
+  const handleAddQuickNote = (note: string) => {
+    setOrderNote((prev) => (prev ? `${prev}, ${note}` : note));
+  };
 
   // File upload handler for QRIS
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -153,7 +196,7 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
     }
 
     if (paymentMethod === 'QRIS' && !uploadedReceiptUrl) {
-      setFormError('Bukti transfer / pembayaran QRIS wajib diupload sebelum Anda dapat menekan tombol PLACE ORDER.');
+      setFormError('Bukti transfer / screenshot pembayaran QRIS wajib diunggah sebelum melanjutkan.');
       return;
     }
 
@@ -175,403 +218,477 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
     (paymentMethod === 'QRIS' && !uploadedReceiptUrl);
 
   return (
-    <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12 bg-[#F8FBFF]">
-      {/* Top Step Bar & Visual Indicator */}
-      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center px-3 py-1 rounded-full bg-[#E0F2FE] text-[#0284C7] text-xs font-bold uppercase tracking-wider">
-              Checkout &amp; Instant Pay
-            </span>
-            <span className="text-xs text-[#64748B] font-mono">{outlet.name} Barista Station</span>
-          </div>
-          <h1 className="font-display font-black text-2xl sm:text-3xl text-[#172033] tracking-tight mt-1">
-            Konfirmasi &amp; Bayar Pesanan
+    <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 bg-[#f8f9ff] text-[#041d32] min-h-screen">
+      {/* Top Header & Stitch Stepper */}
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <button
+            type="button"
+            onClick={onBackToCart}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#006389] hover:underline mb-1.5 cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Kembali ke Keranjang</span>
+          </button>
+          <h1 className="font-extrabold text-xl sm:text-2xl text-[#041d32] tracking-tight">
+            Checkout &amp; Pembayaran
           </h1>
+          <p className="text-xs text-[#3e484f] mt-0.5">
+            Outlet: {outlet.name} • Siap diproses Barista
+          </p>
         </div>
 
-        {/* Stepper Indicator */}
-        <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-2xl border border-[#E0F2FE] shadow-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-[#0284C7] text-white flex items-center justify-center text-xs font-bold">
-              1
+        {/* Stitch Progress Tracker */}
+        <div className="inline-flex items-center gap-2 bg-white px-3.5 py-2 rounded-full border border-[#e4efff] shadow-xs">
+          <div className="flex items-center gap-1.5">
+            <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold">
+              <Check className="w-3 h-3" />
             </div>
-            <span className="text-xs text-[#172033] font-medium">Review</span>
+            <span className="text-xs font-semibold text-[#041d32]">Review</span>
           </div>
-          <div className="w-6 h-0.5 bg-[#0284C7]" />
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-[#0284C7] text-white flex items-center justify-center text-xs font-bold">
+          <div className="w-4 h-0.5 bg-[#006389]" />
+          <div className="flex items-center gap-1.5">
+            <div className="w-5 h-5 rounded-full bg-[#006389] text-white flex items-center justify-center text-[10px] font-bold">
               2
             </div>
-            <span className="text-xs text-[#0284C7] font-bold">QRIS Pay</span>
+            <span className="text-xs font-bold text-[#006389]">QRIS</span>
           </div>
-          <div className="w-6 h-0.5 bg-[#E0F2FE]" />
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-[#F0F7FF] text-[#64748B] flex items-center justify-center text-xs font-bold">
-              3
+          <div className="w-4 h-0.5 bg-[#e4efff]" />
+          <div className="flex items-center gap-1.5">
+            <div className="w-5 h-5 rounded-full bg-[#eef4ff] text-[#3e484f] flex items-center justify-center text-[10px] font-bold">
+              <Coffee className="w-3 h-3" />
             </div>
-            <span className="text-xs text-[#64748B]">Seduh</span>
+            <span className="text-xs text-[#3e484f]">Seduh</span>
           </div>
         </div>
-      </div>
-
-      {/* Back Button */}
-      <div className="mb-6">
-        <button
-          onClick={onBackToCart}
-          className="inline-flex items-center gap-2 text-xs font-semibold uppercase text-[#64748B] hover:text-[#0284C7] transition-colors cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4 text-[#0284C7]" />
-          <span>Kembali ke Keranjang Pesanan</span>
-        </button>
       </div>
 
       {formError && (
-        <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2 font-medium">
+        <div className="mb-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2 font-medium">
           <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
           <span>{formError}</span>
         </div>
       )}
 
-      {/* 2-COLUMN MAIN CONTENT */}
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* ================= LEFT COLUMN: ORDER DETAILS & CUSTOMER ================= */}
-        <div className="lg:col-span-7 flex flex-col gap-6">
-          {/* 1. Outlet & Service Type Confirmation */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-5">
-            {/* Selected Outlet Header */}
-            <div className="flex items-center justify-between bg-[#F8FBFF] p-4 rounded-xl border border-[#E0F2FE]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center">
-                  <Store className="w-5 h-5" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[10px] uppercase tracking-wider text-[#64748B] font-bold font-mono">
-                    Outlet Ditugaskan
-                  </span>
-                  <span className="font-display font-black text-base text-[#172033]">
-                    {outlet.name}
-                  </span>
-                  <span className="text-xs text-[#64748B]">{outlet.address}</span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={onBackToCart}
-                className="text-xs text-[#0284C7] hover:underline font-bold transition-colors cursor-pointer"
-              >
-                Ubah
-              </button>
+      {/* Main Checkout Form */}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Section 1: Outlet Card */}
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#e4efff] shadow-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-[#eef4ff] text-[#006389] flex items-center justify-center shrink-0">
+              <Store className="w-4.5 h-4.5" />
             </div>
-
-            {/* Service Type Switcher (Dine-in / Take-away) */}
-            <div className="space-y-2">
-              <label className="text-xs text-[#172033] font-bold flex items-center gap-1.5 uppercase tracking-wide">
-                <Utensils className="w-4 h-4 text-[#0284C7]" />
-                <span>Tipe Layanan</span>
-              </label>
-              <div className="grid grid-cols-2 gap-3 p-1 bg-[#F0F7FF] rounded-xl border border-[#E0F2FE]">
-                <button
-                  type="button"
-                  onClick={() => setOrderType('DINE IN')}
-                  className={`py-3 px-4 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                    orderType === 'DINE IN'
-                      ? 'bg-white text-[#0284C7] shadow-sm border border-[#E0F2FE]'
-                      : 'text-[#64748B] hover:text-[#172033]'
-                  }`}
-                >
-                  <Utensils className="w-4 h-4" />
-                  <span>Dine In (Makan di Tempat)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOrderType('TAKE AWAY')}
-                  className={`py-3 px-4 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                    orderType === 'TAKE AWAY'
-                      ? 'bg-white text-[#0284C7] shadow-sm border border-[#E0F2FE]'
-                      : 'text-[#64748B] hover:text-[#172033]'
-                  }`}
-                >
-                  <Package className="w-4 h-4" />
-                  <span>Take Away (Bawa Pulang)</span>
-                </button>
-              </div>
+            <div className="min-w-0">
+              <span className="text-[10px] uppercase tracking-wider text-[#3e484f] font-bold block">
+                Outlet Ditugaskan
+              </span>
+              <h3 className="font-extrabold text-sm text-[#041d32] truncate">
+                Leton Coffee — {outlet.name}
+              </h3>
+              <p className="text-[11px] text-[#3e484f] truncate">{outlet.address}</p>
             </div>
+          </div>
+          <button
+            type="button"
+            onClick={onBackToCart}
+            className="text-xs font-bold text-[#006389] hover:underline px-2 py-1 rounded hover:bg-[#eef4ff] transition-colors cursor-pointer shrink-0"
+          >
+            Ubah
+          </button>
+        </div>
 
-            {/* Table Number Selector (When Dine In) */}
-            {orderType === 'DINE IN' && (
-              <div className="space-y-1.5">
-                <label className="text-xs text-[#172033] font-bold flex items-center gap-1.5 uppercase tracking-wide">
-                  <span className="text-[#0284C7] font-mono">#</span>
-                  <span>Nomor Meja Pelanggan <span className="text-rose-500">*</span></span>
-                </label>
-                <div className="relative flex items-center">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Meja 14 (Lantai 1)"
-                    value={tableNumber}
-                    onChange={(e) => setTableNumber(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white border border-[#E0F2FE] rounded-xl text-sm font-semibold text-[#172033] focus:outline-none focus:border-[#38BDF8]"
-                  />
-                  <span className="absolute right-3 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#E0F2FE] text-[#0284C7] text-[10px] font-bold">
-                    Dine In
-                  </span>
-                </div>
-              </div>
-            )}
+        {/* Section 2: Ringkasan Pesanan (Order Items Summary) */}
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#e4efff] shadow-xs space-y-3">
+          <div className="flex items-center justify-between border-b border-[#eef4ff] pb-2.5">
+            <div className="flex items-center gap-2">
+              <h2 className="font-extrabold text-sm text-[#041d32] uppercase tracking-wide">
+                Ringkasan Pesanan
+              </h2>
+            </div>
+            <span className="px-2.5 py-0.5 rounded-full bg-[#eef4ff] text-[#006389] text-[11px] font-bold">
+              {totalItems} Menu
+            </span>
+          </div>
 
-            {/* Customer Info Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-1">
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs text-[#172033] font-bold">
-                    Nama Lengkap <span className="text-rose-500">*</span>
-                  </label>
-                  {customerProfile && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#C39A6B]">
-                      <Award className="w-3 h-3 text-[#C39A6B] shrink-0" />
-                      <span>Member Leton</span>
-                    </span>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  required
-                  disabled={Boolean(customerProfile)}
-                  placeholder="Nama pemesan..."
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 rounded-xl text-sm text-[#172033] focus:outline-none focus:border-[#38BDF8] ${
-                    customerProfile 
-                      ? 'bg-amber-50/50 border-[#C39A6B]/30 font-semibold text-[#172033]' 
-                      : 'bg-white border border-[#E0F2FE]'
-                  }`}
-                />
-              </div>
+          <div className="divide-y divide-[#eef4ff]">
+            {cart.map((item, idx) => {
+              const unitPrice = calculateItemUnitPrice(
+                item.product.price,
+                item.size,
+                item.topping,
+                item.syrup,
+                item.customOptions
+              );
+              const hasSize = item.size && item.size.name;
+              const hasTopping = item.topping && item.topping.name !== 'No Topping';
+              const hasSyrup = item.syrup && item.syrup.name !== 'No Syrup';
 
-              <div className="space-y-1.5">
-                <label className="text-xs text-[#172033] font-bold">No. WhatsApp</label>
-                <input
-                  type="tel"
-                  disabled={Boolean(customerProfile)}
-                  placeholder="0812-xxxx-xxxx"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  className={`w-full px-3.5 py-2.5 rounded-xl text-sm text-[#172033] focus:outline-none focus:border-[#38BDF8] ${
-                    customerProfile 
-                      ? 'bg-amber-50/50 border-[#C39A6B]/30 font-semibold text-[#172033]' 
-                      : 'bg-white border border-[#E0F2FE]'
-                  }`}
-                />
-              </div>
-
-              {/* Pilihan Keanggotaan Member Saat Checkout */}
-              <div className="space-y-2 md:col-span-2 pt-2 border-t border-[#E0F2FE]">
-                <label className="text-xs text-[#172033] font-bold flex items-center gap-1.5 uppercase tracking-wider">
-                  <Award className="w-4 h-4 text-[#0284C7]" />
-                  <span>Keanggotaan Member</span>
-                </label>
-                {customerProfile ? (
-                  <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-[#C39A6B]/40 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-[#C39A6B] text-white flex items-center justify-center font-bold text-xs">
-                        <Award className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-[#172033] block">
-                          Terdaftar sebagai Member: <span className="text-[#0284C7]">{customerProfile.namaLengkap}</span>
+              return (
+                <div key={idx} className="py-2.5 flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-[#eef4ff] overflow-hidden shrink-0 flex items-center justify-center">
+                      {item.product.image ? (
+                        <img
+                          src={resolveMediaUrl(item.product.image)}
+                          alt={item.product.name}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <Coffee className="w-5 h-5 text-[#006389]" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-xs text-[#006389]">
+                          {item.quantity}x
                         </span>
-                        <span className="text-[10px] text-[#64748B]">
-                          Pesanan akan otomatis terhubung dengan akun member Anda.
-                        </span>
+                        <h4 className="font-bold text-xs sm:text-sm text-[#041d32] truncate">
+                          {item.product.name}
+                        </h4>
                       </div>
+                      <div className="flex flex-wrap gap-1 mt-1 text-[10px] text-[#3e484f]">
+                        {hasSize && (
+                          <span className="px-1.5 py-0.2 rounded bg-[#eef4ff] text-[#006389] font-medium">
+                            {item.size!.name}
+                          </span>
+                        )}
+                        {hasTopping && (
+                          <span className="px-1.5 py-0.2 rounded bg-[#eef4ff] text-[#006389] font-medium">
+                            {item.topping!.name}
+                          </span>
+                        )}
+                        {hasSyrup && (
+                          <span className="px-1.5 py-0.2 rounded bg-[#eef4ff] text-[#006389] font-medium">
+                            {item.syrup!.name}
+                          </span>
+                        )}
+                        {item.customOptions && item.customOptions.map((co) => (
+                          <span key={co.groupId} className="px-1.5 py-0.2 rounded bg-[#eef4ff] text-[#006389] font-medium">
+                            {co.optionName}
+                          </span>
+                        ))}
+                      </div>
+                      {item.note && (
+                        <p className="text-[11px] text-amber-700 italic mt-0.5">
+                          Catatan: {item.note}
+                        </p>
+                      )}
                     </div>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-3 p-1.5 bg-[#F0F7FF] rounded-2xl border border-[#E0F2FE]">
-                    <button
-                      type="button"
-                      onClick={() => setIsMemberChoice(true)}
-                      className={`py-3 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                        isMemberChoice
-                          ? 'bg-white text-[#0284C7] shadow-sm border border-[#E0F2FE] ring-1 ring-[#0284C7]/20'
-                          : 'text-[#64748B] hover:text-[#172033]'
-                      }`}
-                    >
-                      <Award className="w-4 h-4 text-[#0284C7]" />
-                      <span>Jadi Member</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsMemberChoice(false)}
-                      className={`py-3 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                        !isMemberChoice
-                          ? 'bg-white text-slate-700 shadow-sm border border-[#E0F2FE] ring-1 ring-slate-400/20'
-                          : 'text-[#64748B] hover:text-[#172033]'
-                      }`}
-                    >
-                      <User className="w-4 h-4 text-slate-500" />
-                      <span>Tidak Jadi Member</span>
-                    </button>
-                  </div>
-                )}
-              </div>
 
-              <div className="space-y-1.5 md:col-span-2">
-                <label className="text-xs text-[#172033] font-bold">Catatan Tambahan untuk Barista</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Pisahkan es batu, less sweet, dll..."
-                  value={orderNote}
-                  onChange={(e) => setOrderNote(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#E0F2FE] rounded-xl text-sm text-[#172033] focus:outline-none focus:border-[#38BDF8]"
-                />
+                  <span className="font-extrabold text-xs sm:text-sm text-[#041d32] whitespace-nowrap shrink-0">
+                    {formatRupiah(unitPrice * item.quantity)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="pt-2 border-t border-[#eef4ff] flex items-center justify-between">
+            <button
+              type="button"
+              onClick={onBackToCart}
+              className="text-xs font-bold text-[#006389] hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Tambah pesanan lain</span>
+            </button>
+            <span className="text-xs font-bold text-[#3e484f]">
+              Subtotal: <strong className="text-[#041d32]">{formatRupiah(subtotal)}</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* Section 3: "Mau Duduk Dimana?" (Service Type & Table) */}
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#e4efff] shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-extrabold text-sm text-[#041d32] uppercase tracking-wide">
+              Mau Duduk Dimana?
+            </h2>
+            <span className="text-[11px] text-[#3e484f]">
+              {orderType === 'DINE IN' ? 'Santai di Cafe' : 'Ambil di Counter'}
+            </span>
+          </div>
+
+          {/* Dual Toggle Pill Buttons */}
+          <div className="grid grid-cols-2 gap-2 p-1 bg-[#eef4ff] rounded-xl border border-[#e4efff]">
+            <button
+              type="button"
+              onClick={() => setOrderType('DINE IN')}
+              className={`py-2.5 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                orderType === 'DINE IN'
+                  ? 'bg-white text-[#006389] shadow-xs border border-[#e4efff]'
+                  : 'text-[#3e484f] hover:text-[#041d32]'
+              }`}
+            >
+              <Utensils className="w-4 h-4" />
+              <span>DINE IN (Makan di Tempat)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrderType('TAKE AWAY')}
+              className={`py-2.5 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                orderType === 'TAKE AWAY'
+                  ? 'bg-white text-[#006389] shadow-xs border border-[#e4efff]'
+                  : 'text-[#3e484f] hover:text-[#041d32]'
+              }`}
+            >
+              <Package className="w-4 h-4" />
+              <span>TAKE AWAY (Bawa Pulang)</span>
+            </button>
+          </div>
+
+          {/* Conditional Table Number for Dine In */}
+          {orderType === 'DINE IN' ? (
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-[#041d32] font-bold flex items-center gap-1">
+                  <span>Nomor Meja Pelanggan</span>
+                  <span className="text-rose-500">*</span>
+                </label>
+                <span className="text-[10px] text-[#3e484f]">Tersedia Meja di Area Cafe</span>
               </div>
+              <input
+                type="text"
+                required
+                value={tableNumber}
+                onChange={(e) => setTableNumber(e.target.value)}
+                placeholder="Misal: 08 (Lantai 1)"
+                className="w-full px-3.5 py-2.5 bg-white border border-[#e4efff] rounded-lg text-xs sm:text-sm font-semibold text-[#041d32] focus:outline-none focus:border-[#006389] shadow-2xs"
+              />
+              <p className="text-[11px] text-[#3e484f]">
+                Lihat stiker nomor akrilik di atas meja Anda agar barista dapat mengantar pesanan.
+              </p>
+            </div>
+          ) : (
+            <div className="p-3 rounded-lg bg-[#eef4ff] border border-[#e4efff] text-xs text-[#006389] flex items-center gap-2">
+              <Package className="w-4 h-4 shrink-0" />
+              <span>
+                Kemasan Ramah Lingkungan — Pesanan disiapkan dalam paper bag Leton siap ambil di Pick-up Counter dalam 5-10 menit.
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Section 4: Data Pemesan & Member */}
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#e4efff] shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-extrabold text-sm text-[#041d32] uppercase tracking-wide">
+              Informasi Pemesan
+            </h2>
+            {customerProfile && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                <Award className="w-3.5 h-3.5 text-amber-600" />
+                <span>Member Terdaftar</span>
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#041d32]">
+                Nama Lengkap <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                disabled={Boolean(customerProfile)}
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="Nama Anda..."
+                className={`w-full px-3.5 py-2 rounded-lg text-xs sm:text-sm text-[#041d32] focus:outline-none focus:border-[#006389] ${
+                  customerProfile
+                    ? 'bg-amber-50/60 border border-amber-200 font-semibold'
+                    : 'bg-white border border-[#e4efff]'
+                }`}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#041d32]">
+                No. WhatsApp <span className="text-slate-400 font-normal">(Untuk Notifikasi)</span>
+              </label>
+              <input
+                type="tel"
+                disabled={Boolean(customerProfile)}
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="0812-xxxx-xxxx"
+                className={`w-full px-3.5 py-2 rounded-lg text-xs sm:text-sm text-[#041d32] focus:outline-none focus:border-[#006389] ${
+                  customerProfile
+                    ? 'bg-amber-50/60 border border-amber-200 font-semibold'
+                    : 'bg-white border border-[#e4efff]'
+                }`}
+              />
             </div>
           </div>
 
-          {/* 2. Cart Items List */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h2 className="font-display font-black text-base text-[#172033] uppercase">
-                  Rincian Minuman &amp; Makanan
-                </h2>
+          {/* Member Choice Section */}
+          {!customerProfile && (
+            <div className="pt-2 border-t border-[#eef4ff]">
+              <label className="text-xs font-bold text-[#041d32] block mb-2">
+                Keanggotaan Member Leton
+              </label>
+              <div className="grid grid-cols-2 gap-2 p-1 bg-[#eef4ff] rounded-xl border border-[#e4efff]">
+                <button
+                  type="button"
+                  onClick={() => setIsMemberChoice(true)}
+                  className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    isMemberChoice
+                      ? 'bg-white text-[#006389] shadow-xs border border-[#e4efff]'
+                      : 'text-[#3e484f] hover:text-[#041d32]'
+                  }`}
+                >
+                  <Award className="w-3.5 h-3.5 text-[#006389]" />
+                  <span>Daftar Jadi Member</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsMemberChoice(false)}
+                  className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    !isMemberChoice
+                      ? 'bg-white text-slate-700 shadow-xs border border-[#e4efff]'
+                      : 'text-[#3e484f] hover:text-[#041d32]'
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Tanpa Member</span>
+                </button>
               </div>
-              <span className="px-2.5 py-1 rounded-full bg-[#F0F7FF] text-[#0284C7] text-xs font-bold">
-                {totalItems} Menu Dipilih
-              </span>
             </div>
+          )}
+        </div>
 
-            <div className="flex flex-col gap-3">
-              {cart.map((item, idx) => {
-                const unitPrice = calculateItemUnitPrice(item.product.price, item.size, item.topping, item.syrup, item.customOptions);
-                const hasSize = item.size && item.size.name;
-                const hasTopping = item.topping && item.topping.name !== 'No Topping';
-                const hasSyrup = item.syrup && item.syrup.name !== 'No Syrup';
+        {/* Section 5: Catatan Tambahan */}
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#e4efff] shadow-xs space-y-2.5">
+          <label className="text-xs font-bold text-[#041d32] block">
+            Catatan Pesanan <span className="text-slate-400 font-normal">(Opsional)</span>
+          </label>
+          <input
+            type="text"
+            value={orderNote}
+            onChange={(e) => setOrderNote(e.target.value)}
+            placeholder="Contoh: Pisahkan es batu, less sweet, dll..."
+            className="w-full px-3.5 py-2.5 bg-white border border-[#e4efff] rounded-lg text-xs sm:text-sm text-[#041d32] focus:outline-none focus:border-[#006389]"
+          />
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-[10px] text-[#3e484f] font-semibold">Cepat tambah:</span>
+            {quickNotes.map((qn) => (
+              <button
+                key={qn}
+                type="button"
+                onClick={() => handleAddQuickNote(qn)}
+                className="px-2 py-0.5 rounded-full bg-[#eef4ff] hover:bg-[#e4efff] text-[#006389] text-[10px] font-bold transition-colors cursor-pointer"
+              >
+                + {qn}
+              </button>
+            ))}
+          </div>
+        </div>
 
-                return (
-                  <div
-                    key={idx}
-                    className="p-3.5 rounded-xl bg-[#F8FBFF] border border-[#E0F2FE] flex items-start justify-between gap-3"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 rounded-lg bg-white border border-[#E0F2FE] flex items-center justify-center font-bold text-[#0284C7] shrink-0 font-mono">
-                        {item.quantity}x
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="font-display font-bold text-sm text-[#172033]">
-                          {item.product.name}
-                        </span>
-                        <div className="flex flex-wrap gap-1 mt-0.5 text-[11px] text-[#64748B]">
-                          {hasSize && (
-                            <span className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono font-medium">
-                              Size: {item.size!.name}{item.size!.price > 0 ? ` (+${formatRupiah(item.size!.price)})` : ''}
-                            </span>
-                          )}
-                          {hasTopping && (
-                            <span className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono font-medium">
-                              Top: {item.topping!.name} (+{formatRupiah(item.topping!.price)})
-                            </span>
-                          )}
-                          {hasSyrup && (
-                            <span className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono font-medium">
-                              Syr: {item.syrup!.name} (+{formatRupiah(item.syrup!.price)})
-                            </span>
-                          )}
-                          {item.customOptions && item.customOptions.length > 0 && (
-                            item.customOptions.map((co) => (
-                              <span key={co.groupId} className="px-1.5 py-0.5 bg-[#E0F2FE] text-[#0284C7] rounded font-mono font-medium">
-                                {co.groupName}: {co.optionName}{co.price > 0 ? ` (+${formatRupiah(co.price)})` : ''}
-                              </span>
-                            ))
-                          )}
-                        </div>
-                        {item.note && (
-                          <span className="text-[11px] text-slate-500 italic mt-0.5">
-                            Catatan: {item.note}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="text-right font-mono">
-                      <span className="font-bold text-sm text-[#172033] block">
-                        {formatRupiah(unitPrice * item.quantity)}
-                      </span>
-                      <span className="text-[10px] text-[#64748B]">
-                        @{formatRupiah(unitPrice)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+        {/* Section 6: Detail Pembayaran (Ringkasan Biaya) */}
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#e4efff] shadow-xs space-y-2.5">
+          <h2 className="font-extrabold text-sm text-[#041d32] uppercase tracking-wide border-b border-[#eef4ff] pb-2">
+            Rincian Pembayaran
+          </h2>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex justify-between text-[#3e484f]">
+              <span>Subtotal Pesanan</span>
+              <span className="font-bold text-[#041d32]">{formatRupiah(subtotal)}</span>
             </div>
-
-            {/* Total summary */}
-            <div className="pt-3 border-t border-[#E0F2FE] flex justify-between items-center text-sm">
-              <span className="font-bold text-[#172033]">Total Pembayaran</span>
-              <span className="font-mono font-black text-lg text-[#0284C7]">
-                {formatRupiah(grandTotal)}
+            <div className="flex justify-between text-[#3e484f]">
+              <span>Biaya Layanan &amp; Antar</span>
+              <span className="font-bold text-emerald-600">GRATIS</span>
+            </div>
+            <div className="flex justify-between text-[#3e484f]">
+              <span className="flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <span>Poin Leton yang Didapat</span>
               </span>
+              <span className="font-bold text-amber-600">+{Math.floor(grandTotal / 1000)} Pts</span>
+            </div>
+            <div className="pt-2 border-t border-[#eef4ff] flex justify-between items-center text-sm">
+              <span className="font-extrabold text-[#041d32]">Total Pembayaran</span>
+              <span className="font-black text-lg text-[#006389]">{formatRupiah(grandTotal)}</span>
             </div>
           </div>
         </div>
 
-        {/* ================= RIGHT COLUMN: QRIS PAYMENT & UPLOAD ================= */}
-        <div className="lg:col-span-5 flex flex-col gap-6">
-          {/* 1. Payment Method Card */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-4">
-            <div className="flex flex-col gap-1 border-b border-[#E0F2FE] pb-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-[#0284C7] font-bold">
-                  Metode Pembayaran
+        {/* Section 7: QRIS Payment Card (Stitch Design) */}
+        <div className="bg-white rounded-xl p-4 sm:p-5 border border-[#e4efff] shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#eef4ff] pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-[#006389] uppercase tracking-wider bg-[#eef4ff] px-2 py-0.5 rounded-full">
+                  QRIS INSTANT PAY
                 </span>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>QRIS BI Aktif</span>
-                </div>
+                  <span>Sistem Realtime</span>
+                </span>
               </div>
-              <h3 className="font-display font-black text-sm text-[#172033] uppercase">
-                QRIS Instant Pay (Semua Bank &amp; E-Wallet)
+              <h3 className="font-extrabold text-sm sm:text-base text-[#041d32] mt-1">
+                Scan QRIS Semua Bank &amp; E-Wallet
               </h3>
             </div>
 
-            {/* Bank Chips */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              {['BCA', 'Mandiri', 'BRI', 'BNI', 'GoPay', 'OVO', 'DANA', 'ShopeePay'].map((b) => (
-                <span
-                  key={b}
-                  className="px-2 py-0.5 rounded-md bg-[#F0F7FF] text-[#0284C7] font-mono text-[10px] font-bold border border-[#E0F2FE]"
-                >
-                  {b}
-                </span>
-              ))}
+            {/* Countdown Badge */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold">
+              <Clock className="w-3.5 h-3.5 text-amber-600" />
+              <span>Selesaikan dalam {formatTime(timeLeft)}</span>
+            </div>
+          </div>
+
+          {/* Copy Amount Box */}
+          <div className="p-3 rounded-xl bg-[#eef4ff] border border-[#e4efff] flex items-center justify-between gap-3">
+            <div>
+              <span className="text-[10px] text-[#3e484f] uppercase tracking-wider block font-bold">
+                Total yang harus dibayar:
+              </span>
+              <span className="font-black text-lg text-[#006389]">
+                {formatRupiah(grandTotal)}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleCopyAmount}
+              className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-[#e4efff] text-xs font-bold text-[#006389] flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+            >
+              {copiedAmount ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-emerald-600">Tersalin!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Salin Nominal</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* QR Code Container */}
+          <div className="bg-[#f8f9ff] rounded-xl p-4 border border-[#e4efff] flex flex-col items-center justify-center text-center">
+            <div className="text-[11px] font-extrabold text-[#041d32] uppercase tracking-wide mb-0.5">
+              LETON COFFEE {outlet.shortName?.toUpperCase() || 'DUMAI'}
+            </div>
+            <div className="text-[10px] text-[#3e484f] mb-3 font-mono">
+              NMID: ID102003921829 • Standar Pembayaran Nasional
             </div>
 
-            {/* QRIS SVG Representation */}
-            <div className="bg-[#F8FBFF] rounded-2xl p-4 border border-[#E0F2FE] flex flex-col items-center justify-center text-center">
-              <div className="text-[11px] font-bold text-[#172033] mb-1">
-                LETON COFFEE {outlet.shortName?.toUpperCase() || 'SUDIRMAN'}
-              </div>
-              <div className="text-[10px] font-mono text-[#64748B] mb-3">
-                NMID: ID102003921829
-              </div>
-
-              {/* QR Code Display */}
+            {/* QR Box with corner styling */}
+            <div className="p-3.5 bg-white rounded-xl border border-[#e4efff] shadow-sm relative w-56 max-w-full flex items-center justify-center">
               {activeQrisUrl ? (
-                <div className="p-3 bg-white rounded-xl border border-[#E0F2FE] shadow-sm relative w-[#220px] max-w-full flex items-center justify-center">
-                  <img
-                    src={resolveMediaUrl(activeQrisUrl)}
-                    alt={`QRIS ${outlet.name}`}
-                    className="w-full h-auto rounded-lg object-contain max-h-64"
-                  />
-                </div>
+                <img
+                  src={resolveMediaUrl(activeQrisUrl)}
+                  alt={`QRIS ${outlet.name}`}
+                  className="w-full h-auto rounded-lg object-contain max-h-56"
+                />
               ) : (
-                <div className="p-3 bg-white rounded-xl border border-[#E0F2FE] shadow-sm relative w-48 h-48 flex items-center justify-center">
-                  <svg className="w-full h-full text-[#172033]" fill="none" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg">
+                <div className="relative w-44 h-44 flex items-center justify-center">
+                  <svg className="w-full h-full text-[#041d32]" fill="none" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg">
                     <rect fill="currentColor" height="35" rx="4" width="35" x="10" y="10" />
                     <rect fill="#ffffff" height="25" rx="2" width="25" x="15" y="15" />
                     <rect fill="currentColor" height="15" rx="1" width="15" x="20" y="20" />
@@ -581,7 +698,6 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
                     <rect fill="currentColor" height="35" rx="4" width="35" x="10" y="95" />
                     <rect fill="#ffffff" height="25" rx="2" width="25" x="15" y="100" />
                     <rect fill="currentColor" height="15" rx="1" width="15" x="20" y="105" />
-                    {/* Data Points */}
                     <rect fill="currentColor" height="6" width="6" x="52" y="12" />
                     <rect fill="currentColor" height="6" width="6" x="62" y="12" />
                     <rect fill="currentColor" height="6" width="6" x="72" y="12" />
@@ -616,42 +732,48 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
                     <rect fill="currentColor" height="6" width="6" x="64" y="122" />
                     <rect fill="currentColor" height="6" width="6" x="88" y="122" />
                   </svg>
-                  {/* Central Brand Tag */}
-                  <div className="absolute inset-0 m-auto w-10 h-10 rounded-lg bg-white border border-[#E0F2FE] shadow-md flex items-center justify-center font-display font-black text-xs text-[#0284C7]">
+                  <div className="absolute inset-0 m-auto w-10 h-10 rounded-lg bg-white border border-[#e4efff] shadow-md flex items-center justify-center font-black text-xs text-[#006389]">
                     LTC
                   </div>
                 </div>
               )}
+            </div>
 
-              <div className="mt-3 inline-flex items-center gap-1.5 bg-white px-3 py-1 rounded-full border border-[#E0F2FE] shadow-sm">
-                <span className="text-[10px] text-[#64748B]">Total Scan:</span>
-                <span className="text-xs font-mono font-extrabold text-[#0284C7]">
-                  {formatRupiah(grandTotal)}
+            {/* Bank/Wallet Logos Chips */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3 max-w-sm">
+              {['BCA', 'Mandiri', 'BRI', 'BNI', 'GoPay', 'OVO', 'DANA', 'ShopeePay'].map((b) => (
+                <span
+                  key={b}
+                  className="px-2 py-0.5 rounded bg-white text-[#006389] font-mono text-[10px] font-bold border border-[#e4efff]"
+                >
+                  {b}
                 </span>
-              </div>
+              ))}
             </div>
           </div>
 
-          {/* 3. Bukti Pembayaran Upload Area (Mandatory for QRIS) */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-[#E0F2FE] shadow-sm space-y-3">
+          {/* Upload Bukti Transfer (Mandatory for QRIS) */}
+          <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between">
-              <span className="font-display font-bold text-xs sm:text-sm text-[#172033] uppercase">
-                Bukti Transfer / Screenshot
+              <label className="text-xs font-bold text-[#041d32] uppercase tracking-wide">
+                Unggah Bukti Transfer / Screenshot
+              </label>
+              <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                Wajib Diunggah
               </span>
-              <span className="text-[10px] font-bold text-rose-600 font-mono">Wajib Diunggah</span>
             </div>
 
             {uploadedReceiptUrl ? (
-              <div className="p-3.5 rounded-xl bg-[#F0F7FF] border border-[#E0F2FE] flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-white border border-[#E0F2FE] flex items-center justify-center text-[#0284C7]">
+              <div className="p-3.5 rounded-xl bg-[#eef4ff] border border-[#e4efff] flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-lg bg-white border border-[#e4efff] flex items-center justify-center text-[#006389] shrink-0">
                     <FileCheck className="w-5 h-5 text-emerald-600" />
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold text-[#172033] truncate max-w-[180px]">
-                      {uploadedFileName || 'Bukti_Transfer.jpg'}
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-[#041d32] truncate block">
+                      {uploadedFileName || 'Bukti_Pembayaran.jpg'}
                     </span>
-                    <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                    <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" /> Berhasil Diunggah ({uploadedFileSize || 'Siap'})
                     </span>
                   </div>
@@ -660,14 +782,14 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
                 <button
                   type="button"
                   onClick={handleClearReceipt}
-                  className="p-1.5 rounded-lg text-[#64748B] hover:text-rose-600 hover:bg-white transition-colors cursor-pointer"
-                  title="Hapus / Ganti File"
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-white transition-colors cursor-pointer shrink-0"
+                  title="Ganti Foto"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             ) : (
-              <label className="p-5 rounded-xl bg-[#F8FBFF] border-2 border-dashed border-[#BAE6FD] hover:border-[#0284C7] flex flex-col items-center justify-center text-center cursor-pointer transition-colors">
+              <label className="p-4 sm:p-5 rounded-xl bg-[#f8f9ff] border-2 border-dashed border-[#c6e7ff] hover:border-[#006389] flex flex-col items-center justify-center text-center cursor-pointer transition-colors group">
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
@@ -675,11 +797,11 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
                   disabled={isUploadingReceipt}
                   className="hidden"
                 />
-                <UploadCloud className="w-7 h-7 text-[#0284C7] mb-1.5 animate-bounce" />
-                <span className="text-xs font-bold text-[#172033]">
-                  {isUploadingReceipt ? 'Mengunggah Bukti Pembayaran...' : 'Klik untuk Upload Bukti Transfer'}
+                <UploadCloud className="w-8 h-8 text-[#006389] mb-1 group-hover:-translate-y-0.5 transition-transform" />
+                <span className="text-xs font-bold text-[#041d32]">
+                  {isUploadingReceipt ? 'Mengunggah Bukti Pembayaran...' : 'PILIH FOTO / SCREENSHOT STRUK'}
                 </span>
-                <span className="text-[10px] text-[#64748B] mt-0.5">
+                <span className="text-[10px] text-[#3e484f] mt-0.5">
                   Format JPG, PNG, atau Screenshot m-Banking (Maks. 5 MB)
                 </span>
               </label>
@@ -688,33 +810,57 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
             {receiptUploadError && (
               <p className="text-[11px] text-rose-600 font-medium">{receiptUploadError}</p>
             )}
+
+            <p className="text-[11px] text-[#3e484f]">
+              Menyertakan struk akan mempercepat barista kami memulai pesanan Anda.
+            </p>
           </div>
 
-          {/* 4. Final Submit Button */}
-          <div className="space-y-3">
+          {/* Accordion Cara Membayar QRIS */}
+          <div className="border-t border-[#eef4ff] pt-2">
             <button
-              type="submit"
-              disabled={isPlaceOrderDisabled}
-              id="submit-order-btn"
-              className={`w-full py-4 px-6 rounded-xl font-display font-black text-sm tracking-wider uppercase shadow-md flex items-center justify-center gap-2 transition-all ${
-                isPlaceOrderDisabled
-                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                  : 'bg-[#0284C7] hover:bg-[#0369A1] text-white shadow-[0_4px_14px_rgba(2,132,199,0.25)] cursor-pointer'
-              }`}
+              type="button"
+              onClick={() => setShowQrisInstructions(!showQrisInstructions)}
+              className="w-full flex items-center justify-between text-xs font-bold text-[#006389] py-1 cursor-pointer"
             >
-              <span>{isSubmitting ? 'MEMPROSES PESANAN...' : 'PLACE ORDER & VERIFIKASI SEKARANG'}</span>
-              <Bolt className="w-5 h-5" />
+              <span>Cara Membayar dengan QRIS</span>
+              {showQrisInstructions ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
 
-            <div className="flex items-start gap-2 p-3 rounded-xl bg-[#F0F7FF] border border-[#E0F2FE] text-xs text-[#64748B]">
-              <ShieldCheck className="w-4 h-4 text-[#0284C7] shrink-0 mt-0.5" />
-              <span>
-                Pesanan Anda akan langsung diteruskan ke Kitchen Display Barista {outlet.name} secara real-time.
-              </span>
-            </div>
+            {showQrisInstructions && (
+              <div className="mt-2 text-xs text-[#3e484f] space-y-1.5 pl-3 border-l-2 border-[#006389]/30">
+                <p>1. Buka aplikasi m-Banking (BCA, Mandiri, BRI, dll) atau E-Wallet (GoPay, OVO, Dana, ShopeePay).</p>
+                <p>2. Pilih menu <strong>Scan / Bayar QRIS</strong> dan arahkan kamera ke barcode di atas (atau screenshot).</p>
+                <p>3. Masukkan nominal tepat <strong>{formatRupiah(grandTotal)}</strong> sesuai total pesanan.</p>
+                <p>4. Selesaikan pembayaran, simpan screenshot bukti, dan unggah pada kotak di atas.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Section 8: Final Submit Button */}
+        <div className="space-y-3 pt-2">
+          <button
+            type="submit"
+            disabled={isPlaceOrderDisabled}
+            id="submit-order-btn"
+            className={`w-full py-4 px-6 rounded-xl font-black text-sm tracking-wide uppercase shadow-md flex items-center justify-center gap-2 transition-all ${
+              isPlaceOrderDisabled
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                : 'bg-[#006389] hover:bg-[#004c6b] text-white shadow-[0_4px_16px_rgba(0,99,137,0.25)] active:scale-[0.99] cursor-pointer'
+            }`}
+          >
+            <span>{isSubmitting ? 'MEMPROSES PESANAN...' : 'KONFIRMASI PEMBAYARAN & PLACE ORDER'}</span>
+            <Bolt className="w-4.5 h-4.5" />
+          </button>
+
+          <div className="flex items-center justify-center gap-2 text-xs text-[#3e484f]">
+            <ShieldCheck className="w-4 h-4 text-[#006389]" />
+            <span>Pembayaran terenkripsi &amp; diverifikasi otomatis oleh sistem Leton</span>
           </div>
         </div>
       </form>
     </div>
   );
 };
+

@@ -730,17 +730,17 @@ export const OrderManager: React.FC = () => {
                   setSelectedOrderDetail(order);
                   setIsDetailModalOpen(true);
                 }}
-                className={`p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-slate-900/95 border transition-all cursor-pointer hover:bg-slate-900/70 hover:border-slate-700/80 hover:shadow-xl ${
+                className={`p-5 sm:p-6 rounded-2xl bg-white text-[#041d32] border transition-all cursor-pointer hover:shadow-lg ${
                   order.paymentStatus === 'WAITING VERIFICATION'
-                    ? 'border-amber-500/80 shadow-lg shadow-amber-500/10'
+                    ? 'border-amber-400 shadow-md shadow-amber-500/10 ring-1 ring-amber-400/30'
                     : order.orderStatus === 'NEW'
-                    ? 'border-[#00E5FF]/80 shadow-lg shadow-[#00E5FF]/10'
-                    : 'border-slate-800/90'
+                    ? 'border-[#006389] shadow-md shadow-[#006389]/10 ring-1 ring-[#006389]/20'
+                    : 'border-[#e4efff] shadow-xs'
                 }`}
               >
                 {/* Header Row */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
-                  <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-[#e4efff]">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -748,11 +748,11 @@ export const OrderManager: React.FC = () => {
                         setSelectedOrderForSlip(order);
                         setIsSlipModalOpen(true);
                       }}
-                      className="font-mono font-black text-lg sm:text-xl text-[#00E5FF] hover:text-cyan-300 tracking-wider flex items-center gap-1.5 transition-all cursor-pointer group text-left focus:outline-none bg-transparent border-0 p-0"
+                      className="font-mono font-black text-lg sm:text-xl text-[#006389] hover:text-[#004f6e] tracking-tight flex items-center gap-1.5 transition-colors cursor-pointer group text-left focus:outline-none bg-transparent border-0 p-0"
                       title="Klik untuk membuka Slip Dapur / Barista"
                     >
                       <span>{order.orderNumber}</span>
-                      <ClipboardList className="w-4 h-4 text-[#00E5FF]/70 group-hover:text-[#00E5FF] transition-all group-hover:scale-110" />
+                      <ClipboardList className="w-4 h-4 text-[#006389]/70 group-hover:text-[#006389] transition-all group-hover:scale-110" />
                     </button>
 
                     <button
@@ -762,7 +762,7 @@ export const OrderManager: React.FC = () => {
                         setSelectedOrderForSlip(order);
                         setIsSlipModalOpen(true);
                       }}
-                      className="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold bg-[#00E5FF]/10 hover:bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/30 hover:border-[#00E5FF]/60 flex items-center gap-1 transition-all cursor-pointer"
+                      className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-[#eef4ff] hover:bg-[#dbe9ff] text-[#006389] border border-[#dbe9ff] flex items-center gap-1 transition-colors cursor-pointer uppercase tracking-wider"
                       title="Cetak atau Lihat Slip Dapur"
                     >
                       <Printer className="w-3 h-3" />
@@ -771,18 +771,18 @@ export const OrderManager: React.FC = () => {
 
                     {/* Order Status Badge */}
                     <span
-                      className={`px-3 py-1 rounded-full text-[10px] font-mono font-black uppercase tracking-wider ${
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                         order.orderStatus === 'NEW'
-                          ? 'bg-cyan-500/20 border border-cyan-500/50 text-cyan-300 animate-pulse'
+                          ? 'bg-[#c6e7ff] text-[#004c6b] animate-pulse'
                           : order.orderStatus === 'ACCEPTED'
-                          ? 'bg-blue-500/20 border border-blue-500/50 text-blue-300'
+                          ? 'bg-[#dbe9ff] text-[#004c6b]'
                           : order.orderStatus === 'PREPARING'
-                          ? 'bg-amber-500/20 border border-amber-500/50 text-amber-300'
+                          ? 'bg-[#ffddb8] text-[#653e00]'
                           : order.orderStatus === 'READY'
-                          ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-300'
+                          ? 'bg-emerald-100 text-emerald-800'
                           : order.orderStatus === 'COMPLETED'
-                          ? 'bg-slate-800 text-slate-400'
-                          : 'bg-rose-500/20 border border-rose-500/50 text-rose-300'
+                          ? 'bg-slate-100 text-slate-700'
+                          : 'bg-rose-100 text-rose-800'
                       }`}
                     >
                       {order.orderStatus}
@@ -790,24 +790,24 @@ export const OrderManager: React.FC = () => {
 
                     {/* Payment Status Badge */}
                     <span
-                      className={`px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider ${
+                      className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
                         order.paymentStatus === 'PAID'
-                          ? 'bg-emerald-950 border border-emerald-500/50 text-emerald-400'
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                           : order.paymentStatus === 'WAITING VERIFICATION'
-                          ? 'bg-amber-950 border border-amber-500/60 text-amber-300 animate-pulse'
+                          ? 'bg-amber-50 border-amber-300 text-amber-900 animate-pulse font-black'
                           : order.paymentStatus === 'PAY AT STORE'
-                          ? 'bg-blue-950 border border-blue-500/50 text-blue-300'
+                          ? 'bg-blue-50 border-blue-200 text-blue-800'
                           : order.paymentStatus === 'PAYMENT REJECTED'
-                          ? 'bg-rose-950 border border-rose-500/60 text-rose-300'
-                          : 'bg-slate-800 text-slate-400'
+                          ? 'bg-rose-50 border-rose-200 text-rose-800'
+                          : 'bg-slate-100 border-slate-200 text-slate-700'
                       }`}
                     >
                       {order.paymentStatus}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 text-xs text-slate-400 font-mono">
-                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  <div className="flex items-center gap-1.5 text-xs text-[#52606d] font-mono">
+                    <Clock className="w-3.5 h-3.5 text-[#52606d]" />
                     <span>
                       {new Date(order.createdAt).toLocaleDateString('id-ID', {
                         day: 'numeric',
@@ -821,27 +821,27 @@ export const OrderManager: React.FC = () => {
                 </div>
 
                 {/* Details Grid */}
-                <div className="py-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="py-3.5 grid grid-cols-1 md:grid-cols-3 gap-3.5 text-xs">
                   {/* Outlet & Table */}
-                  <div className="space-y-1.5">
-                    <span className="text-[10px] font-mono uppercase text-slate-400 block">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-[#52606d] block font-bold">
                       OUTLET & MEJA
                     </span>
-                    <div className="flex items-center gap-2 font-display font-bold text-white text-sm">
-                      <Store className="w-4 h-4 text-[#00E5FF] shrink-0" />
+                    <div className="flex items-center gap-1.5 font-bold text-[#041d32] text-sm">
+                      <Store className="w-4 h-4 text-[#006389] shrink-0" />
                       <span>{order.outletName}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-slate-300">
+                    <div className="flex items-center gap-1.5 text-[#3e484f]">
                       {order.orderType === 'DINE IN' ? (
                         <>
-                          <Utensils className="w-3.5 h-3.5 text-[#00E5FF]" />
-                          <span className="font-mono font-bold text-white">
+                          <Utensils className="w-3.5 h-3.5 text-[#006389]" />
+                          <span className="font-bold text-[#041d32]">
                             Dine In (Meja: {order.tableNumber || '-'})
                           </span>
                         </>
                       ) : (
                         <>
-                          <Package className="w-3.5 h-3.5 text-slate-400" />
+                          <Package className="w-3.5 h-3.5 text-[#52606d]" />
                           <span>Take Away (Bawa Pulang)</span>
                         </>
                       )}
@@ -849,23 +849,23 @@ export const OrderManager: React.FC = () => {
                   </div>
 
                   {/* Customer Info */}
-                  <div className="space-y-1.5">
-                    <span className="text-[10px] font-mono uppercase text-slate-400 block">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-[#52606d] block font-bold">
                       PEMESAN
                     </span>
-                    <p className="font-display font-bold text-white text-sm">
+                    <p className="font-bold text-[#041d32] text-sm">
                       {order.customerName}
                     </p>
                     {order.customerPhone ? (
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-slate-400">{order.customerPhone}</span>
+                        <span className="font-mono text-[#52606d]">{order.customerPhone}</span>
                         {customerWaLink && (
                           <a
                             href={customerWaLink}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:underline"
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded hover:bg-emerald-100 transition-colors"
                           >
                             <MessageCircle className="w-3 h-3" />
                             <span>WhatsApp</span>
@@ -873,29 +873,29 @@ export const OrderManager: React.FC = () => {
                         )}
                       </div>
                     ) : (
-                      <span className="text-slate-400 italic">No. HP tidak diisi</span>
+                      <span className="text-[#52606d] italic">No. HP tidak diisi</span>
                     )}
                   </div>
 
                   {/* Payment & Total */}
-                  <div className="space-y-1.5">
-                    <span className="text-[10px] font-mono uppercase text-slate-400 block">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-[#52606d] block font-bold">
                       METODE & TOTAL
                     </span>
-                    <div className="flex items-center gap-2 text-slate-300">
+                    <div className="flex items-center gap-1.5 text-[#3e484f]">
                       {order.paymentMethod === 'QRIS' ? (
-                        <QrCode className="w-4 h-4 text-[#00E5FF]" />
+                        <QrCode className="w-4 h-4 text-[#006389]" />
                       ) : (
-                        <Banknote className="w-4 h-4 text-[#00E5FF]" />
+                        <Banknote className="w-4 h-4 text-[#006389]" />
                       )}
-                      <span className="font-mono font-bold text-white">
+                      <span className="font-bold text-[#041d32]">
                         {order.paymentMethod}
                       </span>
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-[11px] text-[#52606d]">
                         ({order.paymentMethod === 'QRIS' ? 'Upload QRIS' : 'Bayar Kasir'})
                       </span>
                     </div>
-                    <div className="font-mono font-black text-lg text-[#00E5FF]">
+                    <div className="font-mono font-black text-lg text-[#006389]">
                       Total: {formatRupiah(order.totalAmount)}
                     </div>
                   </div>
@@ -903,36 +903,36 @@ export const OrderManager: React.FC = () => {
 
                 {/* QRIS PAYMENT PROOF DETAIL & THUMBNAIL (For QRIS) */}
                 {order.paymentMethod === 'QRIS' && (
-                  <div className="mb-4 p-4 rounded-2xl bg-slate-950 border border-slate-800/90 space-y-3">
+                  <div className="mb-3.5 p-3.5 rounded-xl bg-[#f8f9ff] border border-[#e4efff] space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <QrCode className="w-4 h-4 text-[#00E5FF]" />
-                        <span className="font-display font-bold text-xs uppercase text-white tracking-wider">
+                      <div className="flex items-center gap-1.5">
+                        <QrCode className="w-4 h-4 text-[#006389]" />
+                        <span className="font-bold text-xs uppercase text-[#041d32] tracking-wider">
                           BUKTI PEMBAYARAN QRIS CUSTOMER
                         </span>
                       </div>
 
                       {order.paymentReceiptUrl ? (
-                        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40">
+                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
                           ✓ File Bukti Tersedia
                         </span>
                       ) : (
-                        <span className="text-[10px] font-mono text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-500/40">
+                        <span className="text-[10px] font-bold text-rose-800 bg-rose-100 px-2 py-0.5 rounded border border-rose-300">
                           ⚠️ Bukti Belum Terlampir
                         </span>
                       )}
                     </div>
 
                     {order.paymentReceiptUrl ? (
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-1">
-                        <div className="flex items-center gap-3.5">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
+                        <div className="flex items-center gap-3">
                           {/* Thumbnail (Clickable to view full preview) */}
                           <div
                             onClick={(e) => {
                               e.stopPropagation();
                               setPreviewImageUrl(order.paymentReceiptUrl || null);
                             }}
-                            className="w-20 h-20 rounded-xl bg-slate-900 border border-slate-700 overflow-hidden shrink-0 cursor-pointer relative group"
+                            className="w-16 h-16 rounded-xl bg-white border border-[#dbe9ff] overflow-hidden shrink-0 cursor-pointer relative group shadow-2xs"
                             title="Klik untuk memperbesar bukti transfer"
                           >
                             <img
@@ -940,13 +940,13 @@ export const OrderManager: React.FC = () => {
                               alt="Bukti Transfer"
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                             />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                               <Eye className="w-5 h-5 text-white" />
                             </div>
                           </div>
 
                           <div className="space-y-1">
-                            <span className="font-mono text-xs text-slate-300 block">
+                            <span className="font-mono text-xs text-[#52606d] block">
                               File tersimpan di Cloud Storage
                             </span>
                             <div className="flex items-center gap-2">
@@ -956,9 +956,9 @@ export const OrderManager: React.FC = () => {
                                   e.stopPropagation();
                                   setPreviewImageUrl(order.paymentReceiptUrl || null);
                                 }}
-                                className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] font-mono inline-flex items-center gap-1 cursor-pointer"
+                                className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#eef4ff] border border-[#dbe9ff] text-[#006389] text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                               >
-                                <Eye className="w-3 h-3 text-[#00E5FF]" />
+                                <Eye className="w-3 h-3 text-[#006389]" />
                                 <span>Perbesar Foto</span>
                               </button>
                               <a
@@ -966,9 +966,9 @@ export const OrderManager: React.FC = () => {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-[11px] font-mono inline-flex items-center gap-1"
+                                className="px-2.5 py-1 rounded-lg bg-white hover:bg-[#eef4ff] border border-[#dbe9ff] text-[#52606d] text-[11px] font-medium inline-flex items-center gap-1 transition-colors shadow-2xs"
                               >
-                                <ExternalLink className="w-3 h-3 text-slate-400" />
+                                <ExternalLink className="w-3 h-3 text-[#52606d]" />
                                 <span>Buka Tab Baru</span>
                               </a>
                             </div>
@@ -976,17 +976,17 @@ export const OrderManager: React.FC = () => {
                         </div>
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-[#52606d]">
                         Customer belum mengunggah file bukti transfer untuk pesanan ini.
                       </p>
                     )}
 
                     {/* Rejection Note Alert if rejected */}
                     {(order.orderStatus === 'CANCELLED' || order.paymentStatus === 'PAYMENT REJECTED' || order.paymentStatus === 'REJECTED') && (
-                      <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-200 text-xs flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                         <div>
-                          <strong className="block text-rose-300 uppercase font-mono">
+                          <strong className="block text-rose-900 uppercase font-mono">
                             Status Penolakan:
                           </strong>
                           <span>{order.rejectionReason || 'Alasan tidak dispesifikasikan.'}</span>
@@ -998,22 +998,22 @@ export const OrderManager: React.FC = () => {
 
                 {/* TUNAI PAYMENT INFO BAR (For Cash at Store) */}
                 {order.paymentMethod === 'TUNAI' && (
-                  <div className="mb-4 p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center gap-2 text-xs">
-                    <Banknote className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span className="text-slate-300">
+                  <div className="mb-3.5 p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2 text-xs">
+                    <Banknote className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-emerald-950 font-medium">
                       Pembayaran Tunai di Kasir. Status:{' '}
-                      <strong className="font-mono text-emerald-400">{order.paymentStatus}</strong>
+                      <strong className="font-mono text-emerald-800 font-bold">{order.paymentStatus}</strong>
                     </span>
                   </div>
                 )}
 
                 {/* Items Breakdown */}
-                <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2">
-                  <span className="text-[10px] font-mono uppercase text-slate-400 block">
+                <div className="p-3.5 rounded-xl bg-[#f8f9ff] border border-[#e4efff] space-y-2">
+                  <span className="text-[10px] font-mono uppercase text-[#52606d] block font-bold">
                     RINCIAN MENU ({order.items.reduce((a, b) => a + b.quantity, 0)} Item)
                   </span>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     {order.items.map((it, idx) => {
                       const sizePrice = it.size?.price || 0;
                       const topPrice = it.topping?.price || 0;
@@ -1028,26 +1028,26 @@ export const OrderManager: React.FC = () => {
                       return (
                         <div
                           key={idx}
-                          className="flex flex-col justify-between p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2"
+                          className="flex flex-col justify-between p-3 rounded-xl bg-white border border-[#e4efff] space-y-2 shadow-2xs"
                         >
-                          <div className="space-y-1.5">
+                          <div className="space-y-1">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="font-mono font-black text-[#00E5FF] bg-[#00E5FF]/10 px-1.5 py-0.5 rounded border border-[#00E5FF]/20 shrink-0">
+                                <span className="font-mono font-black text-[#006389] bg-[#eef4ff] px-1.5 py-0.5 rounded border border-[#dbe9ff] shrink-0 text-xs">
                                   {it.quantity}x
                                 </span>
-                                <span className="font-bold text-white text-sm truncate">
+                                <span className="font-bold text-[#041d32] text-sm truncate">
                                   {it.name}
                                 </span>
                               </div>
-                              <span className="font-mono text-slate-400 text-[11px] whitespace-nowrap shrink-0">
-                                Menu: {formatRupiah(it.price)}
+                              <span className="font-mono text-[#52606d] text-[11px] whitespace-nowrap shrink-0">
+                                {formatRupiah(it.price)}
                               </span>
                             </div>
 
                             {/* Size Details */}
                             {hasSize && (
-                              <div className="text-[11px] font-mono text-[#00E5FF] flex items-center justify-between pl-1">
+                              <div className="text-[11px] text-[#006389] font-medium flex items-center justify-between pl-1">
                                 <span>Size: {it.size!.name}</span>
                                 <span>{sizePrice > 0 ? `+${formatRupiah(sizePrice)}` : 'Rp0'}</span>
                               </div>
@@ -1055,24 +1055,24 @@ export const OrderManager: React.FC = () => {
 
                             {/* Topping Details */}
                             {hasTopping ? (
-                              <div className="text-[11px] font-mono text-[#38BDF8] flex items-center justify-between pl-1">
+                              <div className="text-[11px] text-[#006389] font-medium flex items-center justify-between pl-1">
                                 <span>Topping: {it.topping!.name}</span>
                                 <span>+{formatRupiah(topPrice)}</span>
                               </div>
                             ) : (
-                              <div className="text-[10px] font-mono text-slate-500 pl-1">
+                              <div className="text-[10px] text-[#85929d] pl-1">
                                 Topping: No Topping (Rp0)
                               </div>
                             )}
 
                             {/* Syrup Details */}
                             {hasSyrup ? (
-                              <div className="text-[11px] font-mono text-[#818CF8] flex items-center justify-between pl-1">
+                              <div className="text-[11px] text-[#006389] font-medium flex items-center justify-between pl-1">
                                 <span>Syrup: {it.syrup!.name}</span>
                                 <span>+{formatRupiah(syrPrice)}</span>
                               </div>
                             ) : (
-                              <div className="text-[10px] font-mono text-slate-500 pl-1">
+                              <div className="text-[10px] text-[#85929d] pl-1">
                                 Syrup: No Syrup (Rp0)
                               </div>
                             )}
@@ -1080,7 +1080,7 @@ export const OrderManager: React.FC = () => {
                             {/* Dynamic Customization Options */}
                             {it.customOptions && it.customOptions.length > 0 && (
                               it.customOptions.map((co) => (
-                                <div key={co.groupId} className="text-[11px] font-mono text-[#00E5FF] flex items-center justify-between pl-1">
+                                <div key={co.groupId} className="text-[11px] text-[#006389] font-medium flex items-center justify-between pl-1">
                                   <span>{co.groupName}: {co.optionName}</span>
                                   <span>{co.price > 0 ? `+${formatRupiah(co.price)}` : 'Rp0'}</span>
                                 </div>
@@ -1088,17 +1088,17 @@ export const OrderManager: React.FC = () => {
                             )}
 
                             {it.note && (
-                              <div className="text-slate-300 text-[11px] italic bg-slate-950/60 px-2 py-1 rounded border border-slate-800/80">
+                              <div className="text-amber-800 text-[11px] italic bg-amber-50 px-2 py-1 rounded border border-amber-200">
                                 Catatan: "{it.note}"
                               </div>
                             )}
                           </div>
 
-                          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between font-mono text-xs">
-                            <span className="text-slate-400 text-[10px] uppercase">
+                          <div className="pt-1.5 border-t border-[#e4efff] flex items-center justify-between font-mono text-xs">
+                            <span className="text-[#52606d] text-[10px] uppercase">
                               Subtotal Item
                             </span>
-                            <span className="font-bold text-[#00E5FF]">
+                            <span className="font-bold text-[#006389]">
                               {formatRupiah(itemSubtotal)}
                             </span>
                           </div>
@@ -1108,15 +1108,15 @@ export const OrderManager: React.FC = () => {
                   </div>
 
                   {order.customerNote && (
-                    <div className="pt-2 text-xs text-amber-300/90 font-mono">
+                    <div className="pt-2 text-xs text-amber-800 font-medium bg-amber-50 p-2 rounded-lg border border-amber-200">
                       Catatan Pemesan: "{order.customerNote}"
                     </div>
                   )}
                 </div>
 
                 {/* SIMPLIFIED ADMIN OUTLET ACTIONS: [ SIAP ] [ TOLAK ] [ HAPUS PESANAN ] */}
-                <div className="pt-4 mt-4 border-t border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2.5">
+                <div className="pt-3.5 mt-3.5 border-t border-[#e4efff] flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     {/* 1. [ SIAP ] ACTION */}
                     {order.orderStatus !== 'READY' && order.orderStatus !== 'COMPLETED' && order.orderStatus !== 'CANCELLED' ? (
                       <button
@@ -1126,15 +1126,15 @@ export const OrderManager: React.FC = () => {
                           e.stopPropagation();
                           handleMarkReady(order);
                         }}
-                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-display font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition-all cursor-pointer"
+                        className="px-5 py-2.5 rounded-xl bg-[#006389] hover:bg-[#004f6e] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
                       >
                         <CheckCircle2 className="w-4 h-4 text-white" />
                         <span>SIAP</span>
                       </button>
                     ) : order.orderStatus === 'READY' ? (
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-3.5 py-2 rounded-xl bg-emerald-950 border border-emerald-500/60 text-emerald-300 font-mono font-bold text-xs flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span className="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-800 font-bold text-xs flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                           <span>Pesanan Sudah Siap (Menunggu Customer Ambil)</span>
                         </span>
                         <button
@@ -1144,19 +1144,19 @@ export const OrderManager: React.FC = () => {
                             e.stopPropagation();
                             handleMarkReady(order);
                           }}
-                          className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-xs uppercase font-bold transition-all cursor-pointer border border-slate-700"
+                          className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono text-xs uppercase font-bold transition-colors cursor-pointer border border-slate-700"
                         >
                           Selesai
                         </button>
                       </div>
                     ) : order.orderStatus === 'CANCELLED' ? (
-                      <span className="px-3.5 py-2 rounded-xl bg-rose-950/80 border border-rose-500/60 text-rose-300 font-mono font-bold text-xs flex items-center gap-1.5">
-                        <XCircle className="w-4 h-4 text-rose-400" />
+                      <span className="px-3.5 py-2 rounded-xl bg-rose-50 border border-rose-300 text-rose-800 font-bold text-xs flex items-center gap-1.5">
+                        <XCircle className="w-4 h-4 text-rose-600" />
                         <span>Pesanan Ditolak</span>
                       </span>
                     ) : (
-                      <span className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 font-mono font-bold text-xs flex items-center gap-1.5">
-                        <Check className="w-4 h-4 text-emerald-400" />
+                      <span className="px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5">
+                        <Check className="w-4 h-4 text-emerald-600" />
                         <span>Pesanan Selesai</span>
                       </span>
                     )}
@@ -1170,9 +1170,9 @@ export const OrderManager: React.FC = () => {
                           e.stopPropagation();
                           handleOpenRejectDialog(order);
                         }}
-                        className="px-4 py-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        className="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                       >
-                        <XCircle className="w-4 h-4 text-rose-400" />
+                        <XCircle className="w-4 h-4 text-rose-600" />
                         <span>TOLAK</span>
                       </button>
                     )}
@@ -1185,7 +1185,7 @@ export const OrderManager: React.FC = () => {
                         e.stopPropagation();
                         handleOpenDeleteDialog(order);
                       }}
-                      className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-rose-950/50 border border-slate-800 hover:border-rose-700/60 text-slate-400 hover:text-rose-300 font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      className="px-3.5 py-2.5 rounded-xl bg-slate-50 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-600 hover:text-rose-700 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                       title="Hapus pesanan dari antrean"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1201,7 +1201,7 @@ export const OrderManager: React.FC = () => {
                           e.stopPropagation();
                           handleAwardPoints(order);
                         }}
-                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-display font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-amber-600/20 transition-all cursor-pointer"
+                        className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                         title="Berikan poin loyalty ke akun member customer"
                       >
                         <Sparkles className="w-4 h-4 text-white animate-pulse" />
@@ -1219,9 +1219,9 @@ export const OrderManager: React.FC = () => {
                         setSelectedOrderForSlip(order);
                         setIsSlipModalOpen(true);
                       }}
-                      className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-mono inline-flex items-center gap-1.5 cursor-pointer"
+                      className="px-3 py-2 rounded-xl bg-white hover:bg-[#eef4ff] border border-[#dbe9ff] text-[#006389] text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
                     >
-                      <Printer className="w-3.5 h-3.5 text-[#00E5FF]" />
+                      <Printer className="w-3.5 h-3.5 text-[#006389]" />
                       <span>Slip Dapur</span>
                     </button>
 
@@ -1232,9 +1232,9 @@ export const OrderManager: React.FC = () => {
                         setSelectedOrderDetail(order);
                         setIsDetailModalOpen(true);
                       }}
-                      className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-mono inline-flex items-center gap-1.5 cursor-pointer"
+                      className="px-3 py-2 rounded-xl bg-white hover:bg-[#eef4ff] border border-[#dbe9ff] text-[#3e484f] text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
                     >
-                      <Eye className="w-3.5 h-3.5 text-slate-400" />
+                      <Eye className="w-3.5 h-3.5 text-[#52606d]" />
                       <span>Detail</span>
                     </button>
                   </div>

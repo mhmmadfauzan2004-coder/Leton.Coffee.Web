@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CustomerOrder, OrderOutlet } from '../../../types';
 import { formatRupiah, createWhatsAppLink } from '../../../utils/formatters';
 import { subscribeToSingleOrder } from '../../../utils/supabaseOrders';
+import { getSupabase } from '../../../utils/supabase';
 import {
   CheckCircle2,
   Clock,
@@ -93,17 +94,25 @@ export const OrderConfirmation: React.FC<OrderConfirmationProps> = ({
   }, [initialOrder]);
 
   useEffect(() => {
-    if (!initialOrder?.id && !initialOrder?.orderNumber) return;
-    const unsubscribe = subscribeToSingleOrder(
-      initialOrder.id || initialOrder.orderNumber,
-      (updatedOrder) => {
-        if (updatedOrder) {
+    if (!initialOrder?.id) return;
+
+    // Use Supabase realtime channel
+    const channel = getSupabase()
+      .channel(`order:${initialOrder.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `id=eq.${initialOrder.id}`,
+        },
+        (payload: any) => {
+          const updatedOrder = payload.new;
           setCurrentOrder(updatedOrder);
 
           // Trigger in-app notification when status changes
-          if (
-            updatedOrder.orderStatus !== lastNotifiedStatusRef.current
-          ) {
+          if (updatedOrder.orderStatus !== lastNotifiedStatusRef.current) {
             const oldStatus = lastNotifiedStatusRef.current;
             lastNotifiedStatusRef.current = updatedOrder.orderStatus;
 
@@ -113,23 +122,24 @@ export const OrderConfirmation: React.FC<OrderConfirmationProps> = ({
               oldStatus !== 'COMPLETED'
             ) {
               setInAppNotice({
-                message: 'Pesananmu sudah siap! ☕',
+                message: '🎉 Pesanan Kamu Sudah Siap! Silakan ambil pesanan kamu.',
                 type: 'ready',
               });
             } else if (updatedOrder.orderStatus === 'CANCELLED' && oldStatus !== 'CANCELLED') {
               setInAppNotice({
-                message: 'Pesananmu ditolak.',
+                message: `Pesanan Ditolak: ${updatedOrder.rejectionReason || 'Tanpa alasan'}`,
                 type: 'rejected',
               });
             }
           }
         }
-      }
-    );
+      )
+      .subscribe();
+
     return () => {
-      unsubscribe();
+      channel.unsubscribe();
     };
-  }, [initialOrder?.id, initialOrder?.orderNumber]);
+  }, [initialOrder?.id]);
 
   const handleCopyOrderNumber = () => {
     navigator.clipboard.writeText(currentOrder.orderNumber);

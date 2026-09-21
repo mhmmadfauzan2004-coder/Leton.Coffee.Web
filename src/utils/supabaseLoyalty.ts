@@ -390,9 +390,11 @@ export async function getCustomerLoyalty(customerId: string): Promise<CustomerLo
 
     // 0. Primary: call secure SECURITY DEFINER RPC function to bypass RLS restrictions
     try {
+      console.log('Fetching loyalty for:', customerId);
       const { data: rpcData, error: rpcErr } = await client.rpc('get_customer_loyalty_summary_rpc', {
         p_customer_id: customerId
       });
+      console.log('RPC loyalty result:', { rpcData, rpcErr });
       if (!rpcErr && rpcData && typeof rpcData === 'object') {
         const res = rpcData as any;
         if (res.success) {
@@ -403,7 +405,9 @@ export async function getCustomerLoyalty(customerId: string): Promise<CustomerLo
           };
         }
       }
-    } catch {}
+    } catch (e) {
+      console.error('RPC error:', e);
+    }
 
     // 1. Secondary: query customers table directly
     try {

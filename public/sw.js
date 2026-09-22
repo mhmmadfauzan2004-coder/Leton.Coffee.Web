@@ -1,5 +1,5 @@
 // Leton Coffee - Production PWA Service Worker for Background Web Push
-const SW_VERSION = '1.0.8-ios-bg-push';
+const SW_VERSION = '1.0.9-ios-bg-push';
 
 self.addEventListener('install', (event) => {
   console.log(`[SW ${SW_VERSION}] Installing Service Worker...`);
@@ -11,7 +11,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Single clean push handler
+// Single clean independent push handler
 self.addEventListener('push', (event) => {
   console.log(`[SW ${SW_VERSION}] Push event received`);
 
@@ -23,8 +23,8 @@ self.addEventListener('push', (event) => {
         data = event.data ? event.data.json() : {};
       } catch (err) {
         data = {
-          title: '🔔 Leton Coffee',
-          body: event.data ? event.data.text() : 'Pesanan baru telah diterima.'
+          title: 'TEST BACKGROUND PUSH',
+          body: event.data ? event.data.text() : 'Background push received'
         };
       }
 
@@ -35,9 +35,8 @@ self.addEventListener('push', (event) => {
         body: data.body || 'Pesanan baru telah diterima.',
         icon: data.icon ? (data.icon.startsWith('http') ? data.icon : `${baseUrl}${data.icon}`) : `${baseUrl}/logo_icon.jpg`,
         badge: data.badge ? (data.badge.startsWith('http') ? data.badge : `${baseUrl}${data.badge}`) : `${baseUrl}/logo_icon.jpg`,
-        tag: data.tag || `order-${data.orderId || data.orderNumber || Date.now()}`,
-        data: {
-          ...(data.data || {}),
+        tag: data.tag || `push-${data.orderId || data.orderNumber || Date.now()}`,
+        data: data.data || {
           orderId: data.orderId,
           outletId: data.outletId,
           url: data.data?.url || '/#admin'
@@ -48,18 +47,18 @@ self.addEventListener('push', (event) => {
         await self.registration.showNotification(title, options);
         console.log(`[SW ${SW_VERSION}] showNotification SUCCESS for tag: ${options.tag}`);
       } catch (error) {
-        console.error(`[SW ${SW_VERSION}] showNotification FAILED:`, error);
+        console.error(`[SW ${SW_VERSION}] showNotification ERROR:`, error);
 
-        // Fallback minimal notification without custom icons to guarantee rendering on iOS
+        // Fallback minimal notification without custom images
         try {
           await self.registration.showNotification(title, {
             body: options.body,
             tag: options.tag,
             data: options.data
           });
-          console.log(`[SW ${SW_VERSION}] Fallback showNotification SUCCESS`);
+          console.log(`[SW ${SW_VERSION}] Minimal fallback showNotification SUCCESS`);
         } catch (fallbackErr) {
-          console.error(`[SW ${SW_VERSION}] Fallback showNotification FAILED:`, fallbackErr);
+          console.error(`[SW ${SW_VERSION}] Minimal fallback showNotification FAILED:`, fallbackErr);
         }
       }
     })()
@@ -76,7 +75,7 @@ self.addEventListener('notificationclick', (event) => {
   const outletId = data.outletId || '';
 
   let targetUrl = data.url || '/#admin';
-  if (orderId) {
+  if (orderId && orderId !== 'TEST-001') {
     targetUrl = `/#admin?tab=orders&orderId=${encodeURIComponent(orderId)}&outletId=${encodeURIComponent(outletId)}`;
   }
 

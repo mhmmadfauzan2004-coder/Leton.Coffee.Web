@@ -209,20 +209,24 @@ export async function subscribeAdminPush(username: string, outletId: string, rol
       applicationServerKey
     };
 
-    console.log('[WebPush Checkpoint 6] Checking existing push subscription on browser...');
+    console.log('[WebPush Checkpoint 6] Refreshing device subscription with Push Manager...');
     let subscription = await reg.pushManager.getSubscription();
-    
-    if (!subscription) {
-      console.log('[WebPush Checkpoint 6] No active subscription. Initiating subscription from push manager...');
+    if (subscription) {
       try {
-        subscription = await reg.pushManager.subscribe(subscribeOptions);
-      } catch (subError: any) {
-        console.error('[WebPush Checkpoint 6] Native subscribe error caught:', subError);
-        throw subError;
+        console.log('[WebPush Checkpoint 6] Unsubscribing stale/old subscription before generating fresh subscription...');
+        await subscription.unsubscribe();
+      } catch (unsubErr) {
+        console.warn('[WebPush Checkpoint 6] Unsubscribe warning:', unsubErr);
       }
-      console.log('[WebPush Checkpoint 6] Device successfully subscribed to browser Push Service.');
-    } else {
-      console.log('[WebPush Checkpoint 6] Active device subscription already exists.');
+    }
+
+    try {
+      console.log('[WebPush Checkpoint 6] Requesting fresh push subscription from Apple/Browser Push Service...');
+      subscription = await reg.pushManager.subscribe(subscribeOptions);
+      console.log('[WebPush Checkpoint 6] Fresh subscription successfully obtained from Push Manager!');
+    } catch (subError: any) {
+      console.error('[WebPush Checkpoint 6] Native subscribe error caught:', subError);
+      throw subError;
     }
     checkpoints['CHECKPOINT 6 (registration.pushManager.subscribe)'] = 'PASS';
 
@@ -253,7 +257,10 @@ export async function subscribeAdminPush(username: string, outletId: string, rol
           subscription,
           username,
           outletId,
-          role
+          role,
+          swScope: reg ? reg.scope : '/',
+          swScriptURL: reg && reg.active ? reg.active.scriptURL : '',
+          swVersion: '1.0.9-ios-bg-push'
         })
       });
       if (subRes.ok) {
@@ -263,7 +270,7 @@ export async function subscribeAdminPush(username: string, outletId: string, rol
       console.warn('[WebPush Checkpoint 8] Backend subscription save network error, falling back to direct Supabase client:', backendErr);
     }
 
-    // If backend POST failed or returned error, save directly to Supabase
+    // If backend POST failed or returned error, save directly to Supabase push_subscriptions table
     if (!savedViaBackend) {
       try {
         const subJson = subscription.toJSON();
@@ -272,7 +279,6 @@ export async function subscribeAdminPush(username: string, outletId: string, rol
         const endpoint = subscription.endpoint;
 
         if (endpoint && p256dh && auth) {
-          // 1. Try push_subscriptions table
           const { error: sbErr } = await supabase
             .from('push_subscriptions')
             .upsert({
@@ -285,44 +291,11 @@ export async function subscribeAdminPush(username: string, outletId: string, rol
               updated_at: new Date().toISOString()
             }, { onConflict: 'endpoint' });
 
-          if (!sbErr) {
+          if (sbErr) {
+            console.warn('[WebPush] Direct Supabase push_subscriptions upsert warning:', sbErr);
+          } else {
+            console.log('[WebPush] Successfully saved subscription directly to Supabase push_subscriptions table.');
             savedViaBackend = true;
-          }
-
-          // 2. Also ensure saved into leton_content push_subscriptions
-          try {
-            const { data: existingContent } = await supabase
-              .from('leton_content')
-              .select('*')
-              .eq('id', 'push_subscriptions')
-              .maybeSingle();
-
-            const existingSubs = Array.isArray(existingContent?.content?.subscriptions)
-              ? existingContent.content.subscriptions
-              : [];
-
-            const cleanSubs = existingSubs.filter((s: any) => s.endpoint !== endpoint);
-            cleanSubs.push({
-              endpoint,
-              keys: { p256dh, auth },
-              username: username || 'admin',
-              outletId: outletId || 'all',
-              role: role || 'outlet_admin',
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            });
-
-            await supabase
-              .from('leton_content')
-              .upsert({
-                id: 'push_subscriptions',
-                content: { subscriptions: cleanSubs.slice(-100) },
-                updated_at: new Date().toISOString()
-              }, { onConflict: 'id' });
-
-            savedViaBackend = true;
-          } catch (lcErr) {
-            console.warn('[WebPush] Direct leton_content save error:', lcErr);
           }
         }
       } catch (directSupabaseErr) {

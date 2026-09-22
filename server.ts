@@ -2226,7 +2226,7 @@ app.get('/api/push/debug', async (req, res) => {
       status: 'ok',
       activeSubscriptionsCount: subs.length,
       vapidPublicKeyFingerprint,
-      serviceWorkerVersion: '1.0.8-ios-bg-push',
+      serviceWorkerVersion: '1.0.9-ios-bg-push',
       serviceWorkerStatus: 'active_and_no_cache_configured',
       subscriptions: sanitizedSubs,
       timestamp: new Date().toISOString()
@@ -2297,11 +2297,16 @@ app.post('/api/push/unsubscribe', async (req, res) => {
 });
 
 app.post('/api/push/test', async (req, res) => {
+  console.log('====================================');
+  console.log('[TEST PUSH START]');
   try {
     const clientSubscription = req.body?.subscription;
-    const subs = await getPushSubscriptions();
+    const targetOutlet = req.body?.outletId || req.body?.targetOutlet || 'sudirman';
+    const customTitle = req.body?.title || 'TEST BACKGROUND PUSH';
+    const customBody = req.body?.body || 'Jika ini muncul, background Web Push bekerja.';
+    
+    let subs = await getPushSubscriptions();
 
-    // If client provided a subscription, ensure it's included for testing
     if (clientSubscription && clientSubscription.endpoint && clientSubscription.keys) {
       const exists = subs.some(s => s.endpoint === clientSubscription.endpoint);
       if (!exists) {
@@ -2309,32 +2314,48 @@ app.post('/api/push/test', async (req, res) => {
           endpoint: clientSubscription.endpoint,
           keys: clientSubscription.keys,
           username: 'test_admin',
-          outletId: 'all',
+          outletId: targetOutlet,
           role: 'outlet_admin'
         });
       }
     }
 
+    // Filter out dummy diagnostic endpoints
+    subs = subs.filter(s => s && s.endpoint && !s.endpoint.includes('test-endpoint-diag') && !s.endpoint.includes('test.endpoint.com'));
+
+    console.log(`[TEST PUSH] Total active subscriptions in storage: ${subs.length}`);
+
     if (!subs || subs.length === 0) {
-      return res.status(400).json({ success: false, error: 'Tidak ada perangkat admin yang terdaftar untuk menerima push notification. Silakan klik "Aktifkan Notifikasi" terlebih dahulu.' });
+      console.log('[TEST PUSH END] Subscription exists: NO');
+      return res.status(400).json({ success: false, error: 'Tidak ada perangkat admin yang terdaftar. Klik Aktifkan Notifikasi di PWA terlebih dahulu.' });
     }
 
     const payload = JSON.stringify({
-      title: '🔔 Leton Coffee',
-      body: 'Pesanan Baru Masuk!\n#TEST-001 • Pojan (Uji Coba) • Rp90.000',
+      title: customTitle,
+      body: customBody,
       icon: '/logo_icon.jpg',
       badge: '/logo_icon.jpg',
+      tag: `test-push-${Date.now()}`,
       data: {
-        type: 'TEST_ORDER',
-        orderId: 'TEST-001',
-        outletId: 'all'
+        url: '/#admin'
       }
     });
 
     let sentCount = 0;
-    const errors: string[] = [];
+    const results: any[] = [];
 
     for (const sub of subs) {
+      let endpointDomain = 'unknown';
+      try {
+        endpointDomain = new URL(sub.endpoint).hostname;
+      } catch (e) {}
+
+      console.log(`[TEST PUSH DISPATCH] Target Endpoint Domain: ${endpointDomain}`);
+      console.log(`[TEST PUSH DISPATCH] Outlet: ${sub.outletId || sub.outlet_id || 'all'}`);
+      console.log(`[TEST PUSH DISPATCH] Username: ${sub.username || 'admin'}`);
+      console.log(`[TEST PUSH DISPATCH] Subscription exists: YES`);
+      console.log(`[webpush.sendNotification START]`);
+
       try {
         const pushSubscription = {
           endpoint: sub.endpoint,
@@ -2351,22 +2372,26 @@ app.post('/api/push/test', async (req, res) => {
             'Topic': 'test-notification'
           }
         };
-        await webpush.sendNotification(pushSubscription, payload, pushOptions);
+        const pushResult = await webpush.sendNotification(pushSubscription, payload, pushOptions);
+        const statusCode = pushResult.statusCode || 201;
+        console.log(`[Apple response] status: ${statusCode}`);
+        console.log(`[webpush.sendNotification END] SUCCESS for domain: ${endpointDomain}`);
         sentCount++;
+        results.push({ endpointDomain, status: statusCode, success: true });
       } catch (err: any) {
-        console.warn(`[WebPush Test] Failed to send notification to endpoint ${sub.endpoint}:`, err?.message || err);
-        errors.push(err?.message || 'Unknown push error');
+        const statusCode = err.statusCode || err.status || 500;
+        console.error(`[Apple response] status/error: ${statusCode} - ${err.message || String(err)}`);
+        console.log(`[webpush.sendNotification END] FAILED for domain: ${endpointDomain}`);
+        results.push({ endpointDomain, status: statusCode, success: false, error: err.message });
       }
     }
 
-    if (sentCount === 0 && errors.length > 0) {
-      return res.status(500).json({ success: false, error: `Gagal mengirim push notification ke perangkat: ${errors[0]}` });
-    }
-
-    res.json({ success: true, sentCount });
+    console.log('[TEST PUSH END] Finished sending test notifications.');
+    console.log('====================================');
+    res.json({ success: sentCount > 0, sentCount, results });
   } catch (err: any) {
-    console.error('[WebPush Test] Exception:', err);
-    res.status(500).json({ success: false, error: err.message || 'Terjadi kesalahan saat mengirim tes notifikasi.' });
+    console.error('[TEST PUSH ERROR]', err);
+    res.status(500).json({ success: false, error: err.message || 'Error during test push' });
   }
 });
 

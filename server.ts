@@ -1762,7 +1762,7 @@ function serverMatchesOutlet(orderOutletId: string | null | undefined, targetOut
     return true;
   }
 
-  return o.includes(t) || t.includes(o);
+  return false;
 }
 
 async function sendBackgroundPushNotificationForOrder(order: any) {
@@ -1789,7 +1789,7 @@ async function sendBackgroundPushNotificationForOrder(order: any) {
       return;
     }
 
-    const orderOutletId = String(order.outletId || order.outlet_id || '').toLowerCase();
+    const orderOutletId = String(order.outletId || order.outlet_id || order.outletName || '').toLowerCase();
     
     // Filter matching subscriptions. Only route to specific outlet admins!
     // CENTRAL ADMIN / super_admin: TIDAK menerima operational order push.
@@ -1820,18 +1820,28 @@ async function sendBackgroundPushNotificationForOrder(order: any) {
       ? `Rp${order.totalAmount.toLocaleString('id-ID')}`
       : `Rp${(order.total || 0).toLocaleString('id-ID')}`;
 
+    const outletDisplayName = order.outletName || (
+      orderOutletId.includes('sudirman') ? 'Leton Coffee — Jalan Jendral Sudirman' :
+      orderOutletId.includes('kelakap') || orderOutletId.includes('ratusima') ? 'Leton Coffee — Ratusima / Kelakap 7' :
+      orderOutletId.includes('letgo') ? 'LetGo — depan MPP' :
+      order.outletId || 'Leton Coffee'
+    );
+
     const payload = JSON.stringify({
       title: '🔔 Pesanan Baru — Leton Coffee',
-      body: `#${order.orderNumber || order.id} • ${order.customerName || 'Pelanggan'} • ${totalFormatted}\nOutlet: ${order.outletName || 'Outlet'}`,
+      body: `#${order.orderNumber || order.id} • ${order.customerName || 'Pelanggan'} • ${totalFormatted}\n${outletDisplayName}`,
       icon: '/logo_icon.jpg',
       badge: '/logo_icon.jpg',
       data: {
+        type: 'NEW_ORDER',
         orderId: order.id,
-        outletId: order.outletId || ''
+        orderNumber: order.orderNumber || order.id,
+        outletId: order.outletId || order.outlet_id || '',
+        url: '/#admin/orders'
       }
     });
 
-    console.log(`[WebPush] Sending background push for order ${order.orderNumber || order.id} to ${matchingSubs.length} device(s).`);
+    console.log(`[WebPush] Sending background push for order ${order.orderNumber || order.id} (Outlet: ${orderOutletId}) to ${matchingSubs.length} device(s).`);
 
     const staleEndpoints: string[] = [];
 
@@ -1846,6 +1856,7 @@ async function sendBackgroundPushNotificationForOrder(order: any) {
             }
           };
           await webpush.sendNotification(pushSubscription, payload);
+          console.log(`[WebPush] Push delivered to ${sub.username} (${sub.outletId})`);
         } catch (err: any) {
           console.warn(`[WebPush] Error sending push to endpoint: ${sub.endpoint}. Status code: ${err.statusCode}`);
           if (err.statusCode === 410 || err.statusCode === 404) {
@@ -1863,6 +1874,47 @@ async function sendBackgroundPushNotificationForOrder(order: any) {
     }
   } catch (err) {
     console.error('[WebPush] Error sending background push:', err);
+  }
+}
+
+// Real-time listener for incoming orders via Supabase
+function initSupabaseOrderListener() {
+  try {
+    const channel = supabase.channel('server_backend_orders_listener');
+    channel
+      .on('broadcast', { event: 'ORDER_CREATED' }, (event) => {
+        const order = event.payload;
+        if (order && order.id) {
+          console.log(`[WebPush Listener] Received ORDER_CREATED broadcast for order ${order.orderNumber || order.id}`);
+          sendBackgroundPushNotificationForOrder(order).catch(err => {
+            console.error('[WebPush Listener] Push trigger error:', err);
+          });
+        }
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+        const row = payload.new;
+        if (row && row.id) {
+          console.log(`[WebPush Listener] Received DB INSERT for order ${row.order_number || row.id}`);
+          const formattedOrder = {
+            id: row.id,
+            orderNumber: row.order_number || row.id,
+            outletId: row.outlet_id,
+            outletName: row.outlet_name,
+            customerName: row.customer_name,
+            totalAmount: row.total_amount,
+            orderStatus: row.order_status,
+            createdAt: row.created_at
+          };
+          sendBackgroundPushNotificationForOrder(formattedOrder).catch(err => {
+            console.error('[WebPush Listener] DB Push trigger error:', err);
+          });
+        }
+      })
+      .subscribe((status) => {
+        console.log(`[WebPush Listener] Supabase Realtime Orders listener status: ${status}`);
+      });
+  } catch (err) {
+    console.warn('[WebPush Listener] Could not initialize Supabase Realtime Orders listener:', err);
   }
 }
 
@@ -2005,6 +2057,9 @@ app.post('/api/push/test', async (req, res) => {
 async function start() {
   // Initialize Web Push VAPID keys
   await initVapid();
+
+  // Initialize Real-time Orders Push Listener
+  initSupabaseOrderListener();
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

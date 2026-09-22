@@ -66,8 +66,46 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
   const isOutletAdmin = auth.role === 'outlet_admin';
   const assignedOutletName = auth.outletName || (isOutletAdmin ? 'Outlet Ditugaskan' : 'Semua Cabang');
 
-  const [activeTab, setActiveTab] = useState<string>(isOutletAdmin ? 'orders' : 'dashboard');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const hash = window.location.hash || '';
+    if (hash.includes('tab=orders') || hash.includes('/orders') || hash.includes('orderId')) {
+      return 'orders';
+    }
+    return isOutletAdmin ? 'orders' : 'dashboard';
+  });
   const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
+
+  // Auto-switch to orders tab when deep linked via Web Push notification click
+  useEffect(() => {
+    const handleUrlCheck = () => {
+      const hash = window.location.hash || '';
+      if (hash.includes('tab=orders') || hash.includes('/orders') || hash.includes('orderId')) {
+        setActiveTab('orders');
+      }
+    };
+
+    handleUrlCheck();
+    window.addEventListener('hashchange', handleUrlCheck);
+    window.addEventListener('popstate', handleUrlCheck);
+
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'NOTIFICATION_CLICKED') {
+        setActiveTab('orders');
+      }
+    };
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    }
+
+    return () => {
+      window.removeEventListener('hashchange', handleUrlCheck);
+      window.removeEventListener('popstate', handleUrlCheck);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+      }
+    };
+  }, []);
 
   // Web Push states
   const [isPushCapable, setIsPushCapable] = useState<boolean>(false);

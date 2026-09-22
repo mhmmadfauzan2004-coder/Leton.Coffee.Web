@@ -980,19 +980,34 @@ export async function createNewOrder(
     console.warn('[Orders Registry Backup Note]:', regErr);
   }
 
-  // 3. Post to backend server API /api/orders (Express server fallback)
-  try {
-    const res = await fetch(getApiUrl('/api/orders'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(orderData),
-    });
-    if (res.ok) {
-      console.log('[Backend API] Order registered on server backend.');
+  // 3. Post to backend server API /api/orders (Express server push trigger)
+  const notifyBackendPush = async () => {
+    const backendUrl = getApiUrl('/api/orders');
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout for cold-starts
+        const res = await fetch(backendUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderData),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          console.log(`[Backend API] Order ${orderData.orderNumber} successfully registered on server backend and Web Push dispatched.`);
+          break;
+        }
+      } catch (err) {
+        console.warn(`[Backend API Order Dispatch] Attempt ${attempt} failed:`, err);
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
     }
-  } catch (err) {
-    console.warn('[Backend API Order Note]:', err);
-  }
+  };
+  // Dispatch asynchronously without blocking user confirmation
+  notifyBackendPush();
 
   // 4. Automatically award loyalty points immediately on order creation (Checkout)
   if (orderData.customerId || orderData.userId) {

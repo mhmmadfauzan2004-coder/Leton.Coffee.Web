@@ -50,14 +50,14 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const data = event.notification.data || {};
-  const orderId = data.orderId || '';
+  const orderId = data.orderId || data.orderNumber || '';
   const outletId = data.outletId || '';
   const type = data.type || '';
 
   // Redirect url
-  let targetUrl = `/#admin?tab=orders`;
+  let targetUrl = '/#admin?tab=orders';
   if (orderId && type !== 'TEST_ORDER') {
-    targetUrl = `/#admin?tab=orders&orderId=${orderId}&outletId=${outletId}`;
+    targetUrl = `/#admin?tab=orders&orderId=${encodeURIComponent(orderId)}&outletId=${encodeURIComponent(outletId)}`;
   }
 
   event.waitUntil(
@@ -66,7 +66,7 @@ self.addEventListener('notificationclick', (event) => {
         // Try to find an existing window and focus it
         for (const client of clientList) {
           const clientUrl = new URL(client.url);
-          if (clientUrl.pathname === '/' || clientUrl.hash.includes('#admin')) {
+          if (clientUrl.pathname === '/' || clientUrl.hash.includes('admin')) {
             try {
               client.postMessage({
                 type: 'NOTIFICATION_CLICKED',

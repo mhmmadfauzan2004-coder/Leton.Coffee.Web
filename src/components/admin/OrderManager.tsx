@@ -4,6 +4,7 @@ import { useContent } from '../../context/ContentContext';
 import { matchesOutlet } from '../../data/adminAccounts';
 import {
   fetchAllOrders,
+  fetchSingleOrder,
   updateOrderStatus,
   deleteOrder,
   subscribeToOrdersRealtime,
@@ -246,7 +247,7 @@ export const OrderManager: React.FC = () => {
       const searchParams = new URLSearchParams(queryString);
       const deepOrderId = searchParams.get('orderId');
       if (deepOrderId) {
-        const foundOrder = orders.find(o => o.id === deepOrderId);
+        const foundOrder = orders.find(o => o.id === deepOrderId || o.orderNumber === deepOrderId);
         if (foundOrder) {
           setSelectedOrderDetail(foundOrder);
           setIsDetailModalOpen(true);
@@ -254,6 +255,16 @@ export const OrderManager: React.FC = () => {
           // Clean orderId from URL hash/search to prevent modal popping up on page refreshes
           const cleanHash = hashPart.substring(0, queryIdx);
           window.history.replaceState(null, '', cleanHash);
+        } else {
+          // If orders list is still fetching or not loaded yet, fetch directly from Supabase
+          fetchSingleOrder(deepOrderId).then(fetched => {
+            if (fetched) {
+              setSelectedOrderDetail(fetched);
+              setIsDetailModalOpen(true);
+              const cleanHash = hashPart.substring(0, queryIdx);
+              window.history.replaceState(null, '', cleanHash);
+            }
+          });
         }
       }
     };
@@ -265,10 +276,17 @@ export const OrderManager: React.FC = () => {
       if (event.data && event.data.type === 'NOTIFICATION_CLICKED') {
         const oId = event.data.orderId;
         if (oId) {
-          const foundOrder = orders.find(o => o.id === oId);
+          const foundOrder = orders.find(o => o.id === oId || o.orderNumber === oId);
           if (foundOrder) {
             setSelectedOrderDetail(foundOrder);
             setIsDetailModalOpen(true);
+          } else {
+            fetchSingleOrder(oId).then(fetched => {
+              if (fetched) {
+                setSelectedOrderDetail(fetched);
+                setIsDetailModalOpen(true);
+              }
+            });
           }
         }
       }

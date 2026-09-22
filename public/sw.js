@@ -1,5 +1,51 @@
 // Leton Coffee - Production PWA Service Worker for Background Web Push
-const SW_VERSION = '1.1.0-ios-bg-push';
+const SW_VERSION = '1.1.2-ios-telemetry';
+
+const SUPABASE_URL = 'https://galwyavdonfzuibrmswt.supabase.co';
+const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdhbHd5YXZkb25menVpYnJtc3d0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIzOTY3MjAsImV4cCI6MjA1Nzk3MjcyMH0.KqY9Y637n2f-qf14d8x2X_57h8hQy7kL5bM1qP9R2Yw';
+
+async function sendTelemetryLog(stage, details) {
+  try {
+    const getRes = await fetch(`${SUPABASE_URL}/rest/v1/leton_content?id=eq.sw_telemetry_logs&select=*`, {
+      headers: {
+        'apikey': ANON_KEY,
+        'Authorization': `Bearer ${ANON_KEY}`
+      }
+    });
+    
+    let logs = [];
+    if (getRes.ok) {
+      const data = await getRes.json();
+      if (Array.isArray(data) && data[0]?.content?.logs) {
+        logs = data[0].content.logs.slice(-50);
+      }
+    }
+    
+    logs.push({
+      timestamp: new Date().toISOString(),
+      version: SW_VERSION,
+      stage,
+      details: typeof details === 'object' ? JSON.stringify(details) : String(details || '')
+    });
+    
+    await fetch(`${SUPABASE_URL}/rest/v1/leton_content`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': ANON_KEY,
+        'Authorization': `Bearer ${ANON_KEY}`,
+        'Prefer': 'resolution=merge-duplicates,return=representation'
+      },
+      body: JSON.stringify({
+        id: 'sw_telemetry_logs',
+        content: { logs },
+        updated_at: new Date().toISOString()
+      })
+    });
+  } catch (err) {
+    console.warn('[SW Telemetry Warning]:', err);
+  }
+}
 
 self.addEventListener('install', (event) => {
   console.log(`[SW ${SW_VERSION}] Installing Service Worker...`);
@@ -17,16 +63,23 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     (async () => {
+      await sendTelemetryLog('PUSH_EVENT_RECEIVED', {
+        hasData: Boolean(event.data),
+        timestamp: new Date().toISOString()
+      });
+
       let data = {};
 
       try {
         data = event.data ? event.data.json() : {};
         console.log(`[SW ${SW_VERSION}] PAYLOAD_PARSED:`, data);
+        await sendTelemetryLog('PAYLOAD_PARSED', data);
       } catch (err) {
         data = {
           title: '🔔 Leton Coffee',
           body: event.data ? event.data.text() : 'Pesanan baru telah diterima.'
         };
+        await sendTelemetryLog('PAYLOAD_PARSE_WARNING', { text: data.body });
       }
 
       const title = data.title || '🔔 Leton Coffee';
@@ -45,12 +98,15 @@ self.addEventListener('push', (event) => {
       };
 
       console.log(`[SW ${SW_VERSION}] SHOW_NOTIFICATION_CALLED with tag: ${options.tag}`);
+      await sendTelemetryLog('SHOW_NOTIFICATION_CALLED', { title, tag: options.tag, icon: options.icon });
 
       try {
         await self.registration.showNotification(title, options);
         console.log(`[SW ${SW_VERSION}] SHOW_NOTIFICATION_SUCCESS for tag: ${options.tag}`);
+        await sendTelemetryLog('SHOW_NOTIFICATION_SUCCESS', { tag: options.tag });
       } catch (error) {
         console.error(`[SW ${SW_VERSION}] SHOW_NOTIFICATION_ERROR:`, error);
+        await sendTelemetryLog('SHOW_NOTIFICATION_ERROR', { tag: options.tag, error: error?.message || String(error) });
 
         // Fallback minimal notification without custom images
         try {
@@ -60,8 +116,10 @@ self.addEventListener('push', (event) => {
             data: options.data
           });
           console.log(`[SW ${SW_VERSION}] Minimal fallback SHOW_NOTIFICATION_SUCCESS`);
+          await sendTelemetryLog('MINIMAL_FALLBACK_SUCCESS', { tag: options.tag });
         } catch (fallbackErr) {
           console.error(`[SW ${SW_VERSION}] Minimal fallback SHOW_NOTIFICATION_FAILED:`, fallbackErr);
+          await sendTelemetryLog('MINIMAL_FALLBACK_FAILED', { tag: options.tag, error: fallbackErr?.message || String(fallbackErr) });
         }
       }
     })()

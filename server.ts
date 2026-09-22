@@ -2323,6 +2323,25 @@ app.post('/api/push/unsubscribe', async (req, res) => {
   }
 });
 
+app.get('/api/push/telemetry', async (_req, res) => {
+  try {
+    const { data } = await supabase
+      .from('leton_content')
+      .select('content')
+      .eq('id', 'sw_telemetry_logs')
+      .maybeSingle();
+
+    const logs = data?.content?.logs || [];
+    res.json({
+      success: true,
+      count: logs.length,
+      logs
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch telemetry.' });
+  }
+});
+
 async function executeTestPush(options: { title?: string; body?: string; subscription?: any; outletId?: string }) {
   console.log('====================================');
   console.log('[TEST PUSH START]');

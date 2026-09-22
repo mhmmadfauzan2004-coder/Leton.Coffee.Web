@@ -14,7 +14,7 @@ import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminLogin } from './components/admin/AdminLogin';
 import { PageSkeletonLoader } from './components/public/PageSkeletonLoader';
 import { OrderingSystemModal } from './components/public/ordering/OrderingSystemModal';
-import { MessageCircle, ShoppingBag } from 'lucide-react';
+import { MessageCircle, ShoppingBag, Lock } from 'lucide-react';
 import { createWhatsAppLink } from './utils/formatters';
 import { motion, AnimatePresence } from 'motion/react';
 import { MenuItem } from './types';
@@ -35,35 +35,11 @@ const AppContent: React.FC = () => {
         hash.startsWith('#/admin') ||
         hash.startsWith('#admin');
 
-      if (isUrlAdmin) return true;
-
-      // Safe standalone detection for iOS Home Screen & Android PWA
-      const isStandalone =
-        (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches) ||
-        (window.navigator as any)?.standalone === true ||
-        (document.referrer && document.referrer.includes('apple-mobile-web-app'));
-
-      let lastMode = null;
-      let hasAdminSession = false;
-      try {
-        lastMode = localStorage.getItem('leton_last_route_mode');
-        hasAdminSession = !!localStorage.getItem('leton_admin_token') || !!localStorage.getItem('leton_admin_auth');
-      } catch {}
-
-      // If launched as Standalone PWA and user was in admin mode or has active admin session
-      if (isStandalone && (lastMode === 'admin' || hasAdminSession)) {
-        if (!hash.startsWith('#admin')) {
-          try {
-            window.history.replaceState(null, '', '#admin');
-          } catch {}
-        }
-        return true;
-      }
+      return isUrlAdmin;
     } catch (err) {
       console.warn('[App] Initial route detection handled:', err);
+      return false;
     }
-
-    return false;
   });
 
   const [isOrderingOpen, setIsOrderingOpen] = useState<boolean>(() => {
@@ -83,33 +59,16 @@ const AppContent: React.FC = () => {
   const [isMemberOnlyFlow, setIsMemberOnlyFlow] = useState<boolean>(false);
   const [orderingMenuItem, setOrderingMenuItem] = useState<MenuItem | null>(null);
 
-  // Sync PWA Manifest, document title, apple-mobile-web-app-title, and route mode storage
+  // Sync document title and keep unified single PWA manifest
   useEffect(() => {
     try {
-      const manifestLink = document.getElementById('app-manifest') as HTMLLinkElement | null;
-      const appleTitleMeta = document.getElementById('app-title-meta') as HTMLMetaElement | null;
-
       if (isAdminRoute) {
-        try { localStorage.setItem('leton_last_route_mode', 'admin'); } catch {}
-        if (manifestLink) {
-          manifestLink.setAttribute('href', '/manifest-admin.json');
-        }
-        if (appleTitleMeta) {
-          appleTitleMeta.setAttribute('content', 'Leton Admin');
-        }
         document.title = 'Leton Coffee — Dashboard Admin';
       } else {
-        try { localStorage.setItem('leton_last_route_mode', 'public'); } catch {}
-        if (manifestLink) {
-          manifestLink.setAttribute('href', '/manifest.json');
-        }
-        if (appleTitleMeta) {
-          appleTitleMeta.setAttribute('content', 'LetonCoffee');
-        }
         document.title = 'Leton Coffee — Website Profil & Online Ordering';
       }
     } catch (err) {
-      console.warn('[App] Manifest update handled:', err);
+      console.warn('[App] Title update handled:', err);
     }
   }, [isAdminRoute]);
 
@@ -149,13 +108,11 @@ const AppContent: React.FC = () => {
 
   const openAdmin = () => {
     setIsAdminRoute(true);
-    try { localStorage.setItem('leton_last_route_mode', 'admin'); } catch {}
     try { window.history.pushState(null, '', '#admin'); } catch {}
   };
 
   const closeAdmin = () => {
     setIsAdminRoute(false);
-    try { localStorage.setItem('leton_last_route_mode', 'public'); } catch {}
     try { window.history.pushState(null, '', '/#home'); } catch {}
   };
 
@@ -253,13 +210,15 @@ const AppContent: React.FC = () => {
             {/* 08 — CONTACT & FOOTER */}
             <ContactSection />
 
-            {/* Floating Action Button (Quick WhatsApp) */}
-            <div className="fixed bottom-6 left-6 z-40 flex items-center gap-2">
+            {/* Floating Action Buttons (Bottom Left: WhatsApp & Discreet Admin Lock) */}
+            <div className="fixed bottom-5 left-5 z-40 flex items-center gap-2.5">
               <a
                 href={floatingWhatsAppLink}
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Order via WhatsApp"
+                id="floating-whatsapp-btn"
+                aria-label="Order via WhatsApp"
                 className="p-3.5 rounded-full bg-[#00E5FF] hover:bg-[#3cf0ff] text-slate-950 shadow-2xl shadow-[#00E5FF]/40 flex items-center justify-center transition-all transform hover:scale-110 active:scale-95 group"
               >
                 <MessageCircle className="w-5 h-5" />
@@ -267,10 +226,21 @@ const AppContent: React.FC = () => {
                   Order WhatsApp
                 </span>
               </a>
+
+              {/* Discreet Admin Lock Button (🔒) */}
+              <button
+                onClick={openAdmin}
+                id="admin-lock-access-btn"
+                title="Portal Login Admin"
+                aria-label="Portal Login Admin"
+                className="p-3 rounded-full bg-slate-900/85 hover:bg-slate-900 text-slate-400 hover:text-[#00E5FF] border border-slate-700/60 hover:border-[#00E5FF]/60 shadow-xl backdrop-blur-md flex items-center justify-center transition-all transform hover:scale-110 active:scale-95 cursor-pointer group"
+              >
+                <Lock className="w-4 h-4 transition-transform group-hover:rotate-12" />
+              </button>
             </div>
 
             {/* Floating Action Button (Online Ordering - Bottom Right) */}
-            <div className="fixed bottom-6 right-6 z-40">
+            <div className="fixed bottom-5 right-5 z-40">
               <button
                 onClick={() => openOrdering()}
                 id="floating-order-now-btn"

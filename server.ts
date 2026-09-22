@@ -2090,7 +2090,59 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
           endpointDomain = new URL(sub.endpoint).hostname;
         } catch (e) {}
 
-        console.log(`[REAL ORDER PUSH DISPATCH #${idx + 1}] Target: "${sub.username}" | Outlet: "${sub.outletId}" | Provider Domain: "${endpointDomain}" | sendNotification() called: YES`);
+        const isAppleEndpoint = sub.endpoint.includes('push.apple.com') || sub.endpoint.includes('apple.com');
+
+        let subPayload: string;
+        let pushOptions: any;
+
+        if (isAppleEndpoint) {
+          subPayload = JSON.stringify({
+            web_push: 8030,
+            notification: {
+              title: '🔔 Leton Coffee',
+              body: `Pesanan Baru Masuk! #${orderNum} • ${customerName} • ${totalFormatted}`,
+              navigate: `https://leton-coffee-web.pages.dev/#admin?tab=orders&orderId=${encodeURIComponent(order.id || '')}`,
+              silent: false
+            }
+          });
+
+          pushOptions = {
+            TTL: 86400,
+            urgency: 'high' as const,
+            headers: {
+              'Content-Type': 'application/notification+json',
+              'Urgency': 'high'
+            }
+          };
+        } else {
+          subPayload = JSON.stringify({
+            title: '🔔 Leton Coffee',
+            body: `Pesanan Baru Masuk!\n#${orderNum} • ${customerName} • ${totalFormatted}`,
+            icon: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
+            tag: `order-push-${order.id || Date.now()}`,
+            data: {
+              type: 'NEW_ORDER',
+              orderId: order.id,
+              orderNumber: orderNum,
+              outletId: orderOutlet || '',
+              outletName: orderOutletName || '',
+              customerName: customerName,
+              totalFormatted: totalFormatted,
+              timestamp: Date.now(),
+              url: '/#admin?tab=orders'
+            }
+          });
+
+          pushOptions = {
+            TTL: 86400,
+            urgency: 'high' as const,
+            headers: {
+              'Urgency': 'high'
+            }
+          };
+        }
+
+        console.log(`[REAL ORDER PUSH DISPATCH #${idx + 1}] Target: "${sub.username}" | Outlet: "${sub.outletId}" | Apple Declarative: ${isAppleEndpoint ? 'YES' : 'NO'} | Provider: "${endpointDomain}"`);
 
         try {
           const pushSubscription = {
@@ -2100,21 +2152,14 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
               auth: sub.keys.auth
             }
           };
-          const pushOptions = {
-            TTL: 86400,
-            urgency: 'high' as const,
-            headers: {
-              'Urgency': 'high'
-            }
-          };
 
-          const pushResult = await webpush.sendNotification(pushSubscription, payload, pushOptions);
+          const pushResult = await webpush.sendNotification(pushSubscription, subPayload, pushOptions);
           const statusCode = pushResult.statusCode || 201;
-          console.log(`[REAL ORDER PUSH DISPATCH #${idx + 1}] ✅ SUCCESS: Provider responded with status ${statusCode} for admin "${sub.username}" on ${endpointDomain}. Push delivered to Apple/Push gateway.`);
+          console.log(`[REAL ORDER PUSH DISPATCH #${idx + 1}] ✅ SUCCESS: Provider status ${statusCode} for admin "${sub.username}" on ${endpointDomain}.`);
         } catch (err: any) {
           const statusCode = err.statusCode || err.status || 'unknown';
           const isExpired = statusCode === 410 || statusCode === 404;
-          console.error(`[REAL ORDER PUSH DISPATCH #${idx + 1}] ❌ FAILED: Provider error for admin "${sub.username}". StatusCode: ${statusCode}, Error: ${err.message || String(err)}, Expired/Stale: ${isExpired ? 'YES (410/404)' : 'NO'}`);
+          console.error(`[REAL ORDER PUSH DISPATCH #${idx + 1}] ❌ FAILED: Provider error for admin "${sub.username}". StatusCode: ${statusCode}, Error: ${err.message || String(err)}`);
           if (err.body) {
             console.error(`[REAL ORDER PUSH DISPATCH #${idx + 1}] Provider Error Body:`, err.body);
           }
@@ -2438,10 +2483,53 @@ async function executeTestPush(options: { title?: string; body?: string; subscri
         endpointDomain = new URL(sub.endpoint).hostname;
       } catch (e) {}
 
-      console.log(`[TEST PUSH DISPATCH] Target Endpoint Domain: ${endpointDomain}`);
+      const isAppleEndpoint = sub.endpoint.includes('push.apple.com') || sub.endpoint.includes('apple.com');
+
+      let subPayload: string;
+      let pushOptions: any;
+
+      if (isAppleEndpoint) {
+        subPayload = JSON.stringify({
+          web_push: 8030,
+          notification: {
+            title: customTitle,
+            body: customBody,
+            navigate: 'https://leton-coffee-web.pages.dev/#admin?tab=orders',
+            silent: false
+          }
+        });
+
+        pushOptions = {
+          TTL: 86400,
+          urgency: 'high' as const,
+          headers: {
+            'Content-Type': 'application/notification+json',
+            'Urgency': 'high'
+          }
+        };
+      } else {
+        subPayload = JSON.stringify({
+          title: customTitle,
+          body: customBody,
+          icon: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
+          tag: `test-push-${Date.now()}`,
+          data: {
+            url: '/#admin?tab=orders'
+          }
+        });
+
+        pushOptions = {
+          TTL: 86400,
+          urgency: 'high' as const,
+          headers: {
+            'Urgency': 'high'
+          }
+        };
+      }
+
+      console.log(`[TEST PUSH DISPATCH] Target Endpoint Domain: ${endpointDomain} | Apple Declarative: ${isAppleEndpoint ? 'YES' : 'NO'}`);
       console.log(`[TEST PUSH DISPATCH] Outlet: ${sub.outletId || sub.outlet_id || 'all'}`);
       console.log(`[TEST PUSH DISPATCH] Username: ${sub.username || 'admin'}`);
-      console.log(`[TEST PUSH DISPATCH] Subscription exists: YES`);
       console.log(`[webpush.sendNotification START]`);
 
       try {
@@ -2452,14 +2540,7 @@ async function executeTestPush(options: { title?: string; body?: string; subscri
             auth: sub.keys.auth
           }
         };
-        const pushOptions = {
-          TTL: 86400,
-          urgency: 'high' as const,
-          headers: {
-            'Urgency': 'high'
-          }
-        };
-        const pushResult = await webpush.sendNotification(pushSubscription, payload, pushOptions);
+        const pushResult = await webpush.sendNotification(pushSubscription, subPayload, pushOptions);
         const statusCode = pushResult.statusCode || 201;
         console.log(`[Apple response] status: ${statusCode}`);
         console.log(`[webpush.sendNotification END] SUCCESS for domain: ${endpointDomain}`);

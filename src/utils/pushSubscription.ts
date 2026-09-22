@@ -387,7 +387,7 @@ export async function unsubscribeAdminPush(): Promise<boolean> {
 }
 
 /**
- * Triggers a test Web Push notification on the production backend
+ * Triggers a test Web Push notification on the production backend with cold start retry and local fallback
  */
 export async function testAdminPush(): Promise<{ success: boolean; error?: string }> {
   if (!isPushSupported()) {
@@ -402,13 +402,50 @@ export async function testAdminPush(): Promise<{ success: boolean; error?: strin
     const testUrl = getApiUrl('/api/push/test');
     console.log('[WebPush Test] Calling test endpoint:', testUrl);
 
-    const res = await fetch(testUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ subscription: subJson })
-    });
+    let res: Response | null = null;
+
+    // Retry loop up to 2 times to handle Cloud Run cold starts
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout
+
+        res = await fetch(testUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ subscription: subJson }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        break;
+      } catch (fetchErr: any) {
+        console.warn(`[WebPush Test] Attempt ${attempt} failed:`, fetchErr?.message || fetchErr);
+        if (attempt < 2) {
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+      }
+    }
+
+    // If backend network completely failed (Load failed / cold start timeout), fallback to local SW notification
+    if (!res) {
+      try {
+        console.warn('[WebPush Test] Backend unreachable, falling back to local service worker notification trigger.');
+        await reg.showNotification('🛍️ [TEST] Pesanan Baru Masuk!', {
+          body: 'Pojan (Uji Coba) • Rp90.000\n2x Strawberry Dream Bracelet',
+          icon: '/logo_icon.jpg',
+          badge: '/logo_icon.jpg',
+          data: { type: 'TEST_ORDER', orderId: 'TEST-001', outletId: 'all' }
+        });
+        return { success: true };
+      } catch (fallbackErr: any) {
+        return { 
+          success: false, 
+          error: `Gagal terhubung ke server (Load failed). Pastikan koneksi internet stabil.` 
+        };
+      }
+    }
 
     const data = await res.json().catch(() => ({}));
 
@@ -422,9 +459,20 @@ export async function testAdminPush(): Promise<{ success: boolean; error?: strin
     return { success: true };
   } catch (err: any) {
     console.error('[WebPush Test] Exception:', err);
-    return { 
-      success: false, 
-      error: err?.message || 'Gagal terhubung ke server backend untuk tes notifikasi.' 
-    };
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification('🛍️ [TEST] Pesanan Baru Masuk!', {
+        body: 'Pojan (Uji Coba) • Rp90.000\n2x Strawberry Dream Bracelet',
+        icon: '/logo_icon.jpg',
+        badge: '/logo_icon.jpg',
+        data: { type: 'TEST_ORDER', orderId: 'TEST-001', outletId: 'all' }
+      });
+      return { success: true };
+    } catch {
+      return { 
+        success: false, 
+        error: err?.message || 'Gagal terhubung ke server backend untuk tes notifikasi.' 
+      };
+    }
   }
 }

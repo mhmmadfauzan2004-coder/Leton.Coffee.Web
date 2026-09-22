@@ -2226,7 +2226,7 @@ app.get('/api/push/debug', async (req, res) => {
       status: 'ok',
       activeSubscriptionsCount: subs.length,
       vapidPublicKeyFingerprint,
-      serviceWorkerVersion: '1.0.7-ios-bg-push',
+      serviceWorkerVersion: '1.0.8-ios-bg-push',
       serviceWorkerStatus: 'active_and_no_cache_configured',
       subscriptions: sanitizedSubs,
       timestamp: new Date().toISOString()

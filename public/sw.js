@@ -1,5 +1,5 @@
 // Leton Coffee - Production PWA Service Worker for Background Web Push
-const SW_VERSION = '1.0.7-ios-bg-push';
+const SW_VERSION = '1.0.8-ios-bg-push';
 
 self.addEventListener('install', (event) => {
   console.log(`[SW ${SW_VERSION}] Installing Service Worker...`);
@@ -29,11 +29,12 @@ self.addEventListener('push', (event) => {
       }
 
       const title = data.title || '🔔 Leton Coffee';
+      const baseUrl = self.location ? self.location.origin : '';
 
       const options = {
         body: data.body || 'Pesanan baru telah diterima.',
-        icon: data.icon || '/logo_icon.jpg',
-        badge: data.badge || '/logo_icon.jpg',
+        icon: data.icon ? (data.icon.startsWith('http') ? data.icon : `${baseUrl}${data.icon}`) : `${baseUrl}/logo_icon.jpg`,
+        badge: data.badge ? (data.badge.startsWith('http') ? data.badge : `${baseUrl}${data.badge}`) : `${baseUrl}/logo_icon.jpg`,
         tag: data.tag || `order-${data.orderId || data.orderNumber || Date.now()}`,
         data: {
           ...(data.data || {}),
@@ -49,7 +50,7 @@ self.addEventListener('push', (event) => {
       } catch (error) {
         console.error(`[SW ${SW_VERSION}] showNotification FAILED:`, error);
 
-        // Minimal fallback notification
+        // Fallback minimal notification without custom icons to guarantee rendering on iOS
         try {
           await self.registration.showNotification(title, {
             body: options.body,

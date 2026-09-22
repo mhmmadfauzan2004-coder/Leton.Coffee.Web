@@ -21,7 +21,8 @@ import {
   isPushSupported,
   getPushSubscription,
   subscribeAdminPush,
-  unsubscribeAdminPush
+  unsubscribeAdminPush,
+  testAdminPush
 } from '../../utils/pushSubscription';
 import {
   LayoutDashboard,
@@ -72,7 +73,32 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
   const [isPushCapable, setIsPushCapable] = useState<boolean>(false);
   const [isPushActive, setIsPushActive] = useState<boolean>(false);
   const [isSubscribing, setIsSubscribing] = useState<boolean>(false);
+  const [isTestingPush, setIsTestingPush] = useState<boolean>(false);
+  const [testPushStatus, setTestPushStatus] = useState<string | null>(null);
   const [showIosGuide, setShowIosGuide] = useState<boolean>(false);
+
+  const handleTestPush = async () => {
+    if (isTestingPush) return;
+    setIsTestingPush(true);
+    setTestPushStatus(null);
+
+    try {
+      const res = await testAdminPush();
+      if (res.success) {
+        setTestPushStatus('Test berhasil dikirim');
+        alert('Test berhasil dikirim! Periksa perangkat Anda (pastikan browser di-background atau ditutup untuk melihat system notification).');
+        setTimeout(() => setTestPushStatus(null), 3500);
+      } else {
+        alert(`Test gagal dikirim:\n${res.error || 'Terjadi kesalahan sistem.'}`);
+        setTestPushStatus(null);
+      }
+    } catch (err: any) {
+      alert(`Test gagal:\n${err?.message || String(err)}`);
+      setTestPushStatus(null);
+    } finally {
+      setIsTestingPush(false);
+    }
+  };
 
   useEffect(() => {
     const checkPushSupport = async () => {
@@ -270,18 +296,29 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
             </div>
 
             {isPushCapable ? (
-              <button
-                disabled={isSubscribing}
-                onClick={handleTogglePushNotifications}
-                onTouchEnd={handleTogglePushNotifications}
-                className={`w-full py-1.5 px-3 rounded-lg text-[11px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  isPushActive
-                    ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                    : 'bg-[#0284C7] text-white hover:bg-[#0369a1]'
-                }`}
-              >
-                {isSubscribing ? 'Memproses...' : isPushActive ? 'Matikan Notifikasi' : 'Aktifkan Notifikasi'}
-              </button>
+              <div className="space-y-1.5">
+                <button
+                  disabled={isSubscribing}
+                  onClick={handleTogglePushNotifications}
+                  onTouchEnd={handleTogglePushNotifications}
+                  className={`w-full py-1.5 px-3 rounded-lg text-[11px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    isPushActive
+                      ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                      : 'bg-[#0284C7] text-white hover:bg-[#0369a1]'
+                  }`}
+                >
+                  {isSubscribing ? 'Memproses...' : isPushActive ? 'Matikan Notifikasi' : 'Aktifkan Notifikasi'}
+                </button>
+                {isPushActive && (
+                  <button
+                    disabled={isTestingPush}
+                    onClick={handleTestPush}
+                    className="w-full py-1.5 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-sm"
+                  >
+                    {isTestingPush ? 'Mengirim...' : (testPushStatus || 'Tes Suara & Pop-up')}
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="space-y-1">
                 {/iPad|iPhone|iPod/.test(typeof navigator !== 'undefined' ? navigator.userAgent : '') ? (
@@ -517,18 +554,29 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
             </div>
 
             {isPushCapable ? (
-              <button
-                disabled={isSubscribing}
-                onClick={handleTogglePushNotifications}
-                onTouchEnd={handleTogglePushNotifications}
-                className={`w-full py-1.5 px-3 rounded-lg text-[11px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  isPushActive
-                    ? 'bg-red-50 text-red-600 hover:bg-red-100'
-                    : 'bg-[#0284C7] text-white hover:bg-[#0369a1]'
-                }`}
-              >
-                {isSubscribing ? 'Memproses...' : isPushActive ? 'Matikan Notifikasi' : 'Aktifkan Notifikasi'}
-              </button>
+              <div className="space-y-1.5">
+                <button
+                  disabled={isSubscribing}
+                  onClick={handleTogglePushNotifications}
+                  onTouchEnd={handleTogglePushNotifications}
+                  className={`w-full py-1.5 px-3 rounded-lg text-[11px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    isPushActive
+                      ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                      : 'bg-[#0284C7] text-white hover:bg-[#0369a1]'
+                  }`}
+                >
+                  {isSubscribing ? 'Memproses...' : isPushActive ? 'Matikan Notifikasi' : 'Aktifkan Notifikasi'}
+                </button>
+                {isPushActive && (
+                  <button
+                    disabled={isTestingPush}
+                    onClick={handleTestPush}
+                    className="w-full py-1.5 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-sm"
+                  >
+                    {isTestingPush ? 'Mengirim...' : (testPushStatus || 'Tes Suara & Pop-up')}
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="space-y-1">
                 {/iPad|iPhone|iPod/.test(typeof navigator !== 'undefined' ? navigator.userAgent : '') ? (

@@ -327,35 +327,99 @@ export async function subscribeAdminPush(username: string, outletId: string, rol
 }
 
 /**
- * Unsubscribes from Web Push and removes it from backend
+ * Unsubscribes from Web Push and removes it from backend and Supabase
  */
 export async function unsubscribeAdminPush(): Promise<boolean> {
-  if (!isPushSupported()) return false;
+  if (!isPushSupported()) return true;
 
   try {
     const reg = await navigator.serviceWorker.ready;
     const subscription = await reg.pushManager.getSubscription();
 
-    if (subscription) {
-      const endpoint = subscription.endpoint;
+    if (!subscription) {
+      console.log('[WebPush] No active subscription found on browser during unsubscribe.');
+      return true;
+    }
 
-      // 1. Tell backend to delete subscription
-      await fetch(getApiUrl('/api/push/unsubscribe'), {
+    const endpoint = subscription.endpoint;
+
+    // 1. Try deleting subscription from backend API
+    try {
+      const unsubUrl = getApiUrl('/api/push/unsubscribe');
+      await fetch(unsubUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ endpoint })
       });
+    } catch (apiErr) {
+      console.warn('[WebPush] Backend unsubscribe API error (proceeding with local & supabase cleanup):', apiErr);
+    }
 
-      // 2. Unsubscribe from browser push manager
+    // 2. Direct cleanup from Supabase push_subscriptions table
+    try {
+      if (endpoint) {
+        await supabase
+          .from('push_subscriptions')
+          .delete()
+          .eq('endpoint', endpoint);
+        console.log('[WebPush] Successfully deleted subscription from Supabase push_subscriptions table.');
+      }
+    } catch (dbErr) {
+      console.warn('[WebPush] Direct Supabase delete exception:', dbErr);
+    }
+
+    // 3. Unsubscribe from browser push manager
+    try {
       await subscription.unsubscribe();
-      console.log('[WebPush] Unsubscribed successfully.');
+      console.log('[WebPush] Unsubscribed successfully from browser.');
+    } catch (subUnsubErr) {
+      console.warn('[WebPush] Browser subscription unsubscribe error:', subUnsubErr);
     }
 
     return true;
   } catch (err) {
     console.error('[WebPush] Error during unsubscription:', err);
-    return false;
+    // Return true to prevent UI stuck or false error alerts if subscription is already cleared
+    return true;
+  }
+}
+
+/**
+ * Triggers a test Web Push notification on the production backend
+ */
+export async function testAdminPush(): Promise<{ success: boolean; error?: string }> {
+  if (!isPushSupported()) {
+    return { success: false, error: 'Web Push tidak didukung di peramban ini.' };
+  }
+
+  try {
+    const testUrl = getApiUrl('/api/push/test');
+    console.log('[WebPush Test] Calling test endpoint:', testUrl);
+
+    const res = await fetch(testUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.success) {
+      return { 
+        success: false, 
+        error: data.error || `HTTP ${res.status}: Gagal mengirim tes notifikasi dari server.` 
+      };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[WebPush Test] Exception:', err);
+    return { 
+      success: false, 
+      error: err?.message || 'Gagal terhubung ke server backend untuk tes notifikasi.' 
+    };
   }
 }

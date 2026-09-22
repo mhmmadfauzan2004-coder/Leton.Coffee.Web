@@ -1933,6 +1933,56 @@ app.post('/api/push/unsubscribe', async (req, res) => {
   }
 });
 
+app.post('/api/push/test', async (req, res) => {
+  try {
+    const subs = await getPushSubscriptions();
+    if (!subs || subs.length === 0) {
+      return res.status(400).json({ error: 'Tidak ada perangkat admin yang terdaftar untuk menerima push notification. Silakan klik "Aktifkan Notifikasi" terlebih dahulu.' });
+    }
+
+    const payload = JSON.stringify({
+      title: '🛍️ [TEST] Pesanan Baru Masuk!',
+      body: 'Pojan (Uji Coba) • Rp90.000\n2x Strawberry Dream Bracelet',
+      icon: '/logo_icon.jpg',
+      badge: '/logo_icon.jpg',
+      data: {
+        type: 'TEST_ORDER',
+        orderId: 'TEST-001',
+        outletId: 'all'
+      }
+    });
+
+    let sentCount = 0;
+    const errors: string[] = [];
+
+    for (const sub of subs) {
+      try {
+        const pushSubscription = {
+          endpoint: sub.endpoint,
+          keys: {
+            p256dh: sub.keys.p256dh,
+            auth: sub.keys.auth
+          }
+        };
+        await webpush.sendNotification(pushSubscription, payload);
+        sentCount++;
+      } catch (err: any) {
+        console.warn(`[WebPush Test] Failed to send notification to endpoint ${sub.endpoint}:`, err?.message || err);
+        errors.push(err?.message || 'Unknown push error');
+      }
+    }
+
+    if (sentCount === 0 && errors.length > 0) {
+      return res.status(500).json({ error: `Gagal mengirim push notification ke perangkat: ${errors[0]}` });
+    }
+
+    res.json({ success: true, sentCount });
+  } catch (err: any) {
+    console.error('[WebPush Test] Exception:', err);
+    res.status(500).json({ error: err.message || 'Terjadi kesalahan saat mengirim tes notifikasi.' });
+  }
+});
+
 // ---------------------------------------------
 // VITE / STATIC SERVING
 // ---------------------------------------------

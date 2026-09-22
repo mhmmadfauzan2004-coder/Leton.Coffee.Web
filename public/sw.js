@@ -52,9 +52,13 @@ self.addEventListener('notificationclick', (event) => {
   const data = event.notification.data || {};
   const orderId = data.orderId || '';
   const outletId = data.outletId || '';
+  const type = data.type || '';
 
   // Redirect url
-  const targetUrl = `/#admin?tab=orders&orderId=${orderId}&outletId=${outletId}`;
+  let targetUrl = `/#admin?tab=orders`;
+  if (orderId && type !== 'TEST_ORDER') {
+    targetUrl = `/#admin?tab=orders&orderId=${orderId}&outletId=${outletId}`;
+  }
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true })
@@ -63,7 +67,6 @@ self.addEventListener('notificationclick', (event) => {
         for (const client of clientList) {
           const clientUrl = new URL(client.url);
           if (clientUrl.pathname === '/' || clientUrl.hash.includes('#admin')) {
-            // Send message to the window to update its view if needed
             try {
               client.postMessage({
                 type: 'NOTIFICATION_CLICKED',

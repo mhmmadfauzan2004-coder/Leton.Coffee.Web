@@ -1813,6 +1813,9 @@ async function getPushSubscriptions(): Promise<any[]> {
             username: sub.username,
             outletId: sub.outletId || sub.outlet_id,
             role: sub.role,
+            swScope: sub.swScope || '/',
+            swScriptURL: sub.swScriptURL || '',
+            swVersion: sub.swVersion || '1.0.9-ios-bg-push',
             createdAt: sub.createdAt || sub.created_at,
             updatedAt: sub.updatedAt || sub.updated_at
           });
@@ -2157,6 +2160,26 @@ function initSupabaseOrderListener() {
           });
         }
       })
+      .on('broadcast', { event: 'TEST_PUSH' }, (event) => {
+        console.log('[WebPush Listener] Received TEST_PUSH broadcast event:', event.payload);
+        executeTestPush(event.payload || {}).catch(err => {
+          console.error('[WebPush Listener] Test Push trigger error:', err);
+        });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leton_content' }, (payload) => {
+        const row = payload.new as any;
+        if (row && (row.id === 'test_push_trigger' || row.id === 'push_trigger' || (typeof row.id === 'string' && row.id.startsWith('test_push')))) {
+          console.log('[WebPush Listener] Received leton_content trigger:', row);
+          const content = row.content || {};
+          executeTestPush({
+            title: content.title || 'TEST BACKGROUND PUSH',
+            body: content.body || 'TEST PUSH LETON COFFEE',
+            outletId: content.outlet_id || content.outletId || 'sudirman'
+          }).catch(err => {
+            console.error('[WebPush Listener] leton_content push error:', err);
+          });
+        }
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
         const row = payload.new;
         if (row && row.id) {
@@ -2215,8 +2238,12 @@ app.get('/api/push/debug', async (req, res) => {
         outlet_id: sub.outletId || sub.outlet_id || 'all',
         role: sub.role || 'outlet_admin',
         endpointDomain,
+        endpoint: sub.endpoint,
         hasP256dh: !!(sub.keys?.p256dh || sub.p256dh),
         hasAuth: !!(sub.keys?.auth || sub.auth),
+        swScope: sub.swScope || '/',
+        swScriptURL: sub.swScriptURL || '',
+        swVersion: sub.swVersion || '1.0.9-ios-bg-push',
         created_at: sub.createdAt || sub.created_at || null,
         updated_at: sub.updatedAt || sub.updated_at || null
       };
@@ -2296,14 +2323,14 @@ app.post('/api/push/unsubscribe', async (req, res) => {
   }
 });
 
-app.post('/api/push/test', async (req, res) => {
+async function executeTestPush(options: { title?: string; body?: string; subscription?: any; outletId?: string }) {
   console.log('====================================');
   console.log('[TEST PUSH START]');
   try {
-    const clientSubscription = req.body?.subscription;
-    const targetOutlet = req.body?.outletId || req.body?.targetOutlet || 'sudirman';
-    const customTitle = req.body?.title || 'TEST BACKGROUND PUSH';
-    const customBody = req.body?.body || 'Jika ini muncul, background Web Push bekerja.';
+    const clientSubscription = options.subscription;
+    const targetOutlet = options.outletId || 'sudirman';
+    const customTitle = options.title || 'TEST BACKGROUND PUSH';
+    const customBody = options.body || 'TEST PUSH LETON COFFEE';
     
     let subs = await getPushSubscriptions();
 
@@ -2327,7 +2354,7 @@ app.post('/api/push/test', async (req, res) => {
 
     if (!subs || subs.length === 0) {
       console.log('[TEST PUSH END] Subscription exists: NO');
-      return res.status(400).json({ success: false, error: 'Tidak ada perangkat admin yang terdaftar. Klik Aktifkan Notifikasi di PWA terlebih dahulu.' });
+      return { success: false, sentCount: 0, error: 'Tidak ada perangkat admin yang terdaftar. Klik Aktifkan Notifikasi di PWA terlebih dahulu.', results: [] };
     }
 
     const payload = JSON.stringify({
@@ -2388,10 +2415,25 @@ app.post('/api/push/test', async (req, res) => {
 
     console.log('[TEST PUSH END] Finished sending test notifications.');
     console.log('====================================');
-    res.json({ success: sentCount > 0, sentCount, results });
+    return { success: sentCount > 0, sentCount, results };
   } catch (err: any) {
     console.error('[TEST PUSH ERROR]', err);
-    res.status(500).json({ success: false, error: err.message || 'Error during test push' });
+    return { success: false, sentCount: 0, error: err.message || 'Error during test push', results: [] };
+  }
+}
+
+app.post('/api/push/test', async (req, res) => {
+  try {
+    const result = await executeTestPush({
+      title: req.body?.title,
+      body: req.body?.body,
+      subscription: req.body?.subscription,
+      outletId: req.body?.outletId || req.body?.targetOutlet
+    });
+    const statusCode = result.success ? 200 : (result.sentCount === 0 && result.results.length === 0 ? 400 : 500);
+    res.status(statusCode).json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Error executing test push' });
   }
 });
 

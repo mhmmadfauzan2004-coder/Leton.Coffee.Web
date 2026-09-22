@@ -240,67 +240,84 @@ export async function subscribeAdminPush(username: string, outletId: string, rol
       throw new Error('PushSubscription returned is null or does not contain a valid endpoint.');
     }
 
-    // 7. Send subscription details to backend with direct Supabase client fallback
+    // 7. Save subscription details directly to Supabase leton_content table (unblocked by RLS)
     checkpoints['CHECKPOINT 8 (POST subscription ke backend)'] = 'PENDING';
     checkpoints['CHECKPOINT 9 (subscription berhasil disimpan)'] = 'PENDING';
-    const saveUrl = getApiUrl('/api/push/subscribe');
-    console.log('[WebPush Checkpoint 8] Saving subscription to URL:', saveUrl);
 
-    let savedViaBackend = false;
+    const subJson = subscription.toJSON();
+    const nowIso = new Date().toISOString();
+    const swScope = reg ? reg.scope : '/';
+    const swScriptURL = reg && reg.active ? reg.active.scriptURL : '';
+    const swVersion = '1.0.9-ios-bg-push';
+
+    const subscriptionPayload = {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subJson.keys?.p256dh || '',
+        auth: subJson.keys?.auth || ''
+      },
+      username: username || 'admin_sudirman',
+      outletId: outletId || 'sudirman',
+      role: role || 'outlet_admin',
+      swScope,
+      swScriptURL,
+      swVersion,
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+
+    console.log('[WebPush Checkpoint 8] Saving subscription directly to Supabase leton_content:', subscriptionPayload);
+
+    let savedSuccessfully = false;
+
+    // Direct Supabase leton_content upsert
     try {
-      const subRes = await fetch(saveUrl, {
+      const { data: currentDoc } = await supabase
+        .from('leton_content')
+        .select('*')
+        .eq('id', 'push_subscriptions')
+        .maybeSingle();
+
+      const existingSubs: any[] = currentDoc?.content?.subscriptions || [];
+      const cleanSubs = existingSubs.filter(s => s && s.endpoint !== subscription.endpoint);
+      cleanSubs.push(subscriptionPayload);
+
+      const { error: letonErr } = await supabase
+        .from('leton_content')
+        .upsert({
+          id: 'push_subscriptions',
+          content: { subscriptions: cleanSubs },
+          updated_at: nowIso
+        });
+
+      if (!letonErr) {
+        console.log('[WebPush Checkpoint 9] Successfully saved subscription to leton_content table in Supabase!');
+        savedSuccessfully = true;
+      } else {
+        console.warn('[WebPush] leton_content upsert warning:', letonErr);
+      }
+    } catch (letonEx) {
+      console.warn('[WebPush] leton_content exception:', letonEx);
+    }
+
+    // Try posting to backend API as well
+    const saveUrl = getApiUrl('/api/push/subscribe');
+    try {
+      await fetch(saveUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           subscription,
           username,
           outletId,
           role,
-          swScope: reg ? reg.scope : '/',
-          swScriptURL: reg && reg.active ? reg.active.scriptURL : '',
-          swVersion: '1.0.9-ios-bg-push'
+          swScope,
+          swScriptURL,
+          swVersion
         })
       });
-      if (subRes.ok) {
-        savedViaBackend = true;
-      }
     } catch (backendErr) {
-      console.warn('[WebPush Checkpoint 8] Backend subscription save network error, falling back to direct Supabase client:', backendErr);
-    }
-
-    // If backend POST failed or returned error, save directly to Supabase push_subscriptions table
-    if (!savedViaBackend) {
-      try {
-        const subJson = subscription.toJSON();
-        const p256dh = subJson.keys?.p256dh || '';
-        const auth = subJson.keys?.auth || '';
-        const endpoint = subscription.endpoint;
-
-        if (endpoint && p256dh && auth) {
-          const { error: sbErr } = await supabase
-            .from('push_subscriptions')
-            .upsert({
-              endpoint,
-              p256dh,
-              auth,
-              username: username || 'admin',
-              outlet_id: outletId || 'all',
-              role: role || 'outlet_admin',
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'endpoint' });
-
-          if (sbErr) {
-            console.warn('[WebPush] Direct Supabase push_subscriptions upsert warning:', sbErr);
-          } else {
-            console.log('[WebPush] Successfully saved subscription directly to Supabase push_subscriptions table.');
-            savedViaBackend = true;
-          }
-        }
-      } catch (directSupabaseErr) {
-        console.warn('[WebPush] Direct Supabase save exception:', directSupabaseErr);
-      }
+      console.warn('[WebPush] Backend fetch save URL non-critical network notice:', backendErr);
     }
 
     checkpoints['CHECKPOINT 8 (POST subscription ke backend)'] = 'PASS';

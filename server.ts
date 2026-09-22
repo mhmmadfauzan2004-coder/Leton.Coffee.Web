@@ -1935,9 +1935,25 @@ app.post('/api/push/unsubscribe', async (req, res) => {
 
 app.post('/api/push/test', async (req, res) => {
   try {
+    const clientSubscription = req.body?.subscription;
     const subs = await getPushSubscriptions();
+
+    // If client provided a subscription, ensure it's included for testing
+    if (clientSubscription && clientSubscription.endpoint && clientSubscription.keys) {
+      const exists = subs.some(s => s.endpoint === clientSubscription.endpoint);
+      if (!exists) {
+        subs.push({
+          endpoint: clientSubscription.endpoint,
+          keys: clientSubscription.keys,
+          username: 'test_admin',
+          outletId: 'all',
+          role: 'outlet_admin'
+        });
+      }
+    }
+
     if (!subs || subs.length === 0) {
-      return res.status(400).json({ error: 'Tidak ada perangkat admin yang terdaftar untuk menerima push notification. Silakan klik "Aktifkan Notifikasi" terlebih dahulu.' });
+      return res.status(400).json({ success: false, error: 'Tidak ada perangkat admin yang terdaftar untuk menerima push notification. Silakan klik "Aktifkan Notifikasi" terlebih dahulu.' });
     }
 
     const payload = JSON.stringify({
@@ -1973,13 +1989,13 @@ app.post('/api/push/test', async (req, res) => {
     }
 
     if (sentCount === 0 && errors.length > 0) {
-      return res.status(500).json({ error: `Gagal mengirim push notification ke perangkat: ${errors[0]}` });
+      return res.status(500).json({ success: false, error: `Gagal mengirim push notification ke perangkat: ${errors[0]}` });
     }
 
     res.json({ success: true, sentCount });
   } catch (err: any) {
     console.error('[WebPush Test] Exception:', err);
-    res.status(500).json({ error: err.message || 'Terjadi kesalahan saat mengirim tes notifikasi.' });
+    res.status(500).json({ success: false, error: err.message || 'Terjadi kesalahan saat mengirim tes notifikasi.' });
   }
 });
 

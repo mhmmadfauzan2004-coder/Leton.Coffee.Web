@@ -395,6 +395,10 @@ export async function testAdminPush(): Promise<{ success: boolean; error?: strin
   }
 
   try {
+    const reg = await navigator.serviceWorker.ready;
+    const subscription = await reg.pushManager.getSubscription();
+    const subJson = subscription ? subscription.toJSON() : null;
+
     const testUrl = getApiUrl('/api/push/test');
     console.log('[WebPush Test] Calling test endpoint:', testUrl);
 
@@ -402,7 +406,8 @@ export async function testAdminPush(): Promise<{ success: boolean; error?: strin
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
-      }
+      },
+      body: JSON.stringify({ subscription: subJson })
     });
 
     const data = await res.json().catch(() => ({}));

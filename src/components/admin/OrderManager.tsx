@@ -334,7 +334,18 @@ export const OrderManager: React.FC = () => {
       );
     } catch (err: any) {
       console.error('[Order Status Update Failed]:', err);
-      showToast('Gagal memperbarui status pesanan: ' + (err?.message || 'Koneksi terputus') + '. Perubahan dibatalkan.', 'error');
+      const errMsg = err?.message || '';
+      if (errMsg.includes('tidak ditemukan') || errMsg.includes('not found')) {
+        // Automatically reconcile UI state if the order was already deleted from Supabase
+        setOrders((prev) => prev.filter((o) => o.id !== orderId));
+        if (selectedOrderDetail?.id === orderId) {
+          setIsDetailModalOpen(false);
+          setSelectedOrderDetail(null);
+        }
+        showToast('Pesanan tidak ditemukan di Supabase (sudah dihapus sebelumnya). Tampilan diperbarui.', 'info');
+      } else {
+        showToast('Gagal memperbarui status pesanan: ' + (errMsg || 'Koneksi terputus') + '. Perubahan dibatalkan.', 'error');
+      }
       throw err;
     }
   };
@@ -476,11 +487,26 @@ export const OrderManager: React.FC = () => {
 
       // ONLY remove from React state AFTER database confirms deletion AND post-delete verification passes
       setOrders((prev) => prev.filter((o) => o.id !== targetId && o.orderNumber !== targetNumber));
+      if (selectedOrderDetail?.id === targetId || selectedOrderDetail?.orderNumber === targetNumber) {
+        setIsDetailModalOpen(false);
+        setSelectedOrderDetail(null);
+      }
       showToast(`Pesanan #${targetNumber} berhasil dihapus dari database.`, 'success');
       setOrderToDelete(null);
     } catch (err: any) {
       console.error('[handleConfirmDeleteOrder Failed]:', err);
-      showToast('Gagal menghapus pesanan: ' + (err?.message || 'Akses ditolak atau pesanan tidak ditemukan'), 'error');
+      const errMsg = err?.message || '';
+      if (errMsg.includes('tidak ditemukan') || errMsg.includes('not found')) {
+        setOrders((prev) => prev.filter((o) => o.id !== targetId && o.orderNumber !== targetNumber));
+        if (selectedOrderDetail?.id === targetId || selectedOrderDetail?.orderNumber === targetNumber) {
+          setIsDetailModalOpen(false);
+          setSelectedOrderDetail(null);
+        }
+        showToast(`Pesanan #${targetNumber} tidak ditemukan di database (sudah dihapus). Tampilan diperbarui.`, 'info');
+        setOrderToDelete(null);
+      } else {
+        showToast('Gagal menghapus pesanan: ' + (errMsg || 'Akses ditolak atau pesanan tidak ditemukan'), 'error');
+      }
     } finally {
       setIsSubmittingDelete(false);
     }

@@ -1028,6 +1028,7 @@ export async function createNewOrder(
 
 /**
  * Fetch all orders for Admin Dashboard & Kitchen Display
+ * Supabase database 'orders' table is the SINGLE SOURCE OF TRUTH.
  * If targetOutletId is specified and not 'ALL', strictly filters orders for that outlet.
  */
 export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerOrder[]> {
@@ -1035,10 +1036,7 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
   const activeOutlet = targetOutletId || (typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '');
   const filterId = activeOutlet && activeOutlet !== 'ALL' ? activeOutlet : undefined;
 
-  const ordersMap = new Map<string, CustomerOrder>();
-  let supabaseOrdersLoaded = false;
-
-  // 1. Try Supabase Database 'orders' table (Fastest & direct)
+  // 1. Primary & Authoritative: Supabase Database 'orders' table
   try {
     const client = getSupabase(activeRole, filterId);
     const { data, error } = await client
@@ -1047,91 +1045,58 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
       .order('created_at', { ascending: false })
       .limit(300);
 
-    if (!error && Array.isArray(data) && data.length > 0) {
-      supabaseOrdersLoaded = true;
-      data.forEach((row: any) => {
-        const order: CustomerOrder = {
-          id: row.id,
-          orderNumber: row.order_number || row.orderNumber || 'LTN-????',
-          outletId: row.outlet_id || row.outletId || '',
-          outletName: row.outlet_name || row.outletName || '',
-          customerName: row.customer_name || row.customerName || '',
-          customerPhone: row.customer_phone || row.customerPhone || '',
-          customerId: row.customer_id || row.customerId || undefined,
-          userId: row.user_id || row.userId || undefined,
-          orderType: row.order_type || row.orderType || 'DINE IN',
-          tableNumber: row.table_number || row.tableNumber || '',
-          items: Array.isArray(row.items) ? row.items : [],
-          totalAmount: Number(row.total_amount || row.totalAmount || 0),
-          paymentMethod: row.payment_method || row.paymentMethod || 'QRIS',
-          paymentStatus: row.payment_status || row.paymentStatus || 'WAITING PAYMENT',
-          paymentProofPath: row.payment_proof_path || row.payment_receipt_path || row.paymentReceiptPath,
-          paymentReceiptUrl: row.payment_receipt_url || row.paymentReceiptUrl,
-          paymentReceiptPath: row.payment_receipt_path || row.payment_proof_path || row.paymentReceiptPath,
-          rejectionReason: row.rejection_reason || row.rejectionReason,
-          orderStatus: row.order_status || row.orderStatus || 'NEW',
-          customerNote: row.customer_note || row.customerNote || '',
-          createdAt: row.created_at || row.createdAt || new Date().toISOString(),
-          updatedAt: row.updated_at || row.updatedAt,
-        };
-        ordersMap.set(order.id, order);
-      });
+    if (!error && Array.isArray(data)) {
+      const orders: CustomerOrder[] = data.map((row: any) => ({
+        id: row.id,
+        orderNumber: row.order_number || row.orderNumber || 'LTN-????',
+        outletId: row.outlet_id || row.outletId || '',
+        outletName: row.outlet_name || row.outletName || '',
+        customerName: row.customer_name || row.customerName || '',
+        customerPhone: row.customer_phone || row.customerPhone || '',
+        customerId: row.customer_id || row.customerId || undefined,
+        userId: row.user_id || row.userId || undefined,
+        orderType: row.order_type || row.orderType || 'DINE IN',
+        tableNumber: row.table_number || row.tableNumber || '',
+        items: Array.isArray(row.items) ? row.items : [],
+        totalAmount: Number(row.total_amount || row.totalAmount || 0),
+        paymentMethod: row.payment_method || row.paymentMethod || 'QRIS',
+        paymentStatus: row.payment_status || row.paymentStatus || 'WAITING PAYMENT',
+        paymentProofPath: row.payment_proof_path || row.payment_receipt_path || row.paymentReceiptPath,
+        paymentReceiptUrl: row.payment_receipt_url || row.paymentReceiptUrl,
+        paymentReceiptPath: row.payment_receipt_path || row.payment_proof_path || row.paymentReceiptPath,
+        rejectionReason: row.rejection_reason || row.rejectionReason,
+        orderStatus: row.order_status || row.orderStatus || 'NEW',
+        customerNote: row.customer_note || row.customerNote || '',
+        createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+        updatedAt: row.updated_at || row.updatedAt,
+      }));
+
+      // Apply strict outlet filtering if targetOutletId is specified
+      const filtered = filterId
+        ? orders.filter((o) => matchesOutlet(o.outletId, filterId))
+        : orders;
+
+      // Update local storage cache to strictly match the authoritative database state
+      safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(filtered).slice(0, 50)));
+
+      return filtered;
     }
   } catch (err) {
     console.warn('[Fetch Supabase Orders Warning]:', err);
   }
 
-  // 2. Fetch from backup only if primary table was empty or not accessible
-  if (!supabaseOrdersLoaded || ordersMap.size === 0) {
-    try {
-      const client = getSupabase(activeRole, filterId);
-      const { data: regRow } = await client
-        .from('leton_content')
-        .select('*')
-        .eq('id', 'orders_registry')
-        .maybeSingle();
-
-      if (regRow?.content?.orders && Array.isArray(regRow.content.orders)) {
-        regRow.content.orders.forEach((o: CustomerOrder) => {
-          if (o && o.id && !ordersMap.has(o.id)) {
-            ordersMap.set(o.id, { ...o, items: Array.isArray(o.items) ? o.items : [] });
-          }
-        });
-      }
-    } catch (regErr) {
-      console.warn('[Orders Registry Backup Note]:', regErr);
-    }
-  }
-
-  // 3. Merge with Local Cache / History if available
+  // 2. Offline Fallback ONLY if network/database connection is completely unreachable
   try {
     const cached = safeGetItem(ADMIN_ORDERS_CACHE_KEY);
     if (cached) {
       const parsed: CustomerOrder[] = JSON.parse(cached);
       if (Array.isArray(parsed)) {
-        parsed.forEach((o) => {
-          if (o && o.id && !ordersMap.has(o.id)) {
-            ordersMap.set(o.id, { ...o, items: Array.isArray(o.items) ? o.items : [] });
-          }
-        });
+        return filterId ? parsed.filter((o) => matchesOutlet(o.outletId, filterId)) : parsed;
       }
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
 
-  // Convert map to array sorted by creation date descending
-  let allOrders = Array.from(ordersMap.values()).sort(
-    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-  );
-
-  // Apply strict outlet filtering if targetOutletId is specified
-  if (filterId) {
-    allOrders = allOrders.filter((o) => matchesOutlet(o.outletId, filterId));
-  }
-
-  safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(allOrders).slice(0, 50)));
-  return allOrders;
+  return [];
 }
 
 /**
@@ -1159,6 +1124,9 @@ export async function updateOrderStatus(
   }
 
   // 1. Direct Supabase update in 'orders' table (Primary authoritative database record)
+  let updateSuccess = false;
+  let lastDbError: string | null = null;
+
   try {
     const role = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '';
     const cleanNumber = orderId.replace(/^#/, '').trim();
@@ -1168,7 +1136,7 @@ export async function updateOrderStatus(
     const { data: ordList } = await client
       .from('orders')
       .select('id, outlet_id, order_number')
-      .or(`id.eq.${orderId},order_number.eq.${orderId},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`)
+      .or(`id.eq.${orderId},id.eq.${cleanNumber},order_number.eq.${orderId},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`)
       .limit(1);
 
     const actualDbId = ordList && ordList[0]?.id ? ordList[0].id : orderId;
@@ -1184,7 +1152,7 @@ export async function updateOrderStatus(
     let { data, error } = await client
       .from('orders')
       .update(updatePayload)
-      .or(`id.eq.${actualDbId},id.eq.${orderId},order_number.eq.${orderId},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`)
+      .or(`id.eq.${actualDbId},id.eq.${orderId},id.eq.${cleanNumber},order_number.eq.${orderId},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`)
       .select();
 
     if (error && error.message.includes('payment_verified_at')) {
@@ -1192,17 +1160,17 @@ export async function updateOrderStatus(
       const retry = await client
         .from('orders')
         .update(updatePayload)
-        .or(`id.eq.${actualDbId},id.eq.${orderId},order_number.eq.${orderId},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`)
+        .or(`id.eq.${actualDbId},id.eq.${orderId},id.eq.${cleanNumber},order_number.eq.${orderId},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`)
         .select();
       error = retry.error;
       data = retry.data;
     }
+
     if (error) {
-      console.warn('[Supabase updateOrderStatus Notice]:', error.message);
-      throw new Error(error.message);
-    }
-    if (!data || data.length === 0) {
-      throw new Error('Akses Ditolak (RLS) atau pesanan tidak ditemukan di Supabase.');
+      lastDbError = error.message;
+      console.warn('[Supabase updateOrderStatus direct notice]:', error.message);
+    } else if (data && data.length > 0) {
+      updateSuccess = true;
     }
 
     // Broadcast ORDER_STATUS_UPDATED event on Supabase Realtime channel for instant customer notification
@@ -1246,8 +1214,48 @@ export async function updateOrderStatus(
       }
     }
   } catch (err: any) {
-    console.error('[Supabase updateOrderStatus Exception]:', err);
-    throw err; // RE-THROW so caller receives the exception!
+    console.warn('[Supabase direct update error]:', err?.message || err);
+    lastDbError = err?.message || 'Direct Supabase update error';
+  }
+
+  // 2. Server API fallback / verification
+  try {
+    const adminRole = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '';
+    const adminOutlet = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '';
+    const adminToken = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_token') || 'leton_local_token' : 'leton_local_token';
+
+    const serverRes = await fetch(getApiUrl(`/api/orders/${encodeURIComponent(orderId)}`), {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`,
+        'x-admin-role': adminRole || 'super_admin',
+        'x-outlet-id': adminOutlet,
+      },
+      body: JSON.stringify({
+        orderStatus: newOrderStatus,
+        paymentStatus: newPaymentStatus,
+        rejectionReason: rejectionReason,
+      }),
+    });
+
+    if (serverRes.ok) {
+      const serverJson = await serverRes.json();
+      if (serverJson && (serverJson.success || serverJson.order)) {
+        updateSuccess = true;
+      }
+    } else if (serverRes.status === 404) {
+      throw new Error('Pesanan tidak ditemukan di Supabase (telah dihapus sebelumnya).');
+    }
+  } catch (apiErr: any) {
+    if (apiErr?.message?.includes('tidak ditemukan')) {
+      throw apiErr;
+    }
+    console.warn('[Server updateOrderStatus API Warning]:', apiErr?.message || apiErr);
+  }
+
+  if (!updateSuccess) {
+    throw new Error(lastDbError || 'Akses Ditolak (RLS) atau pesanan tidak ditemukan di Supabase.');
   }
 
   // 2. Parallel background sync for registry & local cache without blocking caller
@@ -1440,12 +1448,33 @@ export async function deleteOrder(
 
   // 5. Clean up local storage cache only after verified database deletion
   try {
+    // Clean up local storage cache
     const cached = safeGetItem(ADMIN_ORDERS_CACHE_KEY);
     if (cached) {
       let list: CustomerOrder[] = JSON.parse(cached);
       list = list.filter((o) => o.id !== targetDbId && o.id !== orderId && o.orderNumber !== cleanNumber && o.orderNumber !== `#${cleanNumber}`);
       safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(list).slice(0, 50)));
     }
+
+    // Clean up leton_content backup registry if present
+    try {
+      const client = getSupabase(isAdminRole || 'super_admin', targetOutletId);
+      const { data: regRow } = await client
+        .from('leton_content')
+        .select('content')
+        .eq('id', 'orders_registry')
+        .maybeSingle();
+
+      if (regRow?.content?.orders && Array.isArray(regRow.content.orders)) {
+        const filteredOrders = regRow.content.orders.filter(
+          (o: any) => o.id !== targetDbId && o.id !== orderId && o.orderNumber !== cleanNumber && o.orderNumber !== `#${cleanNumber}`
+        );
+        await client
+          .from('leton_content')
+          .update({ content: { ...regRow.content, orders: filteredOrders } })
+          .eq('id', 'orders_registry');
+      }
+    } catch {}
   } catch {}
 
   return {
@@ -1536,7 +1565,12 @@ export function subscribeToOrdersRealtime(
           table: 'orders',
         },
         (payload: any) => {
-          if (payload.eventType === 'INSERT' && payload.new) {
+          if (payload.eventType === 'DELETE') {
+            if (payload.old && payload.old.id) {
+              knownOrderIds.delete(payload.old.id);
+            }
+            refresh();
+          } else if (payload.eventType === 'INSERT' && payload.new) {
             const raw = payload.new;
             const newOrder: CustomerOrder = {
               id: raw.id,
@@ -1597,7 +1631,7 @@ export function subscribeToOrdersRealtime(
       sseSource.onmessage = (e) => {
         try {
           const payload = JSON.parse(e.data);
-          if (payload && (payload.type === 'ORDER_CREATED' || payload.type === 'ORDER_UPDATED')) {
+          if (payload && (payload.type === 'ORDER_CREATED' || payload.type === 'ORDER_UPDATED' || payload.type === 'ORDER_DELETED' || payload.type === 'ORDER_STATUS_UPDATED')) {
             if (payload.type === 'ORDER_CREATED' && payload.order) {
               refresh(payload.order);
             } else {
@@ -1640,17 +1674,19 @@ export function subscribeToOrdersRealtime(
 
 /**
  * Fetch a single order by ID or Order Number
+ * Strictly queries Supabase database as the single source of truth.
  */
 export async function fetchSingleOrder(orderIdOrNumber: string): Promise<CustomerOrder | null> {
   if (!orderIdOrNumber) return null;
+  const cleanNumber = orderIdOrNumber.replace(/^#/, '').trim();
 
-  // 1. Try Supabase 'orders' table
+  // Primary & Authoritative: Supabase 'orders' table
   try {
     const client = getSupabase();
     const { data, error } = await client
       .from('orders')
       .select('*')
-      .or(`id.eq.${orderIdOrNumber},order_number.eq.${orderIdOrNumber}`)
+      .or(`id.eq.${orderIdOrNumber},id.eq.${cleanNumber},order_number.eq.${orderIdOrNumber},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`)
       .maybeSingle();
 
     if (!error && data) {
@@ -1691,52 +1727,6 @@ export async function fetchSingleOrder(orderIdOrNumber: string): Promise<Custome
     }
   } catch (err) {
     console.warn('[Fetch Single Supabase Order Error]:', err);
-  }
-
-  // 2. Try 'leton_content' orders_registry
-  try {
-    const client = getSupabase();
-    const { data: regRow } = await client
-      .from('leton_content')
-      .select('*')
-      .eq('id', 'orders_registry')
-      .maybeSingle();
-
-    if (regRow?.content?.orders && Array.isArray(regRow.content.orders)) {
-      const match = regRow.content.orders.find(
-        (o: CustomerOrder) => o.id === orderIdOrNumber || o.orderNumber === orderIdOrNumber
-      );
-      if (match) return match;
-    }
-  } catch (regErr) {
-    // ignore
-  }
-
-  // 3. Try Backend API
-  try {
-    const res = await fetch(getApiUrl(`/api/orders/${orderIdOrNumber}`));
-    if (res.ok) {
-      const found = await res.json();
-      if (found && found.id) return found;
-    }
-  } catch {
-    // ignore
-  }
-
-  // 4. Try Local Storage Cache
-  try {
-    const local = safeGetItem(ORDERS_STORAGE_KEY) || safeGetItem(ADMIN_ORDERS_CACHE_KEY);
-    if (local) {
-      const parsed: CustomerOrder[] = JSON.parse(local);
-      if (Array.isArray(parsed)) {
-        const found = parsed.find(
-          (o) => o.id === orderIdOrNumber || o.orderNumber === orderIdOrNumber
-        );
-        if (found) return found;
-      }
-    }
-  } catch {
-    // ignore
   }
 
   return null;

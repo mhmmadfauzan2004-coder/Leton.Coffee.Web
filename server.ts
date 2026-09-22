@@ -1103,12 +1103,61 @@ function orderMatchesOutlet(orderOutlet: string | undefined, targetOutlet: strin
   return o.includes(t) || t.includes(o);
 }
 
-// Get all orders (with RBAC outlet filtering)
-app.get('/api/orders', (req, res) => {
-  let orders = getOrders();
+// Get all orders (with RBAC outlet filtering) - Supabase is authoritative
+app.get('/api/orders', async (req, res) => {
   const role = (req.headers['x-admin-role'] as string | undefined)?.toLowerCase();
   const outletId = ((req.query.outletId || req.headers['x-outlet-id']) as string | undefined)?.toLowerCase();
 
+  try {
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(300);
+
+      if (!error && Array.isArray(data)) {
+        let mappedOrders = data.map((row: any) => ({
+          id: row.id,
+          orderNumber: row.order_number || row.orderNumber || 'LTN-????',
+          outletId: row.outlet_id || row.outletId || '',
+          outletName: row.outlet_name || row.outletName || '',
+          customerName: row.customer_name || row.customerName || '',
+          customerPhone: row.customer_phone || row.customerPhone || '',
+          customerId: row.customer_id || row.customerId || undefined,
+          userId: row.user_id || row.userId || undefined,
+          orderType: row.order_type || row.orderType || 'DINE IN',
+          tableNumber: row.table_number || row.tableNumber || '',
+          items: Array.isArray(row.items) ? row.items : [],
+          totalAmount: Number(row.total_amount || row.totalAmount || 0),
+          paymentMethod: row.payment_method || row.paymentMethod || 'QRIS',
+          paymentStatus: row.payment_status || row.paymentStatus || 'WAITING PAYMENT',
+          paymentProofPath: row.payment_proof_path || row.payment_receipt_path || row.paymentReceiptPath,
+          paymentReceiptUrl: row.payment_receipt_url || row.paymentReceiptUrl,
+          paymentReceiptPath: row.payment_receipt_path || row.payment_proof_path || row.paymentReceiptPath,
+          rejectionReason: row.rejection_reason || row.rejectionReason,
+          orderStatus: row.order_status || row.orderStatus || 'NEW',
+          customerNote: row.customer_note || row.customerNote || '',
+          createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+          updatedAt: row.updated_at || row.updatedAt,
+        }));
+
+        if (role === 'outlet_admin' && outletId && outletId !== 'all') {
+          mappedOrders = mappedOrders.filter((o: any) => orderMatchesOutlet(o.outletId, outletId));
+        } else if (outletId && outletId !== 'all') {
+          mappedOrders = mappedOrders.filter((o: any) => orderMatchesOutlet(o.outletId, outletId));
+        }
+
+        // Keep local memory in sync with Supabase
+        saveOrders(mappedOrders);
+        return res.json(mappedOrders);
+      }
+    }
+  } catch (sbErr) {
+    console.warn('[Server GET /api/orders Supabase query warning]:', sbErr);
+  }
+
+  let orders = getOrders();
   if (role === 'outlet_admin' && outletId && outletId !== 'all') {
     orders = orders.filter((o: any) => orderMatchesOutlet(o.outletId || o.outlet_id, outletId));
   } else if (outletId && outletId !== 'all') {
@@ -1174,14 +1223,61 @@ app.patch('/api/orders/:id', async (req, res) => {
     return res.status(403).json({ error: 'Akses Ditolak: Otorisasi Admin diperlukan.' });
   }
 
-  const orders = getOrders();
-  const index = orders.findIndex((o: any) => o.id === id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
+  let orders = getOrders();
+  const cleanId = id.replace(/^#/, '').trim();
+  let index = orders.findIndex((o: any) => o.id === id || o.id === cleanId || o.orderNumber === id || o.orderNumber === cleanId || o.orderNumber === `#${cleanId}`);
+
+  let currentOrder = index >= 0 ? orders[index] : null;
+
+  // If not found in server memory, fetch directly from Supabase
+  if (!currentOrder && supabase) {
+    try {
+      const { data: dbRow, error: dbFetchErr } = await supabase
+        .from('orders')
+        .select('*')
+        .or(`id.eq.${id},id.eq.${cleanId},order_number.eq.${id},order_number.eq.${cleanId},order_number.eq.#${cleanId}`)
+        .maybeSingle();
+
+      if (!dbFetchErr && dbRow) {
+        currentOrder = {
+          id: dbRow.id,
+          orderNumber: dbRow.order_number || dbRow.orderNumber || 'LTN-????',
+          outletId: dbRow.outlet_id || dbRow.outletId || '',
+          outletName: dbRow.outlet_name || dbRow.outletName || '',
+          customerName: dbRow.customer_name || dbRow.customerName || '',
+          customerPhone: dbRow.customer_phone || dbRow.customerPhone || '',
+          customerId: dbRow.customer_id || dbRow.customerId || undefined,
+          userId: dbRow.user_id || dbRow.userId || undefined,
+          orderType: dbRow.order_type || dbRow.orderType || 'DINE IN',
+          tableNumber: dbRow.table_number || dbRow.tableNumber || '',
+          items: Array.isArray(dbRow.items) ? dbRow.items : [],
+          totalAmount: Number(dbRow.total_amount || dbRow.totalAmount || 0),
+          paymentMethod: dbRow.payment_method || dbRow.paymentMethod || 'QRIS',
+          paymentStatus: dbRow.payment_status || dbRow.paymentStatus || 'WAITING PAYMENT',
+          paymentProofPath: dbRow.payment_proof_path || dbRow.payment_receipt_path || dbRow.paymentReceiptPath,
+          paymentReceiptUrl: dbRow.payment_receipt_url || dbRow.paymentReceiptUrl,
+          paymentReceiptPath: dbRow.payment_receipt_path || dbRow.payment_proof_path || dbRow.paymentReceiptPath,
+          rejectionReason: dbRow.rejection_reason || dbRow.rejectionReason,
+          orderStatus: dbRow.order_status || dbRow.orderStatus || 'NEW',
+          customerNote: dbRow.customer_note || dbRow.customerNote || '',
+          createdAt: dbRow.created_at || dbRow.createdAt || new Date().toISOString(),
+          updatedAt: dbRow.updated_at || dbRow.updatedAt,
+        };
+        orders.unshift(currentOrder);
+        index = 0;
+      }
+    } catch (err) {
+      console.warn('[Server fetch order fallback error]:', err);
+    }
+  }
+
+  if (!currentOrder) {
+    return res.status(404).json({ error: 'Pesanan tidak ditemukan di database Supabase.' });
   }
 
   // 3. Perform authorization checks
-  const orderOutlet = (orders[index].outletId || orders[index].outlet_id || '').toLowerCase();
+  const targetDbId = currentOrder.id;
+  const orderOutlet = (currentOrder.outletId || currentOrder.outlet_id || '').toLowerCase();
 
   if (role === 'outlet_admin') {
     if (!outletId) {
@@ -1190,43 +1286,24 @@ app.patch('/api/orders/:id', async (req, res) => {
     if (!orderMatchesOutlet(orderOutlet, outletId)) {
       return res.status(403).json({ error: 'Akses Ditolak: Anda tidak memiliki wewenang mengubah pesanan dari cabang lain.' });
     }
-  } else if (role === 'super_admin') {
-    // Super Admin has full permission
-    // As per instruction: "Jika Super Admin melakukan UPDATE order, server membaca outlet_id order dari database"
-    if (supabase) {
-      try {
-        const { data: dbOrder, error: dbErr } = await supabase
-          .from('orders')
-          .select('outlet_id')
-          .eq('id', id)
-          .maybeSingle();
-
-        if (!dbErr && dbOrder) {
-          const dbOutletId = (dbOrder.outlet_id || '').toLowerCase();
-          console.log(`[Super Admin secure verify] Verified order outlet in DB is ${dbOutletId}`);
-        }
-      } catch (dbEx) {
-        console.warn('[Server Supabase Order Query Exception]:', dbEx);
-      }
-    }
   }
 
   // 4. Update local memory representation
-  if (orderStatus) orders[index].orderStatus = orderStatus;
+  if (orderStatus) currentOrder.orderStatus = orderStatus;
   if (paymentStatus) {
-    orders[index].paymentStatus = paymentStatus;
+    currentOrder.paymentStatus = paymentStatus;
     if (paymentStatus === 'PAID' || paymentStatus === 'PAYMENT REJECTED' || paymentStatus === 'REJECTED') {
-      if (!orders[index].paymentVerifiedAt && !orders[index].payment_verified_at) {
+      if (!currentOrder.paymentVerifiedAt && !currentOrder.payment_verified_at) {
         const nowIso = new Date().toISOString();
-        orders[index].paymentVerifiedAt = nowIso;
-        orders[index].payment_verified_at = nowIso;
+        currentOrder.paymentVerifiedAt = nowIso;
+        currentOrder.payment_verified_at = nowIso;
       }
     }
   }
-  if (rejectionReason !== undefined) orders[index].rejectionReason = rejectionReason;
-  if (paymentReceiptUrl) orders[index].paymentReceiptUrl = paymentReceiptUrl;
-  if (paymentReceiptPath) orders[index].paymentReceiptPath = paymentReceiptPath;
-  orders[index].updatedAt = new Date().toISOString();
+  if (rejectionReason !== undefined) currentOrder.rejectionReason = rejectionReason;
+  if (paymentReceiptUrl) currentOrder.paymentReceiptUrl = paymentReceiptUrl;
+  if (paymentReceiptPath) currentOrder.paymentReceiptPath = paymentReceiptPath;
+  currentOrder.updatedAt = new Date().toISOString();
 
   // 5. Update Supabase securely using server Supabase client
   if (supabase) {
@@ -1248,7 +1325,7 @@ app.patch('/api/orders/:id', async (req, res) => {
       const { error: dbErr } = await supabase
         .from('orders')
         .update(updatePayload)
-        .eq('id', id);
+        .or(`id.eq.${targetDbId},id.eq.${id},id.eq.${cleanId},order_number.eq.${id},order_number.eq.${cleanId},order_number.eq.#${cleanId}`);
 
       if (dbErr) {
         console.error('[Server Supabase Order Update Error]:', dbErr.message);
@@ -1259,10 +1336,10 @@ app.patch('/api/orders/:id', async (req, res) => {
   }
 
   saveOrders(orders);
-  broadcastOrderEvent('ORDER_UPDATED', orders[index]);
-  broadcastOrderEvent('ORDER_STATUS_UPDATED', orders[index]);
+  broadcastOrderEvent('ORDER_UPDATED', currentOrder);
+  broadcastOrderEvent('ORDER_STATUS_UPDATED', currentOrder);
 
-  res.json({ success: true, order: orders[index] });
+  res.json({ success: true, order: currentOrder });
 });
 
 // Delete or archive order (with strict Outlet isolation & Supabase deletion + verification)

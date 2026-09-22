@@ -161,3 +161,50 @@ self.addEventListener('notificationclick', (event) => {
     })()
   );
 });
+
+// -------------------------------------------------------------
+// NATIVE FIREBASE CLOUD MESSAGING (FCM) BACKGROUND HANDLER
+// -------------------------------------------------------------
+try {
+  importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
+  importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
+
+  // Request Firebase client configuration from the server
+  fetch('/api/push/firebase-config')
+    .then(res => res.json())
+    .then(config => {
+      if (config && config.apiKey && typeof firebase !== 'undefined') {
+        console.log('[FCM SW] Initializing Firebase app with dynamic config from server...');
+        firebase.initializeApp(config);
+        const messaging = firebase.messaging();
+        
+        messaging.onBackgroundMessage((payload) => {
+          console.log('[FCM SW] Background push event captured:', payload);
+          
+          const title = payload.notification?.title || payload.data?.title || '🔔 Leton Coffee';
+          const baseUrl = 'https://leton-coffee-web.pages.dev';
+          
+          const notificationOptions = {
+            body: payload.notification?.body || payload.data?.body || 'Pesanan baru telah diterima.',
+            icon: payload.data?.icon || `${baseUrl}/logo_icon_small.png`,
+            tag: payload.data?.tag || `fcm-push-${payload.data?.orderId || Date.now()}`,
+            data: {
+              orderId: payload.data?.orderId,
+              outletId: payload.data?.outletId,
+              url: payload.data?.url || '/#admin?tab=orders'
+            }
+          };
+
+          return self.registration.showNotification(title, notificationOptions);
+        });
+        console.log('[FCM SW] Background messaging listener is now ACTIVE.');
+      } else {
+        console.log('[FCM SW] Optional configuration empty. Skipping FCM SW initialization.');
+      }
+    })
+    .catch(err => {
+      console.warn('[FCM SW] Dynamic config fetch notice:', err);
+    });
+} catch (e) {
+  console.log('[FCM SW] compat environment initialization skipped.');
+}

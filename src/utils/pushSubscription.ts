@@ -2,6 +2,9 @@
 
 import { getApiUrl } from './api';
 import { supabase } from './supabase';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getMessaging, getToken, deleteToken } from 'firebase/messaging';
+
 
 // Convert URL safe base64 to Uint8Array for VAPID applicationServerKey
 function urlBase64ToUint8Array(base64String: string) {
@@ -567,4 +570,218 @@ export async function fetchPushDebugInfo(): Promise<PushDebugInfo> {
     subscriptionsCount
   };
 }
+
+// -------------------------------------------------------------
+// FIREBASE CLOUD MESSAGING (FCM) SUPPORT
+// -------------------------------------------------------------
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "",
+};
+
+export function getFcmApp() {
+  if (!firebaseConfig.apiKey) {
+    return null;
+  }
+  try {
+    if (getApps().length === 0) {
+      return initializeApp(firebaseConfig);
+    }
+    return getApp();
+  } catch (err) {
+    console.error('[FCM] Error initializing Firebase app:', err);
+    return null;
+  }
+}
+
+export function isFcmSupported(): boolean {
+  if (typeof window === 'undefined') return false;
+  return !!firebaseConfig.apiKey && 'serviceWorker' in navigator && 'Notification' in window;
+}
+
+export async function subscribeFcmPush(username: string, outletId: string, role?: string): Promise<{ success: boolean; token?: string; error?: string }> {
+  console.log('[FCM] subscribeFcmPush called:', { username, outletId, role });
+  const app = getFcmApp();
+  if (!app) {
+    return { success: false, error: 'Firebase config is not set up on this client.' };
+  }
+
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      return { success: false, error: 'PERMISSION_DENIED' };
+    }
+
+    const messaging = getMessaging(app);
+    const reg = await navigator.serviceWorker.ready;
+    const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY || undefined;
+
+    console.log('[FCM] Getting token from messaging provider with VAPID Key:', vapidKey);
+    const token = await getToken(messaging, {
+      serviceWorkerRegistration: reg,
+      vapidKey
+    });
+
+    if (!token) {
+      throw new Error('No FCM token returned from Firebase.');
+    }
+
+    console.log('[FCM] Got active token:', token);
+
+    // Save directly to Supabase admin_push_tokens table & leton_content (dual-layer)
+    const nowIso = new Date().toISOString();
+    const payload = {
+      token,
+      username: username || 'unknown_admin',
+      outlet_id: outletId || 'all',
+      role: role || 'outlet_admin',
+      device_info: navigator.userAgent || 'unknown_browser',
+      created_at: nowIso,
+      updated_at: nowIso
+    };
+
+    // 1. Try to save to Supabase structured admin_push_tokens table
+    try {
+      await supabase
+        .from('admin_push_tokens')
+        .upsert(payload, { onConflict: 'token' });
+      console.log('[FCM] Successfully saved to Supabase admin_push_tokens table.');
+    } catch (dbErr) {
+      console.warn('[FCM] Direct table upsert fallback notice:', dbErr);
+    }
+
+    // 2. Try to save to Supabase fallback leton_content with ID admin_push_tokens
+    try {
+      const { data: doc } = await supabase
+        .from('leton_content')
+        .select('*')
+        .eq('id', 'admin_push_tokens')
+        .maybeSingle();
+
+      const existingTokens: any[] = doc?.content?.tokens || [];
+      const cleanTokens = existingTokens.filter(t => t && t.token !== token);
+      cleanTokens.push(payload);
+
+      await supabase
+        .from('leton_content')
+        .upsert({
+          id: 'admin_push_tokens',
+          content: { tokens: cleanTokens },
+          updated_at: nowIso
+        });
+      console.log('[FCM] Successfully saved to Supabase leton_content fallback.');
+    } catch (docErr) {
+      console.warn('[FCM] fallback document upsert notice:', docErr);
+    }
+
+    // 3. Register to backend API
+    try {
+      const saveUrl = getApiUrl('/api/fcm/subscribe');
+      await fetch(saveUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (backendErr) {
+      console.warn('[FCM] Backend save URL non-critical network notice:', backendErr);
+    }
+
+    return { success: true, token };
+  } catch (err: any) {
+    console.error('[FCM] Error subscribing to Firebase Messaging:', err);
+    return { success: false, error: err.message || 'Firebase Messaging subscription failed.' };
+  }
+}
+
+export async function unsubscribeFcmPush(): Promise<boolean> {
+  const app = getFcmApp();
+  if (!app) return true;
+  try {
+    const messaging = getMessaging(app);
+    const reg = await navigator.serviceWorker.ready;
+    const token = await getToken(messaging, { serviceWorkerRegistration: reg });
+    if (token) {
+      await deleteToken(messaging);
+      
+      // Remove from backend API
+      try {
+        const unsubUrl = getApiUrl('/api/fcm/unsubscribe');
+        await fetch(unsubUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token })
+        });
+      } catch (e) {}
+      
+      // Delete from Supabase table
+      try {
+        await supabase
+          .from('admin_push_tokens')
+          .delete()
+          .eq('token', token);
+      } catch (e) {}
+
+      // Delete from fallback
+      try {
+        const { data: doc } = await supabase
+          .from('leton_content')
+          .select('*')
+          .eq('id', 'admin_push_tokens')
+          .maybeSingle();
+
+        const existingTokens: any[] = doc?.content?.tokens || [];
+        const cleanTokens = existingTokens.filter(t => t && t.token !== token);
+
+        await supabase
+          .from('leton_content')
+          .upsert({
+            id: 'admin_push_tokens',
+            content: { tokens: cleanTokens },
+            updated_at: new Date().toISOString()
+          });
+      } catch (e) {}
+    }
+    return true;
+  } catch (err) {
+    console.warn('[FCM] Error during FCM unsubscription:', err);
+    return true;
+  }
+}
+
+export async function testFcmPush(): Promise<{ success: boolean; error?: string }> {
+  const app = getFcmApp();
+  if (!app) {
+    return { success: false, error: 'Firebase config is not set up on this client.' };
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const messaging = getMessaging(app);
+    const token = await getToken(messaging, { serviceWorkerRegistration: reg });
+    if (!token) {
+      return { success: false, error: 'No active FCM token found for this device.' };
+    }
+
+    const testUrl = getApiUrl('/api/fcm/test');
+    const res = await fetch(testUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return { success: true };
+    } else {
+      return { success: false, error: data.error || 'Server-side FCM test failed.' };
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message || 'FCM test exception.' };
+  }
+}
+
 

@@ -23,7 +23,11 @@ import {
   subscribeAdminPush,
   unsubscribeAdminPush,
   testAdminPush,
-  fetchPushDebugInfo
+  fetchPushDebugInfo,
+  isFcmSupported,
+  subscribeFcmPush,
+  unsubscribeFcmPush,
+  testFcmPush
 } from '../../utils/pushSubscription';
 import {
   LayoutDashboard,
@@ -152,6 +156,11 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
           try {
             const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
             await subscribeAdminPush(auth.username, outletContext, auth.role);
+            
+            // Also auto-refresh FCM if FCM is supported
+            if (isFcmSupported()) {
+              await subscribeFcmPush(auth.username, outletContext, auth.role);
+            }
           } catch (e) {
             console.warn('[WebPush] Auto-refresh subscription failed:', e);
           }
@@ -176,6 +185,12 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
       if (isPushActive) {
         console.log('[WebPush UI] User requested unsubscription.');
         const success = await unsubscribeAdminPush();
+        
+        // Also unsubscribe FCM if supported
+        if (isFcmSupported()) {
+          await unsubscribeFcmPush();
+        }
+
         if (success) {
           setIsPushActive(false);
           alert('Notifikasi pesanan dinonaktifkan untuk perangkat ini.');
@@ -185,9 +200,22 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
       } else {
         console.log('[WebPush UI] User requested subscription. Checking browser capabilities...');
         const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
-        const res = await subscribeAdminPush(auth.username || 'Admin', outletContext, auth.role);
         
-        console.log('[WebPush UI] Subscription result response:', res);
+        // 1. Subscribe to Web Push (Standard fallback / iOS direct support)
+        const res = await subscribeAdminPush(auth.username || 'Admin', outletContext, auth.role);
+        console.log('[WebPush UI] Web Push subscription result:', res);
+        
+        // 2. Also subscribe to FCM in parallel if supported
+        if (isFcmSupported()) {
+          try {
+            console.log('[WebPush UI] FCM is supported, registering FCM in parallel...');
+            const fcmRes = await subscribeFcmPush(auth.username || 'Admin', outletContext, auth.role);
+            console.log('[WebPush UI] FCM subscription result:', fcmRes);
+          } catch (fcmErr) {
+            console.warn('[WebPush UI] FCM parallel subscription notice:', fcmErr);
+          }
+        }
+        
         if (res.success) {
           setIsPushActive(true);
           alert('Selamat! Perangkat Anda berhasil didaftarkan. Anda akan menerima notifikasi sistem untuk setiap pesanan baru!');

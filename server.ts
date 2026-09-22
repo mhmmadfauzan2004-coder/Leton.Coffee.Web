@@ -9,6 +9,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
+import { initializeApp as initAdminApp, cert as adminCert } from 'firebase-admin/app';
+import { getMessaging as getAdminMessaging, Messaging as AdminMessaging } from 'firebase-admin/messaging';
 import { initialLetonData } from './src/data/initialData';
 import { LetonData } from './src/types';
 
@@ -28,6 +30,29 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
     }
   }
 });
+
+// Initialize Firebase Admin SDK for Cloud Messaging (FCM) safely
+let fcmMessaging: AdminMessaging | null = null;
+try {
+  const serviceAccountEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (serviceAccountEnv) {
+    const credentials = typeof serviceAccountEnv === 'string' && serviceAccountEnv.trim().startsWith('{')
+      ? JSON.parse(serviceAccountEnv)
+      : serviceAccountEnv;
+    
+    if (credentials) {
+      initAdminApp({
+        credential: adminCert(credentials)
+      });
+      fcmMessaging = getAdminMessaging();
+      console.log('[FCM Admin] Firebase Admin SDK successfully initialized.');
+    }
+  } else {
+    console.warn('[FCM Admin] Warning: FIREBASE_SERVICE_ACCOUNT is not set. FCM messaging is disabled.');
+  }
+} catch (err) {
+  console.error('[FCM Admin] Error initializing Firebase Admin SDK:', err);
+}
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -1764,6 +1789,113 @@ async function initVapid() {
   );
 }
 
+// Fetch all active FCM tokens across database table & leton_content fallback
+async function getFcmTokens(): Promise<any[]> {
+  const tokensMap = new Map<string, any>();
+
+  // 1. Try querying structured admin_push_tokens table
+  try {
+    const { data, error } = await supabase
+      .from('admin_push_tokens')
+      .select('*');
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      data.forEach(row => {
+        if (row && row.token) {
+          tokensMap.set(row.token, {
+            token: row.token,
+            username: row.username,
+            outletId: row.outlet_id,
+            role: row.role,
+            deviceInfo: row.device_info,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at
+          });
+        }
+      });
+    }
+  } catch (err) {
+    // Graceful fallback
+  }
+
+  // 2. Also check leton_content single-row array
+  try {
+    const { data, error } = await supabase
+      .from('leton_content')
+      .select('content')
+      .eq('id', 'admin_push_tokens')
+      .maybeSingle();
+
+    if (!error && data?.content && Array.isArray(data.content.tokens)) {
+      data.content.tokens.forEach((t: any) => {
+        if (t && t.token && !tokensMap.has(t.token)) {
+          tokensMap.set(t.token, {
+            token: t.token,
+            username: t.username,
+            outletId: t.outletId || t.outlet_id,
+            role: t.role,
+            deviceInfo: t.deviceInfo || t.device_info || 'unknown',
+            createdAt: t.createdAt || t.created_at,
+            updatedAt: t.updatedAt || t.updated_at
+          });
+        }
+      });
+    }
+  } catch (err) {
+    // Fallback
+  }
+
+  return Array.from(tokensMap.values());
+}
+
+// Save active FCM tokens to both structures
+async function saveFcmTokens(tokens: any[]): Promise<boolean> {
+  const payload = { tokens };
+  let tableSuccess = false;
+
+  // 1. Try saving to structured table
+  try {
+    if (tokens.length > 0) {
+      const dbPayloads = tokens.map(t => ({
+        token: t.token,
+        username: t.username || 'unknown_admin',
+        outlet_id: t.outletId || t.outlet_id || 'all',
+        role: t.role || 'outlet_admin',
+        device_info: t.deviceInfo || t.device_info || 'unknown',
+        updated_at: new Date().toISOString()
+      }));
+
+      const { error } = await supabase
+        .from('admin_push_tokens')
+        .upsert(dbPayloads, { onConflict: 'token' });
+
+      if (!error) {
+        tableSuccess = true;
+      }
+    }
+  } catch (err) {
+    // Fallback
+  }
+
+  // 2. Save to leton_content fallback
+  try {
+    const { error } = await supabase
+      .from('leton_content')
+      .upsert({
+        id: 'admin_push_tokens',
+        content: payload,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+    if (error) {
+      return tableSuccess;
+    }
+    return true;
+  } catch (err) {
+    return tableSuccess;
+  }
+}
+
 // Fetch all active subscriptions across database & local cache
 async function getPushSubscriptions(): Promise<any[]> {
   const subsMap = new Map<string, any>();
@@ -2171,6 +2303,139 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
       }
     }
 
+    // FCM CLOUD MESSAGING (FCM) DISPATCH
+    try {
+      const fcmTokens = await getFcmTokens();
+      console.log(`[FCM Admin Dispatch] Total registered FCM tokens found: ${fcmTokens.length}`);
+
+      if (fcmTokens.length > 0) {
+        // Filter matching FCM tokens. Only route to specific outlet admins!
+        // CENTRAL ADMIN / super_admin: TIDAK menerima operational order push.
+        const matchingFcm = fcmTokens.filter(t => {
+          const tRole = String(t.role || '').toLowerCase();
+          const tUsername = String(t.username || '').toLowerCase();
+          const tOutlet = String(t.outletId || t.outlet_id || '').toLowerCase();
+
+          const isCentral = (
+            tRole === 'super_admin' || 
+            tOutlet === 'all' || 
+            tUsername === 'admin' || 
+            tUsername === 'superadmin' ||
+            tUsername === 'pusat' ||
+            tUsername === 'admin_pusat'
+          ) && !isSudirmanOutlet(tOutlet) && !isKelakapOutlet(tOutlet) && !isLetgoOutlet(tOutlet) &&
+             !tUsername.includes('sudirman') && !tUsername.includes('kelakap') && !tUsername.includes('ratusima') && !tUsername.includes('letgo');
+
+          if (isCentral) {
+            console.log(`[FCM Admin Dispatch] Excluded Central Super Admin: "${t.username}"`);
+            return false;
+          }
+
+          const orderCombined = `${orderOutlet} ${orderOutletName}`.toLowerCase();
+          const adminCombined = `${tOutlet} ${tUsername}`.toLowerCase();
+
+          const orderIsSudirman = isSudirmanOutlet(orderCombined);
+          const orderIsKelakap = isKelakapOutlet(orderCombined);
+          const orderIsLetgo = isLetgoOutlet(orderCombined);
+
+          const adminIsSudirman = isSudirmanOutlet(adminCombined);
+          const adminIsKelakap = isKelakapOutlet(adminCombined);
+          const adminIsLetgo = isLetgoOutlet(adminCombined);
+
+          let isMatch = false;
+          if (orderIsSudirman) {
+            isMatch = adminIsSudirman && !adminIsKelakap && !adminIsLetgo;
+          } else if (orderIsKelakap) {
+            isMatch = adminIsKelakap && !adminIsSudirman && !adminIsLetgo;
+          } else if (orderIsLetgo) {
+            isMatch = adminIsLetgo && !adminIsSudirman && !adminIsKelakap;
+          } else {
+            isMatch = serverMatchesOutlet(orderOutlet, tOutlet) || serverMatchesOutlet(orderOutletName, tOutlet);
+          }
+
+          return isMatch;
+        });
+
+        console.log(`[FCM Admin Dispatch] Target Matching FCM Tokens Count: ${matchingFcm.length}`);
+
+        if (matchingFcm.length > 0 && fcmMessaging) {
+          const staleFcmTokens: string[] = [];
+
+          await Promise.all(
+            matchingFcm.map(async (t, fIdx) => {
+              console.log(`[FCM Dispatch #${fIdx + 1}] Dispatching to admin "${t.username}" for outlet "${t.outletId}"`);
+              
+              const messagePayload = {
+                token: t.token,
+                notification: {
+                  title: '🔔 Leton Coffee',
+                  body: `Pesanan Baru Masuk! #${orderNum} • ${customerName} • ${totalFormatted}`,
+                },
+                data: {
+                  type: 'NEW_ORDER',
+                  orderId: String(order.id),
+                  orderNumber: String(orderNum),
+                  outletId: String(orderOutlet),
+                  outletName: String(orderOutletName),
+                  customerName: String(customerName),
+                  totalFormatted: String(totalFormatted),
+                  timestamp: String(Date.now()),
+                  url: `https://leton-coffee-web.pages.dev/#admin?tab=orders&orderId=${encodeURIComponent(order.id || '')}`
+                },
+                apns: {
+                  payload: {
+                    aps: {
+                      alert: {
+                        title: '🔔 Leton Coffee',
+                        body: `Pesanan Baru Masuk! #${orderNum} • ${customerName} • ${totalFormatted}`
+                      },
+                      sound: 'default',
+                      badge: 1
+                    }
+                  }
+                }
+              };
+
+              try {
+                const response = await fcmMessaging!.send(messagePayload);
+                console.log(`[FCM Dispatch #${fIdx + 1}] ✅ SUCCESS: Message sent. ID: ${response}`);
+              } catch (fcmErr: any) {
+                console.error(`[FCM Dispatch #${fIdx + 1}] ❌ FAILED for admin "${t.username}". Error:`, fcmErr.message || fcmErr);
+                
+                const code = fcmErr.code || '';
+                const isStale = (
+                  code === 'messaging/registration-token-not-registered' || 
+                  code === 'messaging/invalid-registration-token' ||
+                  fcmErr.message?.includes('registration-token-not-registered') ||
+                  fcmErr.message?.includes('not registered')
+                );
+                
+                if (isStale) {
+                  staleFcmTokens.push(t.token);
+                }
+              }
+            })
+          );
+
+          if (staleFcmTokens.length > 0) {
+            console.log(`[FCM Admin Dispatch] Pruning ${staleFcmTokens.length} stale/invalid FCM tokens.`);
+            const activeFcm = fcmTokens.filter(t => !staleFcmTokens.includes(t.token));
+            await saveFcmTokens(activeFcm);
+
+            for (const tk of staleFcmTokens) {
+              try {
+                await supabase.from('admin_push_tokens').delete().eq('token', tk);
+              } catch (dbErr) {}
+            }
+          }
+        } else if (matchingFcm.length > 0 && !fcmMessaging) {
+          console.warn('[FCM Admin Dispatch] ⚠️ WARNING: FCM SDK is not initialized (credentials missing). Skip sending.');
+        }
+      }
+    } catch (fcmDispatchErr) {
+      console.error('[FCM Admin Dispatch] Fatal error in FCM dispatch loop:', fcmDispatchErr);
+    }
+
     console.log(`[REAL ORDER PUSH TRACE - COMPLETE] Order #${orderNum} push notification lifecycle finished.`);
     console.log('================================================================');
   } catch (err) {
@@ -2292,6 +2557,122 @@ app.get('/api/push/debug', async (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Gagal mengambil data debug push notification' });
+  }
+});
+
+// ---------------------------------------------
+// FIREBASE CLOUD MESSAGING (FCM) ENDPOINTS
+// ---------------------------------------------
+
+// Public dynamic Firebase configuration for the frontend & service worker
+app.get('/api/push/firebase-config', (req, res) => {
+  res.json({
+    apiKey: process.env.VITE_FIREBASE_API_KEY || "",
+    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "",
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID || "",
+    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "",
+    messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+    appId: process.env.VITE_FIREBASE_APP_ID || "",
+    vapidKey: process.env.VITE_FIREBASE_VAPID_KEY || ""
+  });
+});
+
+app.post('/api/fcm/subscribe', async (req, res) => {
+  const { token, username, outlet_id, role, device_info } = req.body;
+  if (!token) {
+    return res.status(400).json({ error: 'Token is required.' });
+  }
+
+  try {
+    const currentTokens = await getFcmTokens();
+    const cleanTokens = currentTokens.filter(t => t.token !== token);
+
+    cleanTokens.push({
+      token,
+      username: username || 'unknown_admin',
+      outletId: outlet_id || 'all',
+      role: role || 'outlet_admin',
+      deviceInfo: device_info || 'unknown_device',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    // Limit to last 150 tokens to avoid document limits
+    const finalTokens = cleanTokens.slice(Math.max(0, cleanTokens.length - 150));
+    await saveFcmTokens(finalTokens);
+
+    console.log(`[FCM API] Token successfully saved for user "${username}" at outlet "${outlet_id}".`);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to subscribe FCM token.' });
+  }
+});
+
+app.post('/api/fcm/unsubscribe', async (req, res) => {
+  const { token } = req.body;
+  if (!token) {
+    return res.status(400).json({ error: 'Token is required.' });
+  }
+
+  try {
+    const currentTokens = await getFcmTokens();
+    const cleanTokens = currentTokens.filter(t => t.token !== token);
+    await saveFcmTokens(cleanTokens);
+
+    try {
+      await supabase
+        .from('admin_push_tokens')
+        .delete()
+        .eq('token', token);
+    } catch (dbErr) {}
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to unsubscribe FCM token.' });
+  }
+});
+
+app.post('/api/fcm/test', async (req, res) => {
+  const { token } = req.body;
+  if (!token) {
+    return res.status(400).json({ error: 'Token is required.' });
+  }
+
+  if (!fcmMessaging) {
+    return res.status(503).json({ error: 'Firebase Cloud Messaging backend service is not initialized on this instance. Configure FIREBASE_SERVICE_ACCOUNT.' });
+  }
+
+  try {
+    console.log(`[FCM API Test] Sending background test message to token: ${token.slice(0, 15)}...`);
+    const payload = {
+      token,
+      notification: {
+        title: '🔔 Leton Coffee',
+        body: 'Tes Notifikasi Background FCM Berhasil!',
+      },
+      data: {
+        type: 'TEST_PUSH',
+        orderId: 'TEST-FCM-001',
+        url: 'https://leton-coffee-web.pages.dev/#admin?tab=orders'
+      },
+      apns: {
+        payload: {
+          aps: {
+            alert: {
+              title: '🔔 Leton Coffee',
+              body: 'Tes Notifikasi Background FCM Berhasil!'
+            },
+            sound: 'default'
+          }
+        }
+      }
+    };
+
+    const response = await fcmMessaging.send(payload);
+    res.json({ success: true, messageId: response });
+  } catch (err: any) {
+    console.error('[FCM API Test] Error sending test messaging payload:', err);
+    res.status(500).json({ error: err.message || 'FCM delivery exception.' });
   }
 });
 

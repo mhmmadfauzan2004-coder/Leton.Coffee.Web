@@ -2104,8 +2104,7 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
             TTL: 86400,
             urgency: 'high' as const,
             headers: {
-              'Urgency': 'high',
-              'Topic': 'order-notification'
+              'Urgency': 'high'
             }
           };
 
@@ -2413,8 +2412,7 @@ async function executeTestPush(options: { title?: string; body?: string; subscri
           TTL: 86400,
           urgency: 'high' as const,
           headers: {
-            'Urgency': 'high',
-            'Topic': 'test-notification'
+            'Urgency': 'high'
           }
         };
         const pushResult = await webpush.sendNotification(pushSubscription, payload, pushOptions);

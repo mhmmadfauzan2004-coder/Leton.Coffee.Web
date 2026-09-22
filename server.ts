@@ -1920,9 +1920,24 @@ function serverMatchesOutlet(orderOutletId: string | null | undefined, targetOut
 
   if (o === t) return true;
 
-  if (isSudirmanOutlet(o) && isSudirmanOutlet(t)) return true;
-  if (isKelakapOutlet(o) && isKelakapOutlet(t)) return true;
-  if (isLetgoOutlet(o) && isLetgoOutlet(t)) return true;
+  const oIsSudirman = isSudirmanOutlet(o);
+  const tIsSudirman = isSudirmanOutlet(t);
+  const oIsKelakap = isKelakapOutlet(o);
+  const tIsKelakap = isKelakapOutlet(t);
+  const oIsLetgo = isLetgoOutlet(o);
+  const tIsLetgo = isLetgoOutlet(t);
+
+  // If both belong to Sudirman -> match
+  if (oIsSudirman && tIsSudirman) return true;
+  // If both belong to Kelakap 7 -> match
+  if (oIsKelakap && tIsKelakap) return true;
+  // If both belong to Letgo -> match
+  if (oIsLetgo && tIsLetgo) return true;
+
+  // Strict cross-outlet block: if either is recognized as a specific outlet, do not fuzzy match
+  if (oIsSudirman || tIsSudirman || oIsKelakap || tIsKelakap || oIsLetgo || tIsLetgo) {
+    return false;
+  }
 
   return o.includes(t) || t.includes(o);
 }
@@ -1985,7 +2000,9 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
         subRole === 'super_admin' || 
         subOutlet === 'all' || 
         subUsername === 'admin' || 
-        subUsername === 'superadmin'
+        subUsername === 'superadmin' ||
+        subUsername === 'pusat' ||
+        subUsername === 'admin_pusat'
       ) && !isSudirmanOutlet(subOutlet) && !isKelakapOutlet(subOutlet) && !isLetgoOutlet(subOutlet) &&
          !subUsername.includes('sudirman') && !subUsername.includes('kelakap') && !subUsername.includes('ratusima') && !subUsername.includes('letgo');
 
@@ -1995,13 +2012,28 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
       }
 
       // Check outlet match against orderOutlet OR orderOutletName
-      const matchOutletId = serverMatchesOutlet(orderOutlet, subOutlet);
-      const matchOutletName = serverMatchesOutlet(orderOutletName, subOutlet);
-      const matchSudirman = isSudirmanOutlet(orderOutlet || orderOutletName) && (isSudirmanOutlet(subOutlet) || subUsername.includes('sudirman'));
-      const matchKelakap = isKelakapOutlet(orderOutlet || orderOutletName) && (isKelakapOutlet(subOutlet) || subUsername.includes('kelakap') || subUsername.includes('ratusima'));
-      const matchLetgo = isLetgoOutlet(orderOutlet || orderOutletName) && (isLetgoOutlet(subOutlet) || subUsername.includes('letgo'));
+      const orderCombined = `${orderOutlet} ${orderOutletName}`.toLowerCase();
+      const adminCombined = `${subOutlet} ${subUsername}`.toLowerCase();
 
-      const isMatch = matchOutletId || matchOutletName || matchSudirman || matchKelakap || matchLetgo;
+      const orderIsSudirman = isSudirmanOutlet(orderCombined);
+      const orderIsKelakap = isKelakapOutlet(orderCombined);
+      const orderIsLetgo = isLetgoOutlet(orderCombined);
+
+      const adminIsSudirman = isSudirmanOutlet(adminCombined);
+      const adminIsKelakap = isKelakapOutlet(adminCombined);
+      const adminIsLetgo = isLetgoOutlet(adminCombined);
+
+      let isMatch = false;
+
+      if (orderIsSudirman) {
+        isMatch = adminIsSudirman && !adminIsKelakap && !adminIsLetgo;
+      } else if (orderIsKelakap) {
+        isMatch = adminIsKelakap && !adminIsSudirman && !adminIsLetgo;
+      } else if (orderIsLetgo) {
+        isMatch = adminIsLetgo && !adminIsSudirman && !adminIsKelakap;
+      } else {
+        isMatch = serverMatchesOutlet(orderOutlet, subOutlet) || serverMatchesOutlet(orderOutletName, subOutlet);
+      }
 
       if (isMatch) {
         console.log(`[REAL ORDER PUSH TRACE] ✅ MATCH: Admin "${sub.username}" (outlet: "${subOutlet}") matches order outlet "${orderOutlet || orderOutletName}"`);

@@ -22,7 +22,8 @@ import {
   getPushSubscription,
   subscribeAdminPush,
   unsubscribeAdminPush,
-  testAdminPush
+  testAdminPush,
+  fetchPushDebugInfo
 } from '../../utils/pushSubscription';
 import {
   LayoutDashboard,
@@ -114,6 +115,29 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
   const [isTestingPush, setIsTestingPush] = useState<boolean>(false);
   const [testPushStatus, setTestPushStatus] = useState<string | null>(null);
   const [showIosGuide, setShowIosGuide] = useState<boolean>(false);
+  const [showDebugModal, setShowDebugModal] = useState<boolean>(false);
+  const [debugData, setDebugData] = useState<any>(null);
+  const [isLoadingDebug, setIsLoadingDebug] = useState<boolean>(false);
+
+  const resolvedOutletId = auth.outletId || (
+    auth.username?.toLowerCase().includes('sudirman') ? 'sudirman' :
+    (auth.username?.toLowerCase().includes('kelakap') || auth.username?.toLowerCase().includes('ratusima')) ? 'kelakap_7' :
+    auth.username?.toLowerCase().includes('letgo') ? 'letgo-mpp' :
+    (isOutletAdmin ? 'sudirman' : 'all')
+  );
+
+  const handleOpenDebugModal = async () => {
+    setShowDebugModal(true);
+    setIsLoadingDebug(true);
+    try {
+      const data = await fetchPushDebugInfo();
+      setDebugData(data);
+    } catch (e: any) {
+      setDebugData({ error: e?.message || 'Gagal memuat log debug' });
+    } finally {
+      setIsLoadingDebug(false);
+    }
+  };
 
   const handleTestPush = async () => {
     if (isTestingPush) return;
@@ -121,7 +145,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
     setTestPushStatus(null);
 
     try {
-      const res = await testAdminPush();
+      const res = await testAdminPush(auth.username, resolvedOutletId, auth.role);
       if (res.success) {
         setTestPushStatus('Test berhasil dikirim');
         alert('Test berhasil dikirim! Periksa perangkat Anda (pastikan browser di-background atau ditutup untuk melihat system notification).');
@@ -146,11 +170,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
         const sub = await getPushSubscription();
         setIsPushActive(!!sub && Notification.permission === 'granted');
         
-        // Auto-refresh/register if already active to ensure backend subscription is up to date
+        // Auto-refresh/register if already active to ensure backend subscription is up to date with correct outlet
         if (sub && Notification.permission === 'granted' && auth.username) {
           try {
-            const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
-            await subscribeAdminPush(auth.username, outletContext, auth.role);
+            await subscribeAdminPush(auth.username, resolvedOutletId, auth.role);
           } catch (e) {
             console.warn('[WebPush] Auto-refresh subscription failed:', e);
           }
@@ -158,7 +181,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
       }
     };
     checkPushSupport();
-  }, [auth.username, isOutletAdmin, auth.outletId]);
+  }, [auth.username, isOutletAdmin, auth.outletId, resolvedOutletId, auth.role]);
 
   const handleTogglePushNotifications = async (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
@@ -183,8 +206,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
         }
       } else {
         console.log('[WebPush UI] User requested subscription. Checking browser capabilities...');
-        const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
-        const res = await subscribeAdminPush(auth.username || 'Admin', outletContext, auth.role);
+        const res = await subscribeAdminPush(auth.username || 'Admin', resolvedOutletId, auth.role);
         
         console.log('[WebPush UI] Subscription result response:', res);
         if (res.success) {
@@ -348,13 +370,21 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
                   {isSubscribing ? 'Memproses...' : isPushActive ? 'Matikan Notifikasi' : 'Aktifkan Notifikasi'}
                 </button>
                 {isPushActive && (
-                  <button
-                    disabled={isTestingPush}
-                    onClick={handleTestPush}
-                    className="w-full py-1.5 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-sm"
-                  >
-                    {isTestingPush ? 'Mengirim...' : (testPushStatus || 'Tes Suara & Pop-up')}
-                  </button>
+                  <>
+                    <button
+                      disabled={isTestingPush}
+                      onClick={handleTestPush}
+                      className="w-full py-1.5 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-sm"
+                    >
+                      {isTestingPush ? 'Mengirim...' : (testPushStatus || 'Tes Suara & Pop-up')}
+                    </button>
+                    <button
+                      onClick={handleOpenDebugModal}
+                      className="w-full py-1 px-2 rounded-lg text-[9px] font-semibold text-[#64748B] hover:text-[#0284C7] hover:bg-[#F0F7FF] transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      Diagnostik Push Real Order
+                    </button>
+                  </>
                 )}
               </div>
             ) : (
@@ -606,13 +636,21 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
                   {isSubscribing ? 'Memproses...' : isPushActive ? 'Matikan Notifikasi' : 'Aktifkan Notifikasi'}
                 </button>
                 {isPushActive && (
-                  <button
-                    disabled={isTestingPush}
-                    onClick={handleTestPush}
-                    className="w-full py-1.5 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-sm"
-                  >
-                    {isTestingPush ? 'Mengirim...' : (testPushStatus || 'Tes Suara & Pop-up')}
-                  </button>
+                  <>
+                    <button
+                      disabled={isTestingPush}
+                      onClick={handleTestPush}
+                      className="w-full py-1.5 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-sm"
+                    >
+                      {isTestingPush ? 'Mengirim...' : (testPushStatus || 'Tes Suara & Pop-up')}
+                    </button>
+                    <button
+                      onClick={handleOpenDebugModal}
+                      className="w-full py-1 px-2 rounded-lg text-[9px] font-semibold text-[#64748B] hover:text-[#0284C7] hover:bg-[#F0F7FF] transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      Diagnostik Push Real Order
+                    </button>
+                  </>
                 )}
               </div>
             ) : (
@@ -775,6 +813,113 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
             >
               Saya Mengerti
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Push Diagnostics Modal */}
+      {showDebugModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl border border-[#E0F2FE] max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0F2FE]">
+              <h3 className="font-display font-black text-sm text-[#172033] tracking-wider uppercase flex items-center gap-1.5">
+                <Bell className="w-4 h-4 text-[#0284C7]" />
+                Diagnostik Push Real Order
+              </h3>
+              <button
+                onClick={() => setShowDebugModal(false)}
+                className="p-1 rounded-lg text-[#64748B] hover:text-[#172033]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="my-3 overflow-y-auto flex-1 space-y-3 pr-1 text-xs">
+              {isLoadingDebug ? (
+                <div className="py-8 text-center text-[#64748B] animate-pulse font-medium">
+                  Memuat log diagnostik dari server...
+                </div>
+              ) : debugData ? (
+                <>
+                  <div className="p-3 rounded-xl bg-[#F8FBFF] border border-[#E0F2FE] space-y-1 font-mono text-[11px]">
+                    <div className="font-bold text-[#0284C7] border-b border-[#E0F2FE] pb-1 uppercase">
+                      STATUS REAL ORDER PUSH TERAKHIR
+                    </div>
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-[#64748B]">Target Subscription:</span>
+                      <strong className="text-[#172033]">{debugData.summary?.targetSubscription ?? 0} perangkat</strong>
+                    </div>
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-[#64748B]">sendNotification() dipanggil:</span>
+                      <strong className={debugData.summary?.sendNotificationCalled === 'YES' ? 'text-emerald-600' : 'text-amber-600'}>
+                        {debugData.summary?.sendNotificationCalled ?? 'NO'}
+                      </strong>
+                    </div>
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-[#64748B]">Provider Response:</span>
+                      <strong className="text-[#172033]">{debugData.summary?.providerResponse ?? 'N/A'}</strong>
+                    </div>
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-[#64748B]">Push Accepted:</span>
+                      <strong className={debugData.summary?.pushAccepted === 'YES' ? 'text-emerald-600' : 'text-rose-600'}>
+                        {debugData.summary?.pushAccepted ?? 'NO'}
+                      </strong>
+                    </div>
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-[#64748B]">Error:</span>
+                      <span className="text-[#172033] text-right truncate max-w-[200px]" title={debugData.summary?.error}>
+                        {debugData.summary?.error ?? 'None'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {debugData.lastRealOrderPush && (
+                    <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 text-[11px] space-y-1">
+                      <div className="font-bold text-gray-700">Detail Pesanan Terakhir:</div>
+                      <div>No Order: #{debugData.lastRealOrderPush.orderNumber}</div>
+                      <div>Outlet: {debugData.lastRealOrderPush.outletId}</div>
+                      <div>Waktu: {new Date(debugData.lastRealOrderPush.timestamp).toLocaleString('id-ID')}</div>
+                    </div>
+                  )}
+
+                  <div className="p-3 rounded-xl bg-gray-50 border border-gray-200 text-[11px] space-y-1.5">
+                    <div className="font-bold text-gray-700 flex justify-between">
+                      <span>Perangkat Admin Terdaftar:</span>
+                      <span className="text-[#0284C7]">{debugData.activeSubscriptionsCount ?? 0} perangkat</span>
+                    </div>
+                    {debugData.activeSubscriptions && debugData.activeSubscriptions.length > 0 ? (
+                      <ul className="space-y-1 divide-y divide-gray-200">
+                        {debugData.activeSubscriptions.map((s: any, idx: number) => (
+                          <li key={idx} className="pt-1 text-[10px]">
+                            <strong className="text-[#172033]">{s.username}</strong> ({s.outletId}) • {s.endpointMasked}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-gray-500 italic text-[10px]">Belum ada perangkat yang terdaftar di database.</p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="py-4 text-center text-gray-500">Tidak ada data diagnostik.</div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-[#E0F2FE] flex gap-2">
+              <button
+                onClick={handleOpenDebugModal}
+                disabled={isLoadingDebug}
+                className="flex-1 py-2 bg-[#F0F7FF] text-[#0284C7] hover:bg-[#E0F2FE] rounded-xl text-xs font-bold uppercase transition-all"
+              >
+                {isLoadingDebug ? 'Memuat...' : 'Refresh Status'}
+              </button>
+              <button
+                onClick={() => setShowDebugModal(false)}
+                className="flex-1 py-2 bg-[#0284C7] hover:bg-[#0369a1] text-white rounded-xl text-xs font-bold uppercase transition-all"
+              >
+                Tutup
+              </button>
+            </div>
           </div>
         </div>
       )}

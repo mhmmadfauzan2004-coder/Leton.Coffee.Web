@@ -8,11 +8,18 @@ export const API_BASE_URL = 'https://ais-pre-gfncvyyhq4omamytu5kgc4-866159737618
 
 /**
  * Returns the full API URL for a given endpoint path.
- * In development / same-domain, returns e.g. "/api/content".
- * In production with VITE_API_URL set, returns e.g. "https://api.leton.com/api/content".
+ * In development / same-domain container, returns e.g. "/api/content".
+ * In production with external domain (e.g. Cloudflare Pages), routes to API_BASE_URL.
  */
 export function getApiUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // If running on a Cloud Run container (dev or pre) or local dev server, use relative path directly
+    if (host.includes('.run.app') || host === 'localhost' || host === '127.0.0.1') {
+      return normalizedPath;
+    }
+  }
   if (!API_BASE_URL) {
     return normalizedPath;
   }

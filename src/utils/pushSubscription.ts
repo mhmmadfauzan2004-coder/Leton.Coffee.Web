@@ -432,8 +432,8 @@ export async function testAdminPush(): Promise<{ success: boolean; error?: strin
     if (!res) {
       try {
         console.warn('[WebPush Test] Backend unreachable, falling back to local service worker notification trigger.');
-        await reg.showNotification('🛍️ [TEST] Pesanan Baru Masuk!', {
-          body: 'Pojan (Uji Coba) • Rp90.000\n2x Strawberry Dream Bracelet',
+        await reg.showNotification('🔔 Leton Coffee', {
+          body: 'Pesanan Baru Masuk!\n#TEST-001 • Pojan (Uji Coba) • Rp90.000',
           icon: '/logo_icon.jpg',
           badge: '/logo_icon.jpg',
           data: { type: 'TEST_ORDER', orderId: 'TEST-001', outletId: 'all' }
@@ -461,8 +461,8 @@ export async function testAdminPush(): Promise<{ success: boolean; error?: strin
     console.error('[WebPush Test] Exception:', err);
     try {
       const reg = await navigator.serviceWorker.ready;
-      await reg.showNotification('🛍️ [TEST] Pesanan Baru Masuk!', {
-        body: 'Pojan (Uji Coba) • Rp90.000\n2x Strawberry Dream Bracelet',
+      await reg.showNotification('🔔 Leton Coffee', {
+        body: 'Pesanan Baru Masuk!\n#TEST-001 • Pojan (Uji Coba) • Rp90.000',
         icon: '/logo_icon.jpg',
         badge: '/logo_icon.jpg',
         data: { type: 'TEST_ORDER', orderId: 'TEST-001', outletId: 'all' }

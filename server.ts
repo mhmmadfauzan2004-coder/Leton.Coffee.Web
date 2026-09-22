@@ -1837,8 +1837,8 @@ async function sendBackgroundPushNotificationForOrder(order: any) {
     );
 
     const payload = JSON.stringify({
-      title: '🔔 Pesanan Baru — Leton Coffee',
-      body: `#${order.orderNumber || order.id} • ${order.customerName || 'Pelanggan'} • ${totalFormatted}\n${outletDisplayName}`,
+      title: '🔔 Leton Coffee',
+      body: `Pesanan Baru Masuk!\n#${order.orderNumber || order.id} • ${order.customerName || 'Pelanggan'} • ${totalFormatted}`,
       icon: '/logo_icon.jpg',
       badge: '/logo_icon.jpg',
       data: {
@@ -1846,7 +1846,7 @@ async function sendBackgroundPushNotificationForOrder(order: any) {
         orderId: order.id,
         orderNumber: order.orderNumber || order.id,
         outletId: order.outletId || order.outlet_id || '',
-        url: '/#admin/orders'
+        url: '/#admin?tab=orders'
       }
     });
 
@@ -1864,7 +1864,15 @@ async function sendBackgroundPushNotificationForOrder(order: any) {
               auth: sub.keys.auth
             }
           };
-          await webpush.sendNotification(pushSubscription, payload);
+          const pushOptions = {
+            TTL: 86400,
+            urgency: 'high' as const,
+            headers: {
+              'Urgency': 'high',
+              'Topic': 'order-notification'
+            }
+          };
+          await webpush.sendNotification(pushSubscription, payload, pushOptions);
           console.log(`[WebPush] Push delivered to ${sub.username} (${sub.outletId})`);
         } catch (err: any) {
           console.warn(`[WebPush] Error sending push to endpoint: ${sub.endpoint}. Status code: ${err.statusCode}`);
@@ -2018,8 +2026,8 @@ app.post('/api/push/test', async (req, res) => {
     }
 
     const payload = JSON.stringify({
-      title: '🛍️ [TEST] Pesanan Baru Masuk!',
-      body: 'Pojan (Uji Coba) • Rp90.000\n2x Strawberry Dream Bracelet',
+      title: '🔔 Leton Coffee',
+      body: 'Pesanan Baru Masuk!\n#TEST-001 • Pojan (Uji Coba) • Rp90.000',
       icon: '/logo_icon.jpg',
       badge: '/logo_icon.jpg',
       data: {
@@ -2041,7 +2049,15 @@ app.post('/api/push/test', async (req, res) => {
             auth: sub.keys.auth
           }
         };
-        await webpush.sendNotification(pushSubscription, payload);
+        const pushOptions = {
+          TTL: 86400,
+          urgency: 'high' as const,
+          headers: {
+            'Urgency': 'high',
+            'Topic': 'test-notification'
+          }
+        };
+        await webpush.sendNotification(pushSubscription, payload, pushOptions);
         sentCount++;
       } catch (err: any) {
         console.warn(`[WebPush Test] Failed to send notification to endpoint ${sub.endpoint}:`, err?.message || err);

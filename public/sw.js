@@ -17,25 +17,27 @@ self.addEventListener('push', (event) => {
       payload = event.data.json();
     } catch (err) {
       payload = {
-        title: '🔔 Pesanan Baru — Leton Coffee',
+        title: '🔔 Leton Coffee',
         body: event.data.text()
       };
     }
   }
 
-  const title = payload.title || '🔔 Pesanan Baru — Leton Coffee';
-  const body = payload.body || 'Pesanan baru telah masuk di Leton Coffee.';
+  const title = payload.title || '🔔 Leton Coffee';
+  const body = payload.body || 'Pesanan Baru Masuk!';
   const icon = payload.icon || '/logo_icon.jpg';
   const badge = payload.badge || '/logo_icon.jpg';
   const data = payload.data || {};
+
+  const orderKey = data.orderNumber || data.orderId || `${Date.now()}`;
 
   const options = {
     body,
     icon,
     badge,
-    vibrate: [100, 50, 100],
+    vibrate: [200, 100, 200, 100, 200],
     data,
-    tag: 'new-order-notification',
+    tag: `order-${orderKey}`,
     renotify: true,
     requireInteraction: true
   };
@@ -45,7 +47,7 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Handle when user clicks the notification
+// Handle when user clicks the system notification
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
@@ -65,17 +67,18 @@ self.addEventListener('notificationclick', (event) => {
       .then((clientList) => {
         // Try to find an existing window and focus it
         for (const client of clientList) {
-          const clientUrl = new URL(client.url);
-          if (clientUrl.pathname === '/' || clientUrl.hash.includes('admin')) {
-            try {
-              client.postMessage({
-                type: 'NOTIFICATION_CLICKED',
-                orderId,
-                outletId
-              });
-            } catch (err) {}
-            
+          try {
+            client.postMessage({
+              type: 'NOTIFICATION_CLICKED',
+              orderId,
+              outletId
+            });
+          } catch (err) {}
+          
+          if ('navigate' in client) {
             return client.navigate(targetUrl).then(c => c.focus());
+          } else if ('focus' in client) {
+            return client.focus();
           }
         }
         // If no open window, open a new one
@@ -85,3 +88,4 @@ self.addEventListener('notificationclick', (event) => {
       })
   );
 });
+

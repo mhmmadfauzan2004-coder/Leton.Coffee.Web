@@ -88,6 +88,31 @@ export function matchesOutlet(orderOutletId?: string | null, targetOutletId?: st
 
   if (o === t) return true;
 
+  // Helper to map branch/chapter codes to canonical outlet ID
+  const canonical = (val: string) => {
+    if (val.includes('sudirman') || val.includes('chapter-5') || val.includes('chapter 5') || val === 'chapter5') {
+      return 'sudirman';
+    }
+    if (
+      val.includes('kelakap') ||
+      val.includes('ratusima') ||
+      val.includes('ratu sima') ||
+      val.includes('chapter-6') ||
+      val.includes('chapter 6') ||
+      val === 'chapter6'
+    ) {
+      return 'kelakap_7';
+    }
+    if (val.includes('letgo') || val.includes('mpp')) {
+      return 'letgo-mpp';
+    }
+    return val;
+  };
+
+  const cO = canonical(o);
+  const cT = canonical(t);
+  if (cO === cT) return true;
+
   // Sudirman check
   if (
     (t === 'sudirman' || t.includes('sudirman')) &&

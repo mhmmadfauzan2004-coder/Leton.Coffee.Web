@@ -1041,8 +1041,54 @@ function broadcastOrderEvent(
   }
 }
 
-// 11. Orders API
 // Helper to test if an order belongs to an outlet
+function isSudirmanOutlet(val: string | null | undefined): boolean {
+  if (!val) return false;
+  const s = String(val).toLowerCase().trim();
+  return (
+    s === 'sudirman' ||
+    s.includes('sudirman') ||
+    s === 'chapter-5' ||
+    s === 'chapter_5' ||
+    s === 'chapter5' ||
+    s.includes('chapter 5') ||
+    s.includes('chapter-5') ||
+    s.includes('ch-5')
+  );
+}
+
+function isKelakapOutlet(val: string | null | undefined): boolean {
+  if (!val) return false;
+  const s = String(val).toLowerCase().trim();
+  return (
+    s === 'kelakap_7' ||
+    s === 'kelakap' ||
+    s === 'ratusima' ||
+    s.includes('kelakap') ||
+    s.includes('ratusima') ||
+    s === 'chapter-6' ||
+    s === 'chapter_6' ||
+    s === 'chapter6' ||
+    s.includes('chapter 6') ||
+    s.includes('chapter-6') ||
+    s.includes('ch-6')
+  );
+}
+
+function isLetgoOutlet(val: string | null | undefined): boolean {
+  if (!val) return false;
+  const s = String(val).toLowerCase().trim();
+  return (
+    s === 'letgo' ||
+    s === 'letgo-mpp' ||
+    s === 'let_go' ||
+    s === 'let-go' ||
+    s.includes('letgo') ||
+    s.includes('let-go') ||
+    s.includes('mpp')
+  );
+}
+
 function orderMatchesOutlet(orderOutlet: string | undefined, targetOutlet: string): boolean {
   if (!targetOutlet || targetOutlet === 'ALL' || targetOutlet === 'all') return true;
   if (!orderOutlet) return false;
@@ -1050,29 +1096,9 @@ function orderMatchesOutlet(orderOutlet: string | undefined, targetOutlet: strin
   const t = targetOutlet.toLowerCase().trim();
   if (o === t) return true;
 
-  // Sudirman check
-  if (
-    (t === 'sudirman' || t.includes('sudirman')) &&
-    (o === 'sudirman' || o.includes('sudirman'))
-  ) {
-    return true;
-  }
-
-  // Ratusima / Kelakap 7 check
-  if (
-    (t === 'kelakap_7' || t === 'kelakap' || t === 'ratusima' || t.includes('kelakap') || t.includes('ratusima')) &&
-    (o === 'kelakap_7' || o === 'kelakap' || o === 'ratusima' || o.includes('kelakap') || o.includes('ratusima'))
-  ) {
-    return true;
-  }
-
-  // LetGo check
-  if (
-    (t === 'letgo' || t === 'letgo-mpp' || t.includes('letgo') || t.includes('mpp')) &&
-    (o === 'letgo' || o === 'letgo-mpp' || o.includes('letgo') || o.includes('mpp'))
-  ) {
-    return true;
-  }
+  if (isSudirmanOutlet(o) && isSudirmanOutlet(t)) return true;
+  if (isKelakapOutlet(o) && isKelakapOutlet(t)) return true;
+  if (isLetgoOutlet(o) && isLetgoOutlet(t)) return true;
 
   return o.includes(t) || t.includes(o);
 }
@@ -1111,7 +1137,7 @@ app.post('/api/orders', (req, res) => {
   broadcastOrderEvent('ORDER_CREATED', order);
   
   // Trigger background push notification to matching admin devices asynchronously
-  sendBackgroundPushNotificationForOrder(order).catch((pErr) => {
+  sendBackgroundPushNotificationForOrder(order, 'POST /api/orders (Express API)').catch((pErr) => {
     console.error('[WebPush] Error triggering push notification:', pErr);
   });
 
@@ -1605,34 +1631,39 @@ async function initVapid() {
   );
 }
 
-// Fetch all active subscriptions
+// Fetch all active subscriptions across database & local cache
 async function getPushSubscriptions(): Promise<any[]> {
-  // 1. Try querying structured push_subscriptions table first
+  const subsMap = new Map<string, any>();
+
+  // 1. Try querying structured push_subscriptions table
   try {
     const { data, error } = await supabase
       .from('push_subscriptions')
       .select('*');
 
     if (!error && Array.isArray(data) && data.length > 0) {
-      console.log(`[WebPush] Successfully retrieved ${data.length} subscription(s) from push_subscriptions table.`);
-      return data.map(row => ({
-        endpoint: row.endpoint,
-        keys: {
-          p256dh: row.p256dh,
-          auth: row.auth
-        },
-        username: row.username,
-        outletId: row.outlet_id,
-        role: row.role,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at
-      }));
+      data.forEach(row => {
+        if (row && row.endpoint) {
+          subsMap.set(row.endpoint, {
+            endpoint: row.endpoint,
+            keys: {
+              p256dh: row.p256dh,
+              auth: row.auth
+            },
+            username: row.username,
+            outletId: row.outlet_id,
+            role: row.role,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at
+          });
+        }
+      });
     }
   } catch (err) {
     // Graceful fallback to legacy leton_content
   }
 
-  // 2. Fallback to leton_content single-row array
+  // 2. Also check leton_content single-row array
   try {
     const { data, error } = await supabase
       .from('leton_content')
@@ -1640,20 +1671,23 @@ async function getPushSubscriptions(): Promise<any[]> {
       .eq('id', 'push_subscriptions')
       .maybeSingle();
 
-    if (!error && data?.content && Array.isArray(data.content.subscriptions) && data.content.subscriptions.length > 0) {
-      console.log(`[WebPush] Successfully retrieved ${data.content.subscriptions.length} subscription(s) from leton_content store.`);
-      return data.content.subscriptions.map((sub: any) => ({
-        endpoint: sub.endpoint,
-        keys: sub.keys || { p256dh: sub.p256dh, auth: sub.auth },
-        username: sub.username,
-        outletId: sub.outletId || sub.outlet_id,
-        role: sub.role,
-        createdAt: sub.createdAt || sub.created_at,
-        updatedAt: sub.updatedAt || sub.updated_at
-      }));
+    if (!error && data?.content && Array.isArray(data.content.subscriptions)) {
+      data.content.subscriptions.forEach((sub: any) => {
+        if (sub && sub.endpoint && !subsMap.has(sub.endpoint)) {
+          subsMap.set(sub.endpoint, {
+            endpoint: sub.endpoint,
+            keys: sub.keys || { p256dh: sub.p256dh, auth: sub.auth },
+            username: sub.username,
+            outletId: sub.outletId || sub.outlet_id,
+            role: sub.role,
+            createdAt: sub.createdAt || sub.created_at,
+            updatedAt: sub.updatedAt || sub.updated_at
+          });
+        }
+      });
     }
   } catch (err) {
-    console.error('[WebPush] Error fetching subscriptions from Supabase fallback:', err);
+    // Graceful fallback to local file
   }
 
   // 3. Local file fallback
@@ -1662,11 +1696,18 @@ async function getPushSubscriptions(): Promise<any[]> {
     if (fs.existsSync(subFile)) {
       const raw = fs.readFileSync(subFile, 'utf-8');
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed.subscriptions) ? parsed.subscriptions : [];
+      if (Array.isArray(parsed.subscriptions)) {
+        parsed.subscriptions.forEach((sub: any) => {
+          if (sub && sub.endpoint && !subsMap.has(sub.endpoint)) {
+            subsMap.set(sub.endpoint, sub);
+          }
+        });
+      }
     }
   } catch (err) {}
 
-  return [];
+  const allSubs = Array.from(subsMap.values());
+  return allSubs;
 }
 
 // Save active subscriptions
@@ -1704,7 +1745,6 @@ async function savePushSubscriptions(subscriptions: any[]): Promise<boolean> {
 
       if (!error) {
         tableSuccess = true;
-        console.log('[WebPush] Successfully upserted subscriptions into push_subscriptions table.');
       }
     }
   } catch (err) {
@@ -1737,7 +1777,7 @@ const processedPushOrderIds = new Set<string>();
 
 /**
  * Robust server-side utility to check if an order matches a subscription outlet ID.
- * Handles variations like 'letgo-mpp' vs 'letgo', 'kelakap_7' vs 'kelakap', etc.
+ * Handles variations like 'letgo-mpp' vs 'letgo', 'chapter-5' vs 'sudirman', 'chapter-6' vs 'kelakap_7', etc.
  */
 function serverMatchesOutlet(orderOutletId: string | null | undefined, targetOutletId: string | null | undefined): boolean {
   if (!targetOutletId || !orderOutletId) return false;
@@ -1747,37 +1787,26 @@ function serverMatchesOutlet(orderOutletId: string | null | undefined, targetOut
 
   if (o === t) return true;
 
-  // Sudirman check
-  if (
-    (t === 'sudirman' || t.includes('sudirman')) &&
-    (o === 'sudirman' || o.includes('sudirman'))
-  ) {
-    return true;
-  }
+  if (isSudirmanOutlet(o) && isSudirmanOutlet(t)) return true;
+  if (isKelakapOutlet(o) && isKelakapOutlet(t)) return true;
+  if (isLetgoOutlet(o) && isLetgoOutlet(t)) return true;
 
-  // Ratusima / Kelakap 7 check
-  if (
-    (t === 'kelakap_7' || t === 'kelakap' || t === 'ratusima' || t.includes('kelakap') || t.includes('ratusima')) &&
-    (o === 'kelakap_7' || o === 'kelakap' || o === 'ratusima' || o.includes('kelakap') || o.includes('ratusima'))
-  ) {
-    return true;
-  }
-
-  // LetGo check
-  if (
-    (t === 'letgo' || t === 'letgo-mpp' || t.includes('letgo') || t.includes('mpp')) &&
-    (o === 'letgo' || o === 'letgo-mpp' || o.includes('letgo') || o.includes('mpp'))
-  ) {
-    return true;
-  }
-
-  return false;
+  return o.includes(t) || t.includes(o);
 }
 
-async function sendBackgroundPushNotificationForOrder(order: any) {
+async function sendBackgroundPushNotificationForOrder(order: any, triggerSource = 'ORDER_EVENT') {
   if (!order || !order.id) return;
+  
+  const orderNum = order.orderNumber || order.order_number || order.id;
+  const orderOutlet = String(order.outletId || order.outlet_id || '').trim();
+  const orderOutletName = String(order.outletName || order.outlet_name || '').trim();
+  const customerName = String(order.customerName || order.customer_name || 'Pelanggan').trim();
+  const rawTotal = order.totalAmount ?? order.total_amount ?? order.total ?? 0;
+  const totalNum = typeof rawTotal === 'number' ? rawTotal : Number(rawTotal) || 0;
+  const totalFormatted = `Rp${totalNum.toLocaleString('id-ID')}`;
+
   if (processedPushOrderIds.has(order.id)) {
-    console.log(`[WebPush] Background Push already triggered for order ${order.id}. Skipping.`);
+    console.log(`[WebPush Trace] Background Push already triggered for order ID: ${order.id} (#${orderNum}). Skipping duplicate.`);
     return;
   }
 
@@ -1791,71 +1820,103 @@ async function sendBackgroundPushNotificationForOrder(order: any) {
     }
   }
 
+  console.log('================================================================');
+  console.log(`[REAL ORDER PUSH TRACE - START]`);
+  console.log(`- Source        : ${triggerSource}`);
+  console.log(`- Order Number  : #${orderNum}`);
+  console.log(`- Order ID      : ${order.id}`);
+  console.log(`- Outlet ID     : "${orderOutlet}"`);
+  console.log(`- Outlet Name   : "${orderOutletName}"`);
+  console.log(`- Customer      : ${customerName}`);
+  console.log(`- Total Amount  : ${totalFormatted}`);
+  console.log('================================================================');
+
   try {
     const subscriptions = await getPushSubscriptions();
+    console.log(`[REAL ORDER PUSH TRACE] Total registered subscriptions in database/store: ${subscriptions.length}`);
+
     if (subscriptions.length === 0) {
-      console.log('[WebPush] No active push subscriptions found in storage.');
+      console.warn('[REAL ORDER PUSH TRACE] ⚠️ WARNING: No push subscriptions found in storage. No admin has registered yet or subscriptions are empty.');
       return;
     }
 
-    const orderOutletId = String(order.outletId || order.outlet_id || order.outletName || '').toLowerCase();
-    
     // Filter matching subscriptions. Only route to specific outlet admins!
     // CENTRAL ADMIN / super_admin: TIDAK menerima operational order push.
     const matchingSubs = subscriptions.filter(sub => {
       const subRole = String(sub.role || '').toLowerCase();
       const subUsername = String(sub.username || '').toLowerCase();
-      const subOutlet = String(sub.outletId || '').toLowerCase();
+      const subOutlet = String(sub.outletId || sub.outlet_id || '').toLowerCase();
 
       // Central admin / super_admin: TIDAK menerima operational order push.
-      if (
+      const isCentral = (
         subRole === 'super_admin' || 
         subOutlet === 'all' || 
         subUsername === 'admin' || 
         subUsername === 'superadmin'
-      ) {
+      ) && !isSudirmanOutlet(subOutlet) && !isKelakapOutlet(subOutlet) && !isLetgoOutlet(subOutlet) &&
+         !subUsername.includes('sudirman') && !subUsername.includes('kelakap') && !subUsername.includes('ratusima') && !subUsername.includes('letgo');
+
+      if (isCentral) {
+        console.log(`[REAL ORDER PUSH TRACE] Excluded Central Super Admin: "${sub.username}" (outlet: "${subOutlet}", role: "${subRole}")`);
         return false;
       }
 
-      return serverMatchesOutlet(orderOutletId, subOutlet);
+      // Check outlet match against orderOutlet OR orderOutletName
+      const matchOutletId = serverMatchesOutlet(orderOutlet, subOutlet);
+      const matchOutletName = serverMatchesOutlet(orderOutletName, subOutlet);
+      const matchSudirman = isSudirmanOutlet(orderOutlet || orderOutletName) && (isSudirmanOutlet(subOutlet) || subUsername.includes('sudirman'));
+      const matchKelakap = isKelakapOutlet(orderOutlet || orderOutletName) && (isKelakapOutlet(subOutlet) || subUsername.includes('kelakap') || subUsername.includes('ratusima'));
+      const matchLetgo = isLetgoOutlet(orderOutlet || orderOutletName) && (isLetgoOutlet(subOutlet) || subUsername.includes('letgo'));
+
+      const isMatch = matchOutletId || matchOutletName || matchSudirman || matchKelakap || matchLetgo;
+
+      if (isMatch) {
+        console.log(`[REAL ORDER PUSH TRACE] ✅ MATCH: Admin "${sub.username}" (outlet: "${subOutlet}") matches order outlet "${orderOutlet || orderOutletName}"`);
+      } else {
+        console.log(`[REAL ORDER PUSH TRACE] ❌ NO MATCH: Admin "${sub.username}" (outlet: "${subOutlet}") does not match order outlet "${orderOutlet || orderOutletName}"`);
+      }
+
+      return isMatch;
     });
 
+    console.log(`[REAL ORDER PUSH TRACE] Target Matching Subscriptions Count: ${matchingSubs.length}`);
+
     if (matchingSubs.length === 0) {
-      console.log(`[WebPush] No matching admin subscriptions found for outlet ID: ${orderOutletId}`);
+      console.warn(`[REAL ORDER PUSH TRACE] ⚠️ WARNING: 0 matching admin subscriptions for order #${orderNum} (Outlet: "${orderOutlet || orderOutletName}"). No notification will be sent.`);
       return;
     }
 
-    const totalFormatted = typeof order.totalAmount === 'number' 
-      ? `Rp${order.totalAmount.toLocaleString('id-ID')}`
-      : `Rp${(order.total || 0).toLocaleString('id-ID')}`;
-
-    const outletDisplayName = order.outletName || (
-      orderOutletId.includes('sudirman') ? 'Leton Coffee — Jalan Jendral Sudirman' :
-      orderOutletId.includes('kelakap') || orderOutletId.includes('ratusima') ? 'Leton Coffee — Ratusima / Kelakap 7' :
-      orderOutletId.includes('letgo') ? 'LetGo — depan MPP' :
-      order.outletId || 'Leton Coffee'
-    );
-
     const payload = JSON.stringify({
       title: '🔔 Leton Coffee',
-      body: `Pesanan Baru Masuk!\n#${order.orderNumber || order.id} • ${order.customerName || 'Pelanggan'} • ${totalFormatted}`,
+      body: `Pesanan Baru Masuk!\n#${orderNum} • ${customerName} • ${totalFormatted}`,
       icon: '/logo_icon.jpg',
       badge: '/logo_icon.jpg',
       data: {
         type: 'NEW_ORDER',
         orderId: order.id,
-        orderNumber: order.orderNumber || order.id,
-        outletId: order.outletId || order.outlet_id || '',
+        orderNumber: orderNum,
+        outletId: orderOutlet || '',
+        outletName: orderOutletName || '',
+        customerName: customerName,
+        totalFormatted: totalFormatted,
+        timestamp: Date.now(),
         url: '/#admin?tab=orders'
       }
     });
 
-    console.log(`[WebPush] Sending background push for order ${order.orderNumber || order.id} (Outlet: ${orderOutletId}) to ${matchingSubs.length} device(s).`);
+    console.log(`[REAL ORDER PUSH TRACE] 🚀 Invoking webpush.sendNotification() for ${matchingSubs.length} target device(s)...`);
 
     const staleEndpoints: string[] = [];
 
     await Promise.all(
-      matchingSubs.map(async (sub) => {
+      matchingSubs.map(async (sub, idx) => {
+        let endpointDomain = 'unknown-push-service';
+        try {
+          endpointDomain = new URL(sub.endpoint).hostname;
+        } catch (e) {}
+
+        console.log(`[REAL ORDER PUSH DISPATCH #${idx + 1}] Target: "${sub.username}" | Outlet: "${sub.outletId}" | Provider Domain: "${endpointDomain}" | sendNotification() called: YES`);
+
         try {
           const pushSubscription = {
             endpoint: sub.endpoint,
@@ -1872,25 +1933,35 @@ async function sendBackgroundPushNotificationForOrder(order: any) {
               'Topic': 'order-notification'
             }
           };
-          await webpush.sendNotification(pushSubscription, payload, pushOptions);
-          console.log(`[WebPush] Push delivered to ${sub.username} (${sub.outletId})`);
+
+          const pushResult = await webpush.sendNotification(pushSubscription, payload, pushOptions);
+          const statusCode = pushResult.statusCode || 201;
+          console.log(`[REAL ORDER PUSH DISPATCH #${idx + 1}] ✅ SUCCESS: Provider responded with status ${statusCode} for admin "${sub.username}" on ${endpointDomain}. Push delivered to Apple/Push gateway.`);
         } catch (err: any) {
-          console.warn(`[WebPush] Error sending push to endpoint: ${sub.endpoint}. Status code: ${err.statusCode}`);
-          if (err.statusCode === 410 || err.statusCode === 404) {
+          const statusCode = err.statusCode || err.status || 'unknown';
+          const isExpired = statusCode === 410 || statusCode === 404;
+          console.error(`[REAL ORDER PUSH DISPATCH #${idx + 1}] ❌ FAILED: Provider error for admin "${sub.username}". StatusCode: ${statusCode}, Error: ${err.message || String(err)}, Expired/Stale: ${isExpired ? 'YES (410/404)' : 'NO'}`);
+          if (err.body) {
+            console.error(`[REAL ORDER PUSH DISPATCH #${idx + 1}] Provider Error Body:`, err.body);
+          }
+          if (isExpired) {
             staleEndpoints.push(sub.endpoint);
           }
         }
       })
     );
 
-    // Prune stale subscriptions
+    // Prune stale subscriptions if any
     if (staleEndpoints.length > 0) {
-      console.log(`[WebPush] Pruning ${staleEndpoints.length} stale/expired subscription(s).`);
+      console.log(`[REAL ORDER PUSH TRACE] Pruning ${staleEndpoints.length} stale/expired subscription(s) from database.`);
       const activeSubs = subscriptions.filter(sub => !staleEndpoints.includes(sub.endpoint));
       await savePushSubscriptions(activeSubs);
     }
+
+    console.log(`[REAL ORDER PUSH TRACE - COMPLETE] Order #${orderNum} push notification lifecycle finished.`);
+    console.log('================================================================');
   } catch (err) {
-    console.error('[WebPush] Error sending background push:', err);
+    console.error('[REAL ORDER PUSH TRACE] Fatal error in sendBackgroundPushNotificationForOrder:', err);
   }
 }
 
@@ -1903,7 +1974,7 @@ function initSupabaseOrderListener() {
         const order = event.payload;
         if (order && order.id) {
           console.log(`[WebPush Listener] Received ORDER_CREATED broadcast for order ${order.orderNumber || order.id}`);
-          sendBackgroundPushNotificationForOrder(order).catch(err => {
+          sendBackgroundPushNotificationForOrder(order, 'Supabase Broadcast (ORDER_CREATED)').catch(err => {
             console.error('[WebPush Listener] Push trigger error:', err);
           });
         }
@@ -1922,7 +1993,7 @@ function initSupabaseOrderListener() {
             orderStatus: row.order_status,
             createdAt: row.created_at
           };
-          sendBackgroundPushNotificationForOrder(formattedOrder).catch(err => {
+          sendBackgroundPushNotificationForOrder(formattedOrder, 'Supabase Postgres INSERT (orders table)').catch(err => {
             console.error('[WebPush Listener] DB Push trigger error:', err);
           });
         }

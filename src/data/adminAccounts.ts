@@ -80,7 +80,7 @@ export const PRESET_ADMIN_ACCOUNTS: AdminCredential[] = [
  * Robust against variations like 'letgo' vs 'letgo-mpp', 'kelakap_7' vs 'kelakap' vs 'ratusima', etc.
  */
 export function matchesOutlet(orderOutletId?: string | null, targetOutletId?: string | null): boolean {
-  if (!targetOutletId || targetOutletId === 'ALL') return true;
+  if (!targetOutletId || targetOutletId === 'ALL' || targetOutletId === 'all') return true;
   if (!orderOutletId) return false;
 
   const o = orderOutletId.toLowerCase().trim();
@@ -88,54 +88,20 @@ export function matchesOutlet(orderOutletId?: string | null, targetOutletId?: st
 
   if (o === t) return true;
 
-  // Helper to map branch/chapter codes to canonical outlet ID
-  const canonical = (val: string) => {
-    if (val.includes('sudirman') || val.includes('chapter-5') || val.includes('chapter 5') || val === 'chapter5') {
-      return 'sudirman';
-    }
-    if (
-      val.includes('kelakap') ||
-      val.includes('ratusima') ||
-      val.includes('ratu sima') ||
-      val.includes('chapter-6') ||
-      val.includes('chapter 6') ||
-      val === 'chapter6'
-    ) {
-      return 'kelakap_7';
-    }
-    if (val.includes('letgo') || val.includes('mpp')) {
-      return 'letgo-mpp';
-    }
-    return val;
-  };
+  // Sudirman / Chapter 5 check
+  const isSudirmanO = o === 'sudirman' || o.includes('sudirman') || o === 'chapter-5' || o === 'chapter_5' || o.includes('chapter 5');
+  const isSudirmanT = t === 'sudirman' || t.includes('sudirman') || t === 'chapter-5' || t === 'chapter_5' || t.includes('chapter 5');
+  if (isSudirmanO && isSudirmanT) return true;
 
-  const cO = canonical(o);
-  const cT = canonical(t);
-  if (cO === cT) return true;
-
-  // Sudirman check
-  if (
-    (t === 'sudirman' || t.includes('sudirman')) &&
-    (o === 'sudirman' || o.includes('sudirman'))
-  ) {
-    return true;
-  }
-
-  // Ratusima / Kelakap 7 check
-  if (
-    (t === 'kelakap_7' || t === 'kelakap' || t === 'ratusima' || t.includes('kelakap') || t.includes('ratusima')) &&
-    (o === 'kelakap_7' || o === 'kelakap' || o === 'ratusima' || o.includes('kelakap') || o.includes('ratusima'))
-  ) {
-    return true;
-  }
+  // Ratusima / Kelakap 7 / Chapter 6 check
+  const isKelakapO = o === 'kelakap_7' || o === 'kelakap' || o === 'ratusima' || o.includes('kelakap') || o.includes('ratusima') || o === 'chapter-6' || o === 'chapter_6' || o.includes('chapter 6');
+  const isKelakapT = t === 'kelakap_7' || t === 'kelakap' || t === 'ratusima' || t.includes('kelakap') || t.includes('ratusima') || t === 'chapter-6' || t === 'chapter_6' || t.includes('chapter 6');
+  if (isKelakapO && isKelakapT) return true;
 
   // LetGo check
-  if (
-    (t === 'letgo' || t === 'letgo-mpp' || t.includes('letgo') || t.includes('mpp')) &&
-    (o === 'letgo' || o === 'letgo-mpp' || o.includes('letgo') || o.includes('mpp'))
-  ) {
-    return true;
-  }
+  const isLetgoO = o === 'letgo' || o === 'letgo-mpp' || o.includes('letgo') || o.includes('mpp');
+  const isLetgoT = t === 'letgo' || t === 'letgo-mpp' || t.includes('letgo') || t.includes('mpp');
+  if (isLetgoO && isLetgoT) return true;
 
   return o.includes(t) || t.includes(o);
 }

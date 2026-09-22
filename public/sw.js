@@ -31,6 +31,8 @@ self.addEventListener('push', (event) => {
 
   const orderKey = data.orderNumber || data.orderId || `${Date.now()}`;
 
+  console.log(`[SW Push Event Received] Title: "${title}" | OrderKey: "${orderKey}" | Body: "${body.replace(/\n/g, ' ')}"`);
+
   const options = {
     body,
     icon,
@@ -44,6 +46,12 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     self.registration.showNotification(title, options)
+      .then(() => {
+        console.log(`[SW showNotification Success] System notification displayed for order #${orderKey}`);
+      })
+      .catch((err) => {
+        console.error(`[SW showNotification Error] Failed to show system notification:`, err);
+      })
   );
 });
 

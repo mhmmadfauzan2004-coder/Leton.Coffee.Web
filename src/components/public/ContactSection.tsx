@@ -3,13 +3,11 @@ import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
 import { motion } from 'motion/react';
-import { MessageCircle, Instagram, MapPin, Clock, Mail, Navigation, Heart, Lock } from 'lucide-react';
+import { MessageCircle, Instagram, MapPin, Clock, Mail, Navigation, Heart } from 'lucide-react';
 
-interface ContactSectionProps {
-  onOpenAdmin?: () => void;
-}
+interface ContactSectionProps {}
 
-export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenAdmin }) => {
+export const ContactSection: React.FC<ContactSectionProps> = () => {
   const { data } = useContent();
   const { contactSettings, siteSettings } = data;
 
@@ -194,17 +192,6 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ onOpenAdmin }) =
             <span className="flex items-center gap-1 text-slate-400">
               Crafted with <Heart className="w-3.5 h-3.5 text-[#60A5FA] fill-[#60A5FA] inline" /> for Leton Community
             </span>
-
-            {onOpenAdmin && (
-              <button
-                onClick={onOpenAdmin}
-                className="flex items-center gap-1.5 text-slate-400 hover:text-[#60A5FA] transition-colors font-mono text-[11px] cursor-pointer"
-                title="Admin Control Panel"
-              >
-                <Lock className="w-3 h-3" />
-                <span>Admin CMS</span>
-              </button>
-            )}
           </div>
         </div>
       </div>

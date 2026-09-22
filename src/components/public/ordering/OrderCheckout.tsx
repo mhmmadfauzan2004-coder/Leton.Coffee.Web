@@ -444,7 +444,7 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
             <div className="space-y-1.5 pt-1">
               <div className="flex items-center justify-between">
                 <label className="text-xs text-[#041d32] font-bold flex items-center gap-1">
-                  <span>Nomor Meja Pelanggan</span>
+                  <span>Mau duduk di mana?</span>
                   <span className="text-rose-500">*</span>
                 </label>
                 <span className="text-[10px] text-[#3e484f]">Tersedia Meja di Area Cafe</span>
@@ -454,7 +454,7 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
                 required
                 value={tableNumber}
                 onChange={(e) => setTableNumber(e.target.value)}
-                placeholder="Misal: 08 (Lantai 1)"
+                placeholder="Masukkan nomor meja"
                 className="w-full px-3.5 py-2.5 bg-white border border-[#e4efff] rounded-lg text-xs sm:text-sm font-semibold text-[#041d32] focus:outline-none focus:border-[#006389] shadow-2xs"
               />
               <p className="text-[11px] text-[#3e484f]">

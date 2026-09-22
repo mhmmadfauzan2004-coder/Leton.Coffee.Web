@@ -1,5 +1,89 @@
 [
   {
+    "id": "ORDER-TEST-KLK-1790065697904",
+    "orderNumber": "KLK-1790065697904",
+    "customerName": "Siti Rahma (Verifikasi Kelakap 7)",
+    "customerPhone": "081987654321",
+    "outletId": "chapter-1",
+    "outletName": "Leton Coffee — Ratusima / Kelakap 7",
+    "items": [
+      {
+        "name": "Caramel Macchiato",
+        "quantity": 1,
+        "price": 35000,
+        "subtotal": 35000
+      }
+    ],
+    "totalAmount": 35000,
+    "paymentMethod": "qris",
+    "paymentStatus": "paid",
+    "orderStatus": "pending",
+    "createdAt": "2026-09-22T08:28:17.904Z"
+  },
+  {
+    "id": "ORDER-TEST-SDR-1790065697904",
+    "orderNumber": "SDR-1790065697904",
+    "customerName": "Ahmad Fauzi (Verifikasi Sudirman)",
+    "customerPhone": "081234567890",
+    "outletId": "chapter-5",
+    "outletName": "Leton Coffee — Jalan Jendral Sudirman",
+    "items": [
+      {
+        "name": "Kopi Susu Leton",
+        "quantity": 2,
+        "price": 25000,
+        "subtotal": 50000
+      }
+    ],
+    "totalAmount": 50000,
+    "paymentMethod": "qris",
+    "paymentStatus": "paid",
+    "orderStatus": "pending",
+    "createdAt": "2026-09-22T08:28:17.904Z"
+  },
+  {
+    "id": "ORDER-TEST-KLK-1790065680472",
+    "orderNumber": "KLK-1790065680472",
+    "customerName": "Siti Rahma (Verifikasi Kelakap 7)",
+    "customerPhone": "081987654321",
+    "outletId": "chapter-1",
+    "outletName": "Leton Coffee — Ratusima / Kelakap 7",
+    "items": [
+      {
+        "name": "Caramel Macchiato",
+        "quantity": 1,
+        "price": 35000,
+        "subtotal": 35000
+      }
+    ],
+    "totalAmount": 35000,
+    "paymentMethod": "qris",
+    "paymentStatus": "paid",
+    "orderStatus": "pending",
+    "createdAt": "2026-09-22T08:28:00.472Z"
+  },
+  {
+    "id": "ORDER-TEST-SDR-1790065680472",
+    "orderNumber": "SDR-1790065680472",
+    "customerName": "Ahmad Fauzi (Verifikasi Sudirman)",
+    "customerPhone": "081234567890",
+    "outletId": "chapter-5",
+    "outletName": "Leton Coffee — Jalan Jendral Sudirman",
+    "items": [
+      {
+        "name": "Kopi Susu Leton",
+        "quantity": 2,
+        "price": 25000,
+        "subtotal": 50000
+      }
+    ],
+    "totalAmount": 50000,
+    "paymentMethod": "qris",
+    "paymentStatus": "paid",
+    "orderStatus": "pending",
+    "createdAt": "2026-09-22T08:28:00.472Z"
+  },
+  {
     "id": "order-1789543894876-8v31z",
     "orderNumber": "LTN-1716",
     "outletId": "ratusima",

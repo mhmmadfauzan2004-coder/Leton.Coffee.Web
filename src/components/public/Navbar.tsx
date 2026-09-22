@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
-import { Menu, X, MessageCircle, Lock, ShoppingBag, Coffee, User } from 'lucide-react';
+import { Menu, X, MessageCircle, ShoppingBag, Coffee, User } from 'lucide-react';
 
 interface NavbarProps {
-  onOpenAdmin?: () => void;
+  onOpenMember?: () => void;
   onOpenOrder?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onOpenMember, onOpenOrder }) => {
   const { data } = useContent();
   const { siteSettings, contactSettings } = data;
   const [isScrolled, setIsScrolled] = useState(false);
@@ -83,16 +83,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
         id="main-navbar"
         className="fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-b border-[#E0F2FE] shadow-[0_1px_8px_rgba(0,0,0,0.03)] transition-all duration-300"
       >
-        {/* Top Notification Announcement Bar */}
-        <div className="w-full bg-[#F0F7FF] py-2 px-4 text-center border-b border-[#E0F2FE]">
-          <div className="max-w-7xl mx-auto flex items-center justify-center gap-2.5 text-xs text-[#64748B]">
-            <span className="w-2 h-2 rounded-full bg-[#0284C7] animate-ping" />
-            <p className="font-medium">
-              Cabang Sudirman &amp; Kelakap 7 buka normal hari ini: <span className="text-[#0284C7] font-bold">08:00 – 23:00 WIB</span> • Tersedia kurir antar instan se-Dumai Kota!
-            </p>
-          </div>
-        </div>
-
         {/* Main Nav Container */}
         <div className="h-16 sm:h-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
           {/* Logo & Brand Identity */}
@@ -181,11 +171,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
               <span>WA</span>
             </a>
 
-            {onOpenAdmin && (
+            {onOpenMember && (
               <button
-                onClick={onOpenAdmin}
-                id="navbar-admin-btn"
-                title="Buka Admin CMS"
+                onClick={onOpenMember}
+                id="navbar-member-btn"
+                title="Login / Akun Member"
                 className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#0284C7] text-white flex items-center justify-center shadow-sm hover:bg-[#0369A1] transition-colors cursor-pointer"
               >
                 <User className="w-4 h-4 text-white" />
@@ -266,16 +256,17 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenAdmin, onOpenOrder }) => {
                 <span>ORDER VIA WHATSAPP</span>
               </a>
 
-              {onOpenAdmin && (
+              {onOpenMember && (
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);
-                    onOpenAdmin();
+                    onOpenMember();
                   }}
-                  className="w-full py-2.5 px-4 rounded-xl bg-[#F0F7FF] text-[#64748B] hover:text-[#0284C7] font-semibold text-xs flex items-center justify-center gap-2"
+                  id="mobile-member-btn"
+                  className="w-full py-3 px-4 rounded-xl bg-[#F0F7FF] text-[#0284C7] font-bold text-center flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                 >
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>MASUK ADMIN CMS</span>
+                  <User className="w-4 h-4" />
+                  <span>LOGIN / AKUN MEMBER</span>
                 </button>
               )}
             </div>

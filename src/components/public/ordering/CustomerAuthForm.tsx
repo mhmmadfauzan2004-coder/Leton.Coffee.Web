@@ -75,7 +75,7 @@ export default function CustomerAuthForm({
     try {
       const res = await loginCustomer(cleanInput, loginPassword);
       if (res.success && res.profile) {
-        setSuccessMsg('Masuk berhasil! Mengalihkan ke pemilihan outlet...');
+        setSuccessMsg('Masuk berhasil! Membuka akun member...');
         onAuthSuccess(res.profile);
       } else {
         setErrorMsg(res.error || 'Nama Lengkap atau Password salah.');
@@ -146,7 +146,7 @@ export default function CustomerAuthForm({
     try {
       const res = await registerCustomer(cleanNama, cleanHp, tanggalLahir, regPassword);
       if (res.success && res.profile) {
-        setSuccessMsg('Pendaftaran berhasil! Mengalihkan ke pemilihan outlet...');
+        setSuccessMsg('Pendaftaran berhasil! Membuka akun member...');
         onAuthSuccess(res.profile);
       } else {
         setErrorMsg(res.error || 'Pendaftaran gagal. Silakan periksa kembali data Anda.');

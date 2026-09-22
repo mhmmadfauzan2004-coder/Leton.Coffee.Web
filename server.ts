@@ -1613,7 +1613,7 @@ async function getPushSubscriptions(): Promise<any[]> {
       .from('push_subscriptions')
       .select('*');
 
-    if (!error && Array.isArray(data)) {
+    if (!error && Array.isArray(data) && data.length > 0) {
       console.log(`[WebPush] Successfully retrieved ${data.length} subscription(s) from push_subscriptions table.`);
       return data.map(row => ({
         endpoint: row.endpoint,
@@ -1640,8 +1640,17 @@ async function getPushSubscriptions(): Promise<any[]> {
       .eq('id', 'push_subscriptions')
       .maybeSingle();
 
-    if (!error && data?.content && Array.isArray(data.content.subscriptions)) {
-      return data.content.subscriptions;
+    if (!error && data?.content && Array.isArray(data.content.subscriptions) && data.content.subscriptions.length > 0) {
+      console.log(`[WebPush] Successfully retrieved ${data.content.subscriptions.length} subscription(s) from leton_content store.`);
+      return data.content.subscriptions.map((sub: any) => ({
+        endpoint: sub.endpoint,
+        keys: sub.keys || { p256dh: sub.p256dh, auth: sub.auth },
+        username: sub.username,
+        outletId: sub.outletId || sub.outlet_id,
+        role: sub.role,
+        createdAt: sub.createdAt || sub.created_at,
+        updatedAt: sub.updatedAt || sub.updated_at
+      }));
     }
   } catch (err) {
     console.error('[WebPush] Error fetching subscriptions from Supabase fallback:', err);

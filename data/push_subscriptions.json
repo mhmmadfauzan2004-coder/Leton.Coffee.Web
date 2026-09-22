@@ -1,0 +1,51 @@
+{
+  "subscriptions": [
+    {
+      "endpoint": "https://fcm.googleapis.com/fcm/send/test-sudirman-token-12345",
+      "keys": {
+        "auth": "AbCdEfGh1234...",
+        "p256dh": "BMs_4zW7Z8P23Q..."
+      },
+      "username": "admin_sudirman",
+      "outletId": "chapter-5",
+      "role": "outlet_admin",
+      "updatedAt": "2026-09-22T08:26:52.127Z"
+    },
+    {
+      "endpoint": "https://fcm.googleapis.com/fcm/send/test-sub-sudirman-real",
+      "keys": {
+        "auth": "5K2bW78Z9pQ1xYza",
+        "p256dh": "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuNu3o0OUP-0sI8X"
+      },
+      "username": "admin_sudirman",
+      "outletId": "chapter-5",
+      "role": "outlet_admin",
+      "createdAt": "2026-09-22T08:28:15.119Z",
+      "updatedAt": "2026-09-22T08:28:15.119Z"
+    },
+    {
+      "endpoint": "https://fcm.googleapis.com/fcm/send/test-sub-kelakap7-real",
+      "keys": {
+        "auth": "5K2bW78Z9pQ1xYza",
+        "p256dh": "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuNu3o0OUP-0sI8X"
+      },
+      "username": "admin_kelakap7",
+      "outletId": "chapter-1",
+      "role": "outlet_admin",
+      "createdAt": "2026-09-22T08:28:15.986Z",
+      "updatedAt": "2026-09-22T08:28:15.986Z"
+    },
+    {
+      "endpoint": "https://fcm.googleapis.com/fcm/send/test-sub-pusat-real",
+      "keys": {
+        "p256dh": "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuNu3o0OUP-0sI8X",
+        "auth": "5K2bW78Z9pQ1xYza"
+      },
+      "username": "admin_pusat",
+      "outletId": "all",
+      "role": "super_admin",
+      "createdAt": "2026-09-22T08:28:17.201Z",
+      "updatedAt": "2026-09-22T08:28:17.201Z"
+    }
+  ]
+}

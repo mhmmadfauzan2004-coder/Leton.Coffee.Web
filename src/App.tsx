@@ -14,7 +14,7 @@ import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminLogin } from './components/admin/AdminLogin';
 import { PageSkeletonLoader } from './components/public/PageSkeletonLoader';
 import { OrderingSystemModal } from './components/public/ordering/OrderingSystemModal';
-import { MessageCircle, Lock, ShoppingBag } from 'lucide-react';
+import { MessageCircle, ShoppingBag } from 'lucide-react';
 import { createWhatsAppLink } from './utils/formatters';
 import { motion, AnimatePresence } from 'motion/react';
 import { MenuItem } from './types';
@@ -37,6 +37,7 @@ const AppContent: React.FC = () => {
       window.location.pathname.startsWith('/order')
     );
   });
+  const [isMemberOnlyFlow, setIsMemberOnlyFlow] = useState<boolean>(false);
   const [orderingMenuItem, setOrderingMenuItem] = useState<MenuItem | null>(null);
 
   // Listen to popstate / hash change
@@ -75,7 +76,13 @@ const AppContent: React.FC = () => {
     window.history.pushState(null, '', '/#home');
   };
 
+  const openMember = () => {
+    setIsMemberOnlyFlow(true);
+    setIsOrderingOpen(true);
+  };
+
   const openOrdering = async (item?: MenuItem) => {
+    setIsMemberOnlyFlow(false);
     setOrderingMenuItem(item || null);
     try {
       const client = getSupabase();
@@ -88,6 +95,7 @@ const AppContent: React.FC = () => {
 
   const closeOrdering = () => {
     setIsOrderingOpen(false);
+    setIsMemberOnlyFlow(false);
     setOrderingMenuItem(null);
     if (window.location.hash === '#order' || window.location.hash === '#/order') {
       window.history.pushState(null, '', '#home');
@@ -130,7 +138,7 @@ const AppContent: React.FC = () => {
             transition={{ duration: 0.5, ease: 'easeOut' }}
           >
             {/* Public Navbar */}
-            <Navbar onOpenAdmin={openAdmin} onOpenOrder={() => openOrdering()} />
+            <Navbar onOpenMember={openMember} onOpenOrder={() => openOrdering()} />
 
             {/* 01 — HOME / HERO */}
             <HeroSection onOpenOrder={() => openOrdering()} />
@@ -157,9 +165,9 @@ const AppContent: React.FC = () => {
             <AboutSection />
 
             {/* 08 — CONTACT & FOOTER */}
-            <ContactSection onOpenAdmin={openAdmin} />
+            <ContactSection />
 
-            {/* Floating Action Button (Quick WhatsApp & Admin) */}
+            {/* Floating Action Button (Quick WhatsApp) */}
             <div className="fixed bottom-6 left-6 z-40 flex items-center gap-2">
               <a
                 href={floatingWhatsAppLink}
@@ -173,14 +181,6 @@ const AppContent: React.FC = () => {
                   Order WhatsApp
                 </span>
               </a>
-
-              <button
-                onClick={openAdmin}
-                title="Buka Admin CMS"
-                className="p-3 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-[#00E5FF] shadow-xl flex items-center justify-center transition-all transform hover:scale-105 cursor-pointer"
-              >
-                <Lock className="w-4 h-4" />
-              </button>
             </div>
 
             {/* Floating Action Button (Online Ordering - Bottom Right) */}
@@ -200,6 +200,7 @@ const AppContent: React.FC = () => {
               isOpen={isOrderingOpen}
               onClose={closeOrdering}
               preSelectedMenuItem={orderingMenuItem}
+              isMemberOnlyFlow={isMemberOnlyFlow}
             />
           </motion.div>
         )}

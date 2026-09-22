@@ -37,9 +37,10 @@ interface CustomerProfileTabProps {
   profile: CustomerProfile;
   onLogout: () => void;
   onProfileUpdate: (updated: Partial<CustomerProfile>) => void;
+  onStartOrder?: () => void;
 }
 
-export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate }: CustomerProfileTabProps) {
+export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate, onStartOrder }: CustomerProfileTabProps) {
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -563,6 +564,15 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate 
                     <p className="text-xs text-[#667085] mt-1 max-w-[280px] mx-auto">
                       {searchQuery ? 'Tidak ada pesanan yang sesuai dengan kata kunci pencarian.' : 'Ayo buat pesanan kopi pertamamu sekarang!'}
                     </p>
+                    {onStartOrder && !searchQuery && (
+                      <button
+                        onClick={onStartOrder}
+                        className="mt-4 px-4 py-2 rounded-xl bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Coffee className="w-3.5 h-3.5" />
+                        <span>Pesan Kopi Sekarang</span>
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4 overflow-y-auto max-h-[480px] pr-1">

@@ -36,12 +36,14 @@ interface OrderingSystemModalProps {
   isOpen: boolean;
   onClose: () => void;
   preSelectedMenuItem?: MenuItem | null;
+  isMemberOnlyFlow?: boolean;
 }
 
 export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
   isOpen,
   onClose,
   preSelectedMenuItem,
+  isMemberOnlyFlow = false,
 }) => {
   const [selectedOutlet, setSelectedOutlet] = useState<OrderOutlet | null>(() => {
     try {
@@ -94,13 +96,22 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
         try {
           const profile = await getCurrentCustomerProfile();
           setCustomerProfile(profile);
-          if (profile) {
-            // Logged in as member -> proceed directly to menu / outlet
-            setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+          if (isMemberOnlyFlow) {
+            if (profile) {
+              setCurrentStep('profile');
+            } else {
+              setCurrentStep('member_choice');
+              setMemberChoiceStep('choice');
+            }
           } else {
-            // Not logged in -> show HALAMAN MEMBER choice screen
-            setCurrentStep('member_choice');
-            setMemberChoiceStep('choice');
+            if (profile) {
+              // Logged in as member -> proceed directly to menu / outlet
+              setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+            } else {
+              // Not logged in -> show HALAMAN MEMBER choice screen
+              setCurrentStep('member_choice');
+              setMemberChoiceStep('choice');
+            }
           }
         } catch (err) {
           console.warn('Error syncing customer profile:', err);
@@ -113,7 +124,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
       };
       syncProfile();
     }
-  }, [isOpen]);
+  }, [isOpen, isMemberOnlyFlow]);
 
   // Scroll reset helper for modal and window
   const scrollToTop = () => {
@@ -424,7 +435,9 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                     onClose();
                   }
                 } else if (currentStep === 'profile') {
-                  if (customerProfile) {
+                  if (isMemberOnlyFlow) {
+                    onClose();
+                  } else if (customerProfile) {
                     setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
                   } else {
                     setCurrentStep('member_choice');
@@ -572,13 +585,15 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                           <UserCheck className="w-8 h-8" />
                         </div>
                         <span className="inline-block px-3.5 py-1 rounded-full bg-amber-500/10 border border-[#C39A6B]/30 text-[#C39A6B] text-[11px] font-mono font-bold tracking-widest uppercase mb-2">
-                          AKSES PEMESANAN ONLINE
+                          {isMemberOnlyFlow ? 'AKUN MEMBER LETON COFFEE' : 'AKSES PEMESANAN ONLINE'}
                         </span>
                         <h2 className="font-display font-black text-2xl sm:text-3xl text-white uppercase tracking-tight">
-                          HALAMAN MEMBER
+                          {isMemberOnlyFlow ? 'LOGIN / DAFTAR MEMBER' : 'HALAMAN MEMBER'}
                         </h2>
                         <p className="mt-2 text-slate-300 text-xs sm:text-sm max-w-sm mx-auto leading-relaxed">
-                          Silakan pilih opsi akses pemesanan Anda sebelum melanjutkan ke pemilihan outlet.
+                          {isMemberOnlyFlow
+                            ? 'Masuk ke akun Anda atau daftar sebagai member untuk melihat riwayat pesanan, profil, dan poin loyalty.'
+                            : 'Silakan pilih opsi akses pemesanan Anda sebelum melanjutkan ke pemilihan outlet.'}
                         </p>
                       </div>
 
@@ -633,31 +648,33 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                         </button>
 
                         {/* 3. LANJUT TANPA MEMBER */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomerProfile(null);
-                            setSelectedOutlet(null);
-                            localStorage.removeItem('leton_selected_outlet');
-                            setCurrentStep('outlet');
-                          }}
-                          className="w-full p-4 sm:p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700 hover:bg-slate-850 transition-all text-left flex items-center justify-between group cursor-pointer hover:-translate-y-0.5"
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-xl bg-slate-800/80 text-slate-400 flex items-center justify-center shrink-0">
-                              <ShoppingBag className="w-6 h-6" />
+                        {!isMemberOnlyFlow && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomerProfile(null);
+                              setSelectedOutlet(null);
+                              localStorage.removeItem('leton_selected_outlet');
+                              setCurrentStep('outlet');
+                            }}
+                            className="w-full p-4 sm:p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700 hover:bg-slate-850 transition-all text-left flex items-center justify-between group cursor-pointer hover:-translate-y-0.5"
+                          >
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 rounded-xl bg-slate-800/80 text-slate-400 flex items-center justify-center shrink-0">
+                                <ShoppingBag className="w-6 h-6" />
+                              </div>
+                              <div>
+                                <span className="font-display font-bold text-sm text-slate-200 group-hover:text-white transition-colors block">
+                                  LANJUT TANPA MEMBER
+                                </span>
+                                <p className="text-slate-400 text-xs mt-0.5">
+                                  Pesan langsung tanpa mendaftar akun (Tidak mendapatkan poin loyalty).
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <span className="font-display font-bold text-sm text-slate-200 group-hover:text-white transition-colors block">
-                                LANJUT TANPA MEMBER
-                              </span>
-                              <p className="text-slate-400 text-xs mt-0.5">
-                                Pesan langsung tanpa mendaftar akun (Tidak mendapatkan poin loyalty).
-                              </p>
-                            </div>
-                          </div>
-                          <ArrowRight className="w-5 h-5 text-slate-500 group-hover:translate-x-1 transition-transform shrink-0" />
-                        </button>
+                            <ArrowRight className="w-5 h-5 text-slate-500 group-hover:translate-x-1 transition-transform shrink-0" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -666,17 +683,25 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                     <CustomerAuthForm
                       initialMode="register"
                       onBackToChoice={() => setMemberChoiceStep('choice')}
-                      onSkipWithoutMember={() => {
-                        setCustomerProfile(null);
-                        setSelectedOutlet(null);
-                        localStorage.removeItem('leton_selected_outlet');
-                        setCurrentStep('outlet');
-                      }}
+                      onSkipWithoutMember={
+                        !isMemberOnlyFlow
+                          ? () => {
+                              setCustomerProfile(null);
+                              setSelectedOutlet(null);
+                              localStorage.removeItem('leton_selected_outlet');
+                              setCurrentStep('outlet');
+                            }
+                          : undefined
+                      }
                       onAuthSuccess={(profile) => {
                         setCustomerProfile(profile);
-                        setSelectedOutlet(null);
-                        localStorage.removeItem('leton_selected_outlet');
-                        setCurrentStep('outlet');
+                        if (isMemberOnlyFlow) {
+                          setCurrentStep('profile');
+                        } else {
+                          setSelectedOutlet(null);
+                          localStorage.removeItem('leton_selected_outlet');
+                          setCurrentStep('outlet');
+                        }
                       }}
                     />
                   )}
@@ -685,17 +710,25 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                     <CustomerAuthForm
                       initialMode="login"
                       onBackToChoice={() => setMemberChoiceStep('choice')}
-                      onSkipWithoutMember={() => {
-                        setCustomerProfile(null);
-                        setSelectedOutlet(null);
-                        localStorage.removeItem('leton_selected_outlet');
-                        setCurrentStep('outlet');
-                      }}
+                      onSkipWithoutMember={
+                        !isMemberOnlyFlow
+                          ? () => {
+                              setCustomerProfile(null);
+                              setSelectedOutlet(null);
+                              localStorage.removeItem('leton_selected_outlet');
+                              setCurrentStep('outlet');
+                            }
+                          : undefined
+                      }
                       onAuthSuccess={(profile) => {
                         setCustomerProfile(profile);
-                        setSelectedOutlet(null);
-                        localStorage.removeItem('leton_selected_outlet');
-                        setCurrentStep('outlet');
+                        if (isMemberOnlyFlow) {
+                          setCurrentStep('profile');
+                        } else {
+                          setSelectedOutlet(null);
+                          localStorage.removeItem('leton_selected_outlet');
+                          setCurrentStep('outlet');
+                        }
                       }}
                     />
                   )}
@@ -746,15 +779,18 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                   {customerProfile ? (
                     <CustomerProfileTab
                       profile={customerProfile}
+                      onStartOrder={() => {
+                        setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                      }}
                       onLogout={async () => {
                         try {
                           await logoutCustomer();
-                          setCustomerProfile(null);
-                          setCurrentStep('profile');
                         } catch (err) {
                           console.error('[Customer Logout Error]:', err);
+                        } finally {
                           setCustomerProfile(null);
-                          setCurrentStep('profile');
+                          setCurrentStep('member_choice');
+                          setMemberChoiceStep('choice');
                         }
                       }}
                       onProfileUpdate={(updated) => {
@@ -766,7 +802,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
                       <CustomerAuthForm
                         onAuthSuccess={(profile) => {
                           setCustomerProfile(profile);
-                          setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+                          setCurrentStep('profile');
                         }}
                       />
                     </div>

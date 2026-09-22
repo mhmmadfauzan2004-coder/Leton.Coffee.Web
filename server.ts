@@ -2090,14 +2090,22 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
           endpointDomain = new URL(sub.endpoint).hostname;
         } catch (e) {}
 
+        const isAppleEndpoint = sub.endpoint.includes('push.apple.com') || sub.endpoint.includes('apple.com');
+
         const subPayload = JSON.stringify({
+          web_push: 8030,
           title: '🔔 Leton Coffee',
           body: `Pesanan Baru Masuk!\n#${orderNum} • ${customerName} • ${totalFormatted}`,
           icon: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
           badge: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
           tag: `order-push-${order.id || Date.now()}`,
-          navigate: 'https://leton-coffee-web.pages.dev/#admin?tab=orders',
-          url: 'https://leton-coffee-web.pages.dev/#admin?tab=orders',
+          navigate: `https://leton-coffee-web.pages.dev/#admin?tab=orders&orderId=${encodeURIComponent(order.id || '')}`,
+          notification: {
+            title: '🔔 Leton Coffee',
+            body: `Pesanan Baru Masuk! #${orderNum} • ${customerName} • ${totalFormatted}`,
+            navigate: `https://leton-coffee-web.pages.dev/#admin?tab=orders&orderId=${encodeURIComponent(order.id || '')}`,
+            silent: false
+          },
           data: {
             type: 'NEW_ORDER',
             orderId: order.id,
@@ -2107,19 +2115,22 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
             customerName: customerName,
             totalFormatted: totalFormatted,
             timestamp: Date.now(),
-            url: 'https://leton-coffee-web.pages.dev/#admin?tab=orders'
+            url: `https://leton-coffee-web.pages.dev/#admin?tab=orders&orderId=${encodeURIComponent(order.id || '')}`
           }
         });
 
         const pushOptions = {
           TTL: 86400,
           urgency: 'high' as const,
-          headers: {
+          headers: isAppleEndpoint ? {
+            'Content-Type': 'application/notification+json',
+            'Urgency': 'high'
+          } : {
             'Urgency': 'high'
           }
         };
 
-        console.log(`[REAL ORDER PUSH DISPATCH #${idx + 1}] Target: "${sub.username}" | Outlet: "${sub.outletId}" | Provider: "${endpointDomain}"`);
+        console.log(`[REAL ORDER PUSH DISPATCH #${idx + 1}] Target: "${sub.username}" | Outlet: "${sub.outletId}" | Apple Provider: ${isAppleEndpoint ? 'YES' : 'NO'} ("${endpointDomain}")`);
 
         try {
           const pushSubscription = {

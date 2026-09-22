@@ -205,27 +205,31 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
         const res = await subscribeAdminPush(auth.username || 'Admin', outletContext, auth.role);
         console.log('[WebPush UI] Web Push subscription result:', res);
         
-        // 2. Also subscribe to FCM in parallel if supported
-        if (isFcmSupported()) {
-          try {
-            console.log('[WebPush UI] FCM is supported, registering FCM in parallel...');
-            const fcmRes = await subscribeFcmPush(auth.username || 'Admin', outletContext, auth.role);
-            console.log('[WebPush UI] FCM subscription result:', fcmRes);
-          } catch (fcmErr) {
-            console.warn('[WebPush UI] FCM parallel subscription notice:', fcmErr);
-          }
-        }
-        
-        if (res.success) {
-          setIsPushActive(true);
-          alert('Selamat! Perangkat Anda berhasil didaftarkan. Anda akan menerima notifikasi sistem untuk setiap pesanan baru!');
-        } else {
+        if (!res.success) {
           if (res.error === 'PERMISSION_DENIED') {
             alert('Izin Notifikasi Ditolak!\n\nUntuk menerima notifikasi pesanan baru, Anda harus mengizinkan permission notifikasi di HP Anda:\n1. Buka pengaturan browser atau ikon gembok di sebelah URL.\n2. Ubah Izin Notifikasi menjadi "Izinkan/Allow".');
           } else {
             alert(`Gagal mengaktifkan notifikasi:\n${res.error || 'Terjadi kesalahan sistem.'}`);
           }
+          return;
         }
+
+        // 2. Also subscribe to FCM if supported and treat it as a STRICT REQUIREMENT
+        if (isFcmSupported()) {
+          console.log('[WebPush UI] FCM is supported, registering FCM strictly...');
+          const fcmRes = await subscribeFcmPush(auth.username || 'Admin', outletContext, auth.role);
+          console.log('[WebPush UI] FCM subscription result:', fcmRes);
+          
+          if (!fcmRes.success) {
+            // Unsubscribe standard push to keep states in sync
+            await unsubscribeAdminPush();
+            alert(`Gagal mengaktifkan notifikasi FCM:\n${fcmRes.error || 'Gagal mendaftarkan FCM Token di server.'}`);
+            return;
+          }
+        }
+        
+        setIsPushActive(true);
+        alert('Selamat! Perangkat Anda berhasil didaftarkan. Anda akan menerima notifikasi sistem untuk setiap pesanan baru!');
       }
     } catch (err: any) {
       console.error('[WebPush UI] Error handling toggle event:', err);

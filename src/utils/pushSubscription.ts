@@ -633,7 +633,6 @@ export async function subscribeFcmPush(username: string, outletId: string, role?
 
     console.log('[FCM] Got active token:', token);
 
-    // Save directly to Supabase admin_push_tokens table & leton_content (dual-layer)
     const nowIso = new Date().toISOString();
     const payload = {
       token,
@@ -645,52 +644,25 @@ export async function subscribeFcmPush(username: string, outletId: string, role?
       updated_at: nowIso
     };
 
-    // 1. Try to save to Supabase structured admin_push_tokens table
-    try {
-      await supabase
-        .from('admin_push_tokens')
-        .upsert(payload, { onConflict: 'token' });
-      console.log('[FCM] Successfully saved to Supabase admin_push_tokens table.');
-    } catch (dbErr) {
-      console.warn('[FCM] Direct table upsert fallback notice:', dbErr);
+    // Rely strictly on backend API registration to bypass client-side RLS limits securely
+    const saveUrl = getApiUrl('/api/fcm/subscribe');
+    const response = await fetch(saveUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Server returned error status ${response.status}`);
     }
 
-    // 2. Try to save to Supabase fallback leton_content with ID admin_push_tokens
-    try {
-      const { data: doc } = await supabase
-        .from('leton_content')
-        .select('*')
-        .eq('id', 'admin_push_tokens')
-        .maybeSingle();
-
-      const existingTokens: any[] = doc?.content?.tokens || [];
-      const cleanTokens = existingTokens.filter(t => t && t.token !== token);
-      cleanTokens.push(payload);
-
-      await supabase
-        .from('leton_content')
-        .upsert({
-          id: 'admin_push_tokens',
-          content: { tokens: cleanTokens },
-          updated_at: nowIso
-        });
-      console.log('[FCM] Successfully saved to Supabase leton_content fallback.');
-    } catch (docErr) {
-      console.warn('[FCM] fallback document upsert notice:', docErr);
+    const resData = await response.json();
+    if (!resData || !resData.success) {
+      throw new Error(resData.error || 'Server indicated subscription failure.');
     }
 
-    // 3. Register to backend API
-    try {
-      const saveUrl = getApiUrl('/api/fcm/subscribe');
-      await fetch(saveUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    } catch (backendErr) {
-      console.warn('[FCM] Backend save URL non-critical network notice:', backendErr);
-    }
-
+    console.log('[FCM] Successfully registered FCM token via backend secure API.');
     return { success: true, token };
   } catch (err: any) {
     console.error('[FCM] Error subscribing to Firebase Messaging:', err);

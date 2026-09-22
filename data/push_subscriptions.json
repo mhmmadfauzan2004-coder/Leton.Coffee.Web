@@ -1,17 +1,6 @@
 {
   "subscriptions": [
     {
-      "endpoint": "https://test.endpoint.com/456",
-      "keys": {
-        "p256dh": "key_p256dh",
-        "auth": "key_auth"
-      },
-      "username": "admin_sudirman",
-      "outletId": "sudirman",
-      "role": "outlet_admin",
-      "updatedAt": "2026-09-22T09:38:37.829Z"
-    },
-    {
       "endpoint": "https://web.push.apple.com/test-endpoint-diag-999",
       "keys": {
         "p256dh": "dummy-p256dh",

@@ -1839,7 +1839,14 @@ async function getPushSubscriptions(): Promise<any[]> {
     }
   } catch (err) {}
 
-  const allSubs = Array.from(subsMap.values());
+  const allSubs = Array.from(subsMap.values()).filter(sub => {
+    if (!sub || !sub.endpoint) return false;
+    const ep = String(sub.endpoint).toLowerCase();
+    if (ep.includes('test.endpoint.com') || ep.includes('example.com')) {
+      return false;
+    }
+    return true;
+  });
   return allSubs;
 }
 
@@ -2121,6 +2128,12 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
       console.log(`[REAL ORDER PUSH TRACE] Pruning ${staleEndpoints.length} stale/expired subscription(s) from database.`);
       const activeSubs = subscriptions.filter(sub => !staleEndpoints.includes(sub.endpoint));
       await savePushSubscriptions(activeSubs);
+
+      for (const ep of staleEndpoints) {
+        try {
+          await supabase.from('push_subscriptions').delete().eq('endpoint', ep);
+        } catch (dbErr) {}
+      }
     }
 
     console.log(`[REAL ORDER PUSH TRACE - COMPLETE] Order #${orderNum} push notification lifecycle finished.`);
@@ -2176,6 +2189,51 @@ function initSupabaseOrderListener() {
 // ---------------------------------------------
 app.get('/api/push/vapid-public-key', (req, res) => {
   res.json({ publicKey: vapidPublicKey });
+});
+
+// Admin debug endpoint returning non-sensitive metadata for Web Push diagnostic
+app.get('/api/push/debug', async (req, res) => {
+  try {
+    const subs = await getPushSubscriptions();
+    
+    // Fingerprint of VAPID public key (non-sensitive)
+    const pubKeyClean = (vapidPublicKey || '').trim();
+    const vapidPublicKeyFingerprint = pubKeyClean.length > 16 
+      ? `${pubKeyClean.slice(0, 10)}...${pubKeyClean.slice(-6)} (total length: ${pubKeyClean.length})` 
+      : (pubKeyClean ? pubKeyClean : 'NOT_SET');
+
+    const sanitizedSubs = subs.map(sub => {
+      let endpointDomain = 'unknown';
+      try {
+        if (sub.endpoint) {
+          endpointDomain = new URL(sub.endpoint).hostname;
+        }
+      } catch (e) {}
+
+      return {
+        username: sub.username || 'unknown',
+        outlet_id: sub.outletId || sub.outlet_id || 'all',
+        role: sub.role || 'outlet_admin',
+        endpointDomain,
+        hasP256dh: !!(sub.keys?.p256dh || sub.p256dh),
+        hasAuth: !!(sub.keys?.auth || sub.auth),
+        created_at: sub.createdAt || sub.created_at || null,
+        updated_at: sub.updatedAt || sub.updated_at || null
+      };
+    });
+
+    res.json({
+      status: 'ok',
+      activeSubscriptionsCount: subs.length,
+      vapidPublicKeyFingerprint,
+      serviceWorkerVersion: '1.0.7-ios-bg-push',
+      serviceWorkerStatus: 'active_and_no_cache_configured',
+      subscriptions: sanitizedSubs,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Gagal mengambil data debug push notification' });
+  }
 });
 
 app.post('/api/push/subscribe', async (req, res) => {

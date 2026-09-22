@@ -7,7 +7,7 @@ import './index.css';
 if (typeof window !== 'undefined') {
   try {
     if ('serviceWorker' in navigator && window.isSecureContext) {
-      window.addEventListener('load', () => {
+      const registerServiceWorker = () => {
         try {
           navigator.serviceWorker.register('/sw.js', { scope: '/' })
             .then((reg) => {
@@ -19,7 +19,13 @@ if (typeof window !== 'undefined') {
         } catch (swErr) {
           console.warn('[SW] Service Worker registration exception:', swErr);
         }
-      });
+      };
+
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        registerServiceWorker();
+      } else {
+        window.addEventListener('load', registerServiceWorker);
+      }
     }
   } catch (envErr) {
     console.warn('[SW] Service worker feature detection note:', envErr);

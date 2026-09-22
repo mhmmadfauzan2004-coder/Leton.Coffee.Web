@@ -1,99 +1,102 @@
-// Leton Coffee - Production PWA Service Worker for Background Push Notifications
+// Leton Coffee - Production PWA Service Worker for Background Web Push
+const SW_VERSION = '1.0.7-ios-bg-push';
 
 self.addEventListener('install', (event) => {
+  console.log(`[SW ${SW_VERSION}] Installing Service Worker...`);
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
+  console.log(`[SW ${SW_VERSION}] Activating Service Worker...`);
   event.waitUntil(self.clients.claim());
 });
 
-// Handle incoming background push notifications
+// Single clean push handler
 self.addEventListener('push', (event) => {
-  let payload = {};
-  
-  if (event.data) {
-    try {
-      payload = event.data.json();
-    } catch (err) {
-      payload = {
-        title: '🔔 Leton Coffee',
-        body: event.data.text()
-      };
-    }
-  }
-
-  const title = payload.title || '🔔 Leton Coffee';
-  const body = payload.body || 'Pesanan Baru Masuk!';
-  const icon = payload.icon || '/logo_icon.jpg';
-  const badge = payload.badge || '/logo_icon.jpg';
-  const data = payload.data || {};
-
-  const orderKey = data.orderNumber || data.orderId || `${Date.now()}`;
-
-  console.log(`[SW Push Event Received] Title: "${title}" | OrderKey: "${orderKey}" | Body: "${body.replace(/\n/g, ' ')}"`);
-
-  const options = {
-    body,
-    icon,
-    badge,
-    vibrate: [200, 100, 200, 100, 200],
-    data,
-    tag: `order-${orderKey}`,
-    renotify: true,
-    requireInteraction: true
-  };
+  console.log(`[SW ${SW_VERSION}] Push event received`);
 
   event.waitUntil(
-    self.registration.showNotification(title, options)
-      .then(() => {
-        console.log(`[SW showNotification Success] System notification displayed for order #${orderKey}`);
-      })
-      .catch((err) => {
-        console.error(`[SW showNotification Error] Failed to show system notification:`, err);
-      })
+    (async () => {
+      let data = {};
+
+      try {
+        data = event.data ? event.data.json() : {};
+      } catch (err) {
+        data = {
+          title: '🔔 Leton Coffee',
+          body: event.data ? event.data.text() : 'Pesanan baru telah diterima.'
+        };
+      }
+
+      const title = data.title || '🔔 Leton Coffee';
+
+      const options = {
+        body: data.body || 'Pesanan baru telah diterima.',
+        icon: data.icon || '/logo_icon.jpg',
+        badge: data.badge || '/logo_icon.jpg',
+        tag: data.tag || `order-${data.orderId || data.orderNumber || Date.now()}`,
+        data: {
+          ...(data.data || {}),
+          orderId: data.orderId,
+          outletId: data.outletId,
+          url: data.data?.url || '/#admin'
+        }
+      };
+
+      try {
+        await self.registration.showNotification(title, options);
+        console.log(`[SW ${SW_VERSION}] showNotification SUCCESS for tag: ${options.tag}`);
+      } catch (error) {
+        console.error(`[SW ${SW_VERSION}] showNotification FAILED:`, error);
+
+        // Minimal fallback notification
+        try {
+          await self.registration.showNotification(title, {
+            body: options.body,
+            tag: options.tag,
+            data: options.data
+          });
+          console.log(`[SW ${SW_VERSION}] Fallback showNotification SUCCESS`);
+        } catch (fallbackErr) {
+          console.error(`[SW ${SW_VERSION}] Fallback showNotification FAILED:`, fallbackErr);
+        }
+      }
+    })()
   );
 });
 
-// Handle when user clicks the system notification
+// Single clean notificationclick handler
 self.addEventListener('notificationclick', (event) => {
+  console.log(`[SW ${SW_VERSION}] Notification clicked:`, event.notification.tag);
   event.notification.close();
 
   const data = event.notification.data || {};
-  const orderId = data.orderId || data.orderNumber || '';
+  const orderId = data.orderId || '';
   const outletId = data.outletId || '';
-  const type = data.type || '';
 
-  // Redirect url
-  let targetUrl = '/#admin?tab=orders';
-  if (orderId && type !== 'TEST_ORDER') {
+  let targetUrl = data.url || '/#admin';
+  if (orderId) {
     targetUrl = `/#admin?tab=orders&orderId=${encodeURIComponent(orderId)}&outletId=${encodeURIComponent(outletId)}`;
   }
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clientList) => {
-        // Try to find an existing window and focus it
+    (async () => {
+      try {
+        const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
         for (const client of clientList) {
-          try {
-            client.postMessage({
-              type: 'NOTIFICATION_CLICKED',
-              orderId,
-              outletId
-            });
-          } catch (err) {}
-          
-          if ('navigate' in client) {
-            return client.navigate(targetUrl).then(c => c.focus());
-          } else if ('focus' in client) {
+          if ('focus' in client) {
+            if ('navigate' in client) {
+              await client.navigate(targetUrl);
+            }
             return client.focus();
           }
         }
-        // If no open window, open a new one
         if (self.clients.openWindow) {
           return self.clients.openWindow(targetUrl);
         }
-      })
+      } catch (err) {
+        console.error(`[SW ${SW_VERSION}] Notification click handler error:`, err);
+      }
+    })()
   );
 });
-

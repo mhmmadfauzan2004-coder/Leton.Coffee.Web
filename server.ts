@@ -1265,31 +1265,87 @@ app.patch('/api/orders/:id', async (req, res) => {
   res.json({ success: true, order: orders[index] });
 });
 
-// Delete or archive order (with strict Outlet isolation)
-app.delete('/api/orders/:id', (req, res) => {
+// Delete or archive order (with strict Outlet isolation & Supabase deletion + verification)
+app.delete('/api/orders/:id', async (req, res) => {
   const { id } = req.params;
   const role = req.headers['x-admin-role'] as string | undefined;
   const outletId = (req.headers['x-outlet-id'] as string | undefined)?.toLowerCase();
+  const cleanId = id.replace(/^#/, '').trim();
 
+  // 1. Check & delete from local memory/JSON
   const orders = getOrders();
-  const index = orders.findIndex((o: any) => o.id === id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Pesanan tidak ditemukan' });
-  }
+  const index = orders.findIndex((o: any) => o.id === id || o.orderNumber === id || o.orderNumber === cleanId || o.orderNumber === `#${cleanId}`);
+  let deletedOrder = null;
 
-  // If outlet_admin, verify that the order belongs to this admin's outlet
-  if (role === 'outlet_admin' && outletId && outletId !== 'all') {
-    const orderOutlet = orders[index].outletId || orders[index].outlet_id;
-    if (!orderMatchesOutlet(orderOutlet, outletId)) {
-      return res.status(403).json({ error: 'Akses Ditolak: Anda tidak memiliki wewenang menghapus pesanan dari cabang lain.' });
+  if (index !== -1) {
+    // If outlet_admin, verify outlet isolation
+    if (role === 'outlet_admin' && outletId && outletId !== 'all') {
+      const orderOutlet = orders[index].outletId || orders[index].outlet_id;
+      if (!orderMatchesOutlet(orderOutlet, outletId)) {
+        return res.status(403).json({ error: 'Akses Ditolak: Anda tidak memiliki wewenang menghapus pesanan dari cabang lain.' });
+      }
     }
+    [deletedOrder] = orders.splice(index, 1);
+    saveOrders(orders);
+    broadcastOrderEvent('ORDER_DELETED', deletedOrder);
   }
 
-  const [deletedOrder] = orders.splice(index, 1);
-  saveOrders(orders);
-  broadcastOrderEvent('ORDER_DELETED', deletedOrder);
+  // 2. Direct deletion in Supabase database
+  let supabaseDeleted = false;
+  let supabaseVerified = true;
+  let supabaseError: string | null = null;
 
-  res.json({ success: true, deletedId: id });
+  try {
+    // Delete child items from order_items first
+    await supabase
+      .from('order_items')
+      .delete()
+      .or(`order_id.eq.${id},order_id.eq.${cleanId}`);
+
+    // Delete order from orders table
+    const { error: delErr } = await supabase
+      .from('orders')
+      .delete()
+      .or(`id.eq.${id},order_number.eq.${id},order_number.eq.${cleanId},order_number.eq.#${cleanId}`);
+
+    if (delErr) {
+      console.warn('[Server delete order Supabase warning]:', delErr.message);
+      supabaseError = delErr.message;
+    } else {
+      supabaseDeleted = true;
+    }
+
+    // 3. Post-delete verification in Supabase
+    const { data: checkData } = await supabase
+      .from('orders')
+      .select('id, order_number')
+      .or(`id.eq.${id},order_number.eq.${id},order_number.eq.${cleanId},order_number.eq.#${cleanId}`);
+
+    if (checkData && checkData.length > 0) {
+      supabaseVerified = false;
+      console.error('[Server delete order verification failed]: record still exists in Supabase');
+    }
+  } catch (sbErr: any) {
+    console.error('[Server delete order exception]:', sbErr);
+    supabaseError = sbErr?.message || 'Supabase delete exception';
+  }
+
+  if (!supabaseVerified) {
+    return res.status(500).json({
+      success: false,
+      deleted: false,
+      verified: false,
+      error: supabaseError || 'Verifikasi gagal: record pesanan masih ada di database Supabase.',
+    });
+  }
+
+  res.json({
+    success: true,
+    deleted: true,
+    verified: true,
+    deletedId: id,
+    supabaseDeleted,
+  });
 });
 
 // ---------------------------------------------

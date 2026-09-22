@@ -468,14 +468,19 @@ export const OrderManager: React.FC = () => {
     const targetNumber = orderToDelete.orderNumber;
 
     try {
-      // Optimistic delete from UI
-      setOrders((prev) => prev.filter((o) => o.id !== targetId));
+      const result = await deleteOrder(targetId, assignedOutletId, auth.role);
 
-      await deleteOrder(targetId, assignedOutletId, auth.role);
-      showToast(`Pesanan #${targetNumber} berhasil dihapus dari daftar.`, 'success');
+      if (!result.success || !result.verified) {
+        throw new Error(result.error || 'Gagal menghapus pesanan dari database Supabase.');
+      }
+
+      // ONLY remove from React state AFTER database confirms deletion AND post-delete verification passes
+      setOrders((prev) => prev.filter((o) => o.id !== targetId && o.orderNumber !== targetNumber));
+      showToast(`Pesanan #${targetNumber} berhasil dihapus dari database.`, 'success');
       setOrderToDelete(null);
     } catch (err: any) {
-      showToast('Gagal menghapus pesanan: ' + (err?.message || 'Error'), 'error');
+      console.error('[handleConfirmDeleteOrder Failed]:', err);
+      showToast('Gagal menghapus pesanan: ' + (err?.message || 'Akses ditolak atau pesanan tidak ditemukan'), 'error');
     } finally {
       setIsSubmittingDelete(false);
     }

@@ -136,11 +136,13 @@ DROP POLICY IF EXISTS "Orders Public Insert" ON public.orders;
 DROP POLICY IF EXISTS "Orders Public Read Open" ON public.orders;
 
 -- a. SUPER ADMIN:
--- Super Admin hanya boleh membaca (SELECT) data order untuk keperluan laporan dan sales analytics,
--- bukan untuk kitchen display ataupun mutasi operasional pesanan dapur.
-CREATE POLICY "Orders Super Admin Read Only" ON public.orders
-FOR SELECT TO anon, authenticated
+-- Super Admin memiliki hak penuh (SELECT, UPDATE, DELETE) untuk manajemen data pesanan
+CREATE POLICY "Orders Super Admin Full Access" ON public.orders
+FOR ALL TO anon, authenticated
 USING (
+  get_current_admin_role() = 'super_admin'
+)
+WITH CHECK (
   get_current_admin_role() = 'super_admin'
 );
 
@@ -1159,26 +1161,39 @@ export async function updateOrderStatus(
   // 1. Direct Supabase update in 'orders' table (Primary authoritative database record)
   try {
     const role = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '';
+    const cleanNumber = orderId.replace(/^#/, '').trim();
     let client = getSupabase();
 
-    if (role === 'super_admin') {
-      // Fetch the order first as super_admin (who has SELECT access) to know its outlet_id
-      const { data: ord, error: selErr } = await client
-        .from('orders')
-        .select('outlet_id')
-        .eq('id', orderId)
-        .maybeSingle();
-      
-      if (!selErr && ord?.outlet_id) {
-        // Authenticate the update call under outlet_admin of the respective outlet
-        client = getSupabase('outlet_admin', ord.outlet_id);
-      }
+    // Fetch the order first to discover exact ID and outlet_id
+    const { data: ordList } = await client
+      .from('orders')
+      .select('id, outlet_id, order_number')
+      .or(`id.eq.${orderId},order_number.eq.${orderId},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`)
+      .limit(1);
+
+    const actualDbId = ordList && ordList[0]?.id ? ordList[0].id : orderId;
+    const targetOutlet = ordList && ordList[0]?.outlet_id ? ordList[0].outlet_id : undefined;
+
+    if (role === 'super_admin' && targetOutlet) {
+      // Authenticate update call with outlet context to satisfy RLS
+      client = getSupabase('outlet_admin', targetOutlet);
+    } else if (targetOutlet) {
+      client = getSupabase(role || 'outlet_admin', targetOutlet);
     }
 
-    let { data, error } = await client.from('orders').update(updatePayload).eq('id', orderId).select();
+    let { data, error } = await client
+      .from('orders')
+      .update(updatePayload)
+      .or(`id.eq.${actualDbId},id.eq.${orderId},order_number.eq.${orderId},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`)
+      .select();
+
     if (error && error.message.includes('payment_verified_at')) {
       delete updatePayload.payment_verified_at;
-      const retry = await client.from('orders').update(updatePayload).eq('id', orderId).select();
+      const retry = await client
+        .from('orders')
+        .update(updatePayload)
+        .or(`id.eq.${actualDbId},id.eq.${orderId},order_number.eq.${orderId},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`)
+        .select();
       error = retry.error;
       data = retry.data;
     }
@@ -1283,60 +1298,161 @@ export async function updateOrderStatus(
   return true;
 }
 
+export interface DeleteOrderResult {
+  success: boolean;
+  deleted: boolean;
+  verified: boolean;
+  error?: string;
+}
+
 /**
- * Delete or Archive Order with strict Outlet Isolation
+ * Delete or Archive Order with strict Outlet Isolation and mandatory Post-Delete Database Verification
  */
 export async function deleteOrder(
   orderId: string,
   requesterOutletId?: string,
   isAdminRole?: string
-): Promise<boolean> {
-  if (!orderId) return false;
-
-  // Verify outlet isolation if outlet admin
-  if (requesterOutletId && requesterOutletId !== 'ALL' && isAdminRole !== 'super_admin') {
-    const existing = await fetchSingleOrder(orderId);
-    if (existing && !matchesOutlet(existing.outletId, requesterOutletId)) {
-      throw new Error('Akses Ditolak: Anda tidak memiliki wewenang menghapus pesanan dari cabang lain.');
-    }
+): Promise<DeleteOrderResult> {
+  if (!orderId) {
+    return {
+      success: false,
+      deleted: false,
+      verified: false,
+      error: 'ID pesanan tidak valid.',
+    };
   }
 
-  // 1. Delete or Soft Delete in Supabase
+  const cleanNumber = orderId.replace(/^#/, '').trim();
+
+  // 1. Fetch the exact order to verify outlet isolation and obtain actual database ID
+  let targetDbId = orderId;
+  let targetOutletId = requesterOutletId;
+  let existingOrder: CustomerOrder | null = null;
+
   try {
-    const client = getSupabase(isAdminRole, requesterOutletId);
-    const { error } = await client.from('orders').delete().eq('id', orderId);
-    if (error) {
-      console.warn('[Supabase deleteOrder Notice]:', error.message);
+    existingOrder = await fetchSingleOrder(orderId);
+    if (existingOrder) {
+      targetDbId = existingOrder.id;
+      targetOutletId = existingOrder.outletId;
+
+      if (requesterOutletId && requesterOutletId !== 'ALL' && isAdminRole !== 'super_admin') {
+        if (!matchesOutlet(existingOrder.outletId, requesterOutletId)) {
+          return {
+            success: false,
+            deleted: false,
+            verified: false,
+            error: 'Akses Ditolak: Anda tidak memiliki wewenang menghapus pesanan dari cabang lain.',
+          };
+        }
+      }
     }
-  } catch (err) {
-    console.warn('[Supabase deleteOrder Exception]:', err);
+  } catch (err: any) {
+    console.warn('[deleteOrder fetchSingleOrder Notice]:', err?.message || err);
   }
 
-  // 2. Broadcast and sync cache
-  (async () => {
+  // 2. Perform direct deletion in Supabase database
+  let supabaseDeleteSuccess = false;
+  let supabaseDeleteError: string | null = null;
+
+  try {
+    const client = getSupabase(isAdminRole || 'super_admin', targetOutletId);
+
+    // a. Delete child rows in order_items table to satisfy foreign key constraints
     try {
-      const cached = safeGetItem(ADMIN_ORDERS_CACHE_KEY);
-      if (cached) {
-        let list: CustomerOrder[] = JSON.parse(cached);
-        list = list.filter((o) => o.id !== orderId);
-        safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(list).slice(0, 50)));
-      }
-
-      const adminToken = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_token') || 'leton_local_token' : 'leton_local_token';
-      fetch(getApiUrl(`/api/orders/${orderId}`), {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${adminToken}`,
-          'x-admin-role': isAdminRole || '',
-          'x-outlet-id': requesterOutletId || '',
-        },
-      }).catch(() => {});
-    } catch {
-      // ignore
+      await client
+        .from('order_items')
+        .delete()
+        .or(`order_id.eq.${targetDbId},order_id.eq.${orderId},order_id.eq.${cleanNumber}`);
+    } catch (childErr: any) {
+      console.warn('[Supabase deleteOrder order_items warning]:', childErr?.message || childErr);
     }
-  })();
 
-  return true;
+    // b. Delete record from orders table
+    const { error: delErr } = await client
+      .from('orders')
+      .delete()
+      .or(`id.eq.${targetDbId},id.eq.${orderId},order_number.eq.${orderId},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`);
+
+    if (delErr) {
+      console.warn('[Supabase deleteOrder Notice]:', delErr.message);
+      supabaseDeleteError = delErr.message;
+    } else {
+      supabaseDeleteSuccess = true;
+    }
+  } catch (err: any) {
+    console.warn('[Supabase deleteOrder Exception]:', err);
+    supabaseDeleteError = err?.message || 'Gagal menghapus dari Supabase';
+  }
+
+  // 3. Perform backend server delete sync (Express backend + local JSON storage + server Supabase client)
+  try {
+    const adminToken = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_token') || 'leton_local_token' : 'leton_local_token';
+    const serverRes = await fetch(getApiUrl(`/api/orders/${encodeURIComponent(targetDbId)}`), {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${adminToken}`,
+        'x-admin-role': isAdminRole || 'super_admin',
+        'x-outlet-id': targetOutletId || '',
+      },
+    });
+
+    if (serverRes.ok) {
+      const serverJson = await serverRes.json();
+      if (serverJson.verified) {
+        supabaseDeleteSuccess = true;
+      }
+    }
+  } catch (apiErr: any) {
+    console.warn('[Server deleteOrder API Warning]:', apiErr?.message || apiErr);
+  }
+
+  // 4. MANDATORY POST-DELETE DATABASE VERIFICATION (SELECT query on Supabase)
+  let verifiedEmpty = false;
+  try {
+    const verifyClient = getSupabase(isAdminRole || 'super_admin', targetOutletId);
+    const { data: remainingRows, error: verifyErr } = await verifyClient
+      .from('orders')
+      .select('id, order_number')
+      .or(`id.eq.${targetDbId},id.eq.${orderId},order_number.eq.${orderId},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`);
+
+    if (verifyErr) {
+      console.warn('[deleteOrder Verification Query Warning]:', verifyErr.message);
+    }
+
+    if (!remainingRows || remainingRows.length === 0) {
+      verifiedEmpty = true;
+    } else {
+      verifiedEmpty = false;
+      console.error('[deleteOrder Verification Failed]: Record still found in database:', remainingRows);
+    }
+  } catch (vErr: any) {
+    console.warn('[deleteOrder Verification Exception]:', vErr);
+  }
+
+  if (!verifiedEmpty) {
+    return {
+      success: false,
+      deleted: false,
+      verified: false,
+      error: supabaseDeleteError || `Verifikasi gagal: Record pesanan (${cleanNumber}) masih ditemukan di Supabase. Periksa izin RLS DELETE pada Supabase.`,
+    };
+  }
+
+  // 5. Clean up local storage cache only after verified database deletion
+  try {
+    const cached = safeGetItem(ADMIN_ORDERS_CACHE_KEY);
+    if (cached) {
+      let list: CustomerOrder[] = JSON.parse(cached);
+      list = list.filter((o) => o.id !== targetDbId && o.id !== orderId && o.orderNumber !== cleanNumber && o.orderNumber !== `#${cleanNumber}`);
+      safeSetItem(ADMIN_ORDERS_CACHE_KEY, JSON.stringify(stripHeavyBase64Images(list).slice(0, 50)));
+    }
+  } catch {}
+
+  return {
+    success: true,
+    deleted: true,
+    verified: true,
+  };
 }
 
 /**

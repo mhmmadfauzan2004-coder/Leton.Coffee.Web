@@ -2090,59 +2090,36 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
           endpointDomain = new URL(sub.endpoint).hostname;
         } catch (e) {}
 
-        const isAppleEndpoint = sub.endpoint.includes('push.apple.com') || sub.endpoint.includes('apple.com');
+        const subPayload = JSON.stringify({
+          title: '🔔 Leton Coffee',
+          body: `Pesanan Baru Masuk!\n#${orderNum} • ${customerName} • ${totalFormatted}`,
+          icon: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
+          badge: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
+          tag: `order-push-${order.id || Date.now()}`,
+          navigate: 'https://leton-coffee-web.pages.dev/#admin?tab=orders',
+          url: 'https://leton-coffee-web.pages.dev/#admin?tab=orders',
+          data: {
+            type: 'NEW_ORDER',
+            orderId: order.id,
+            orderNumber: orderNum,
+            outletId: orderOutlet || '',
+            outletName: orderOutletName || '',
+            customerName: customerName,
+            totalFormatted: totalFormatted,
+            timestamp: Date.now(),
+            url: 'https://leton-coffee-web.pages.dev/#admin?tab=orders'
+          }
+        });
 
-        let subPayload: string;
-        let pushOptions: any;
+        const pushOptions = {
+          TTL: 86400,
+          urgency: 'high' as const,
+          headers: {
+            'Urgency': 'high'
+          }
+        };
 
-        if (isAppleEndpoint) {
-          subPayload = JSON.stringify({
-            web_push: 8030,
-            notification: {
-              title: '🔔 Leton Coffee',
-              body: `Pesanan Baru Masuk! #${orderNum} • ${customerName} • ${totalFormatted}`,
-              navigate: `https://leton-coffee-web.pages.dev/#admin?tab=orders&orderId=${encodeURIComponent(order.id || '')}`,
-              silent: false
-            }
-          });
-
-          pushOptions = {
-            TTL: 86400,
-            urgency: 'high' as const,
-            headers: {
-              'Content-Type': 'application/notification+json',
-              'Urgency': 'high'
-            }
-          };
-        } else {
-          subPayload = JSON.stringify({
-            title: '🔔 Leton Coffee',
-            body: `Pesanan Baru Masuk!\n#${orderNum} • ${customerName} • ${totalFormatted}`,
-            icon: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
-            tag: `order-push-${order.id || Date.now()}`,
-            data: {
-              type: 'NEW_ORDER',
-              orderId: order.id,
-              orderNumber: orderNum,
-              outletId: orderOutlet || '',
-              outletName: orderOutletName || '',
-              customerName: customerName,
-              totalFormatted: totalFormatted,
-              timestamp: Date.now(),
-              url: '/#admin?tab=orders'
-            }
-          });
-
-          pushOptions = {
-            TTL: 86400,
-            urgency: 'high' as const,
-            headers: {
-              'Urgency': 'high'
-            }
-          };
-        }
-
-        console.log(`[REAL ORDER PUSH DISPATCH #${idx + 1}] Target: "${sub.username}" | Outlet: "${sub.outletId}" | Apple Declarative: ${isAppleEndpoint ? 'YES' : 'NO'} | Provider: "${endpointDomain}"`);
+        console.log(`[REAL ORDER PUSH DISPATCH #${idx + 1}] Target: "${sub.username}" | Outlet: "${sub.outletId}" | Provider: "${endpointDomain}"`);
 
         try {
           const pushSubscription = {

@@ -1,0 +1,31 @@
+{
+  "id": "/#admin",
+  "name": "Leton Coffee Admin",
+  "short_name": "Leton Admin",
+  "description": "Dashboard Admin & Manajemen Pesanan Real-Time Leton Coffee",
+  "start_url": "/#admin",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0B1524",
+  "theme_color": "#0B1524",
+  "icons": [
+    {
+      "src": "/logo_icon.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo_icon.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo_icon.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "maskable"
+    }
+  ]
+}

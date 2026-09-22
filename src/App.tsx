@@ -22,39 +22,120 @@ import { getSupabase } from './utils/supabase';
 
 const AppContent: React.FC = () => {
   const { data, auth, isLoading, isInitialReady, completeLoading } = useContent();
+
   const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => {
-    return (
-      window.location.pathname.startsWith('/admin') ||
-      window.location.hash.startsWith('#/admin') ||
-      window.location.hash.startsWith('#admin')
-    );
+    if (typeof window === 'undefined') return false;
+
+    try {
+      const pathname = window.location.pathname || '';
+      const hash = window.location.hash || '';
+
+      const isUrlAdmin =
+        pathname.startsWith('/admin') ||
+        hash.startsWith('#/admin') ||
+        hash.startsWith('#admin');
+
+      if (isUrlAdmin) return true;
+
+      // Safe standalone detection for iOS Home Screen & Android PWA
+      const isStandalone =
+        (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches) ||
+        (window.navigator as any)?.standalone === true ||
+        (document.referrer && document.referrer.includes('apple-mobile-web-app'));
+
+      let lastMode = null;
+      let hasAdminSession = false;
+      try {
+        lastMode = localStorage.getItem('leton_last_route_mode');
+        hasAdminSession = !!localStorage.getItem('leton_admin_token') || !!localStorage.getItem('leton_admin_auth');
+      } catch {}
+
+      // If launched as Standalone PWA and user was in admin mode or has active admin session
+      if (isStandalone && (lastMode === 'admin' || hasAdminSession)) {
+        if (!hash.startsWith('#admin')) {
+          try {
+            window.history.replaceState(null, '', '#admin');
+          } catch {}
+        }
+        return true;
+      }
+    } catch (err) {
+      console.warn('[App] Initial route detection handled:', err);
+    }
+
+    return false;
   });
 
   const [isOrderingOpen, setIsOrderingOpen] = useState<boolean>(() => {
-    return (
-      window.location.hash === '#order' ||
-      window.location.hash === '#/order' ||
-      window.location.pathname.startsWith('/order')
-    );
+    if (typeof window === 'undefined') return false;
+    try {
+      const hash = window.location.hash || '';
+      const pathname = window.location.pathname || '';
+      return (
+        hash === '#order' ||
+        hash === '#/order' ||
+        pathname.startsWith('/order')
+      );
+    } catch {
+      return false;
+    }
   });
   const [isMemberOnlyFlow, setIsMemberOnlyFlow] = useState<boolean>(false);
   const [orderingMenuItem, setOrderingMenuItem] = useState<MenuItem | null>(null);
 
+  // Sync PWA Manifest, document title, apple-mobile-web-app-title, and route mode storage
+  useEffect(() => {
+    try {
+      const manifestLink = document.getElementById('app-manifest') as HTMLLinkElement | null;
+      const appleTitleMeta = document.getElementById('app-title-meta') as HTMLMetaElement | null;
+
+      if (isAdminRoute) {
+        try { localStorage.setItem('leton_last_route_mode', 'admin'); } catch {}
+        if (manifestLink) {
+          manifestLink.setAttribute('href', '/manifest-admin.json');
+        }
+        if (appleTitleMeta) {
+          appleTitleMeta.setAttribute('content', 'Leton Admin');
+        }
+        document.title = 'Leton Coffee — Dashboard Admin';
+      } else {
+        try { localStorage.setItem('leton_last_route_mode', 'public'); } catch {}
+        if (manifestLink) {
+          manifestLink.setAttribute('href', '/manifest.json');
+        }
+        if (appleTitleMeta) {
+          appleTitleMeta.setAttribute('content', 'LetonCoffee');
+        }
+        document.title = 'Leton Coffee — Website Profil & Online Ordering';
+      }
+    } catch (err) {
+      console.warn('[App] Manifest update handled:', err);
+    }
+  }, [isAdminRoute]);
+
   // Listen to popstate / hash change
   useEffect(() => {
     const handleLocationChange = () => {
-      const isPathAdmin =
-        window.location.pathname.startsWith('/admin') ||
-        window.location.hash.startsWith('#/admin') ||
-        window.location.hash.startsWith('#admin');
-      setIsAdminRoute(isPathAdmin);
+      try {
+        const pathname = window.location.pathname || '';
+        const hash = window.location.hash || '';
 
-      const isOrder =
-        window.location.hash === '#order' ||
-        window.location.hash === '#/order' ||
-        window.location.pathname.startsWith('/order');
-      if (isOrder) {
-        setIsOrderingOpen(true);
+        const isPathAdmin =
+          pathname.startsWith('/admin') ||
+          hash.startsWith('#/admin') ||
+          hash.startsWith('#admin');
+        
+        setIsAdminRoute(isPathAdmin);
+
+        const isOrder =
+          hash === '#order' ||
+          hash === '#/order' ||
+          pathname.startsWith('/order');
+        if (isOrder) {
+          setIsOrderingOpen(true);
+        }
+      } catch (err) {
+        console.warn('[App] Location change handled:', err);
       }
     };
 
@@ -68,12 +149,14 @@ const AppContent: React.FC = () => {
 
   const openAdmin = () => {
     setIsAdminRoute(true);
-    window.history.pushState(null, '', '#admin');
+    try { localStorage.setItem('leton_last_route_mode', 'admin'); } catch {}
+    try { window.history.pushState(null, '', '#admin'); } catch {}
   };
 
   const closeAdmin = () => {
     setIsAdminRoute(false);
-    window.history.pushState(null, '', '/#home');
+    try { localStorage.setItem('leton_last_route_mode', 'public'); } catch {}
+    try { window.history.pushState(null, '', '/#home'); } catch {}
   };
 
   const openMember = () => {
@@ -97,18 +180,21 @@ const AppContent: React.FC = () => {
     setIsOrderingOpen(false);
     setIsMemberOnlyFlow(false);
     setOrderingMenuItem(null);
-    if (window.location.hash === '#order' || window.location.hash === '#/order') {
-      window.history.pushState(null, '', '#home');
-    }
+    try {
+      if (window.location.hash === '#order' || window.location.hash === '#/order') {
+        window.history.pushState(null, '', '#home');
+      }
+    } catch {}
   };
 
   // Chapter 5 & Chapter 6 branches
-  const chapter5 = data.branches.find((b) => b.id === 'chapter-5') || data.branches[0];
-  const chapter6 = data.branches.find((b) => b.id === 'chapter-6') || data.branches[1];
+  const branchesList = data?.branches || [];
+  const chapter5 = branchesList.find((b) => b.id === 'chapter-5') || branchesList[0];
+  const chapter6 = branchesList.find((b) => b.id === 'chapter-6') || branchesList[1];
 
   const floatingWhatsAppLink = createWhatsAppLink(
-    data.contactSettings.whatsapp,
-    `Halo ${data.siteSettings.brandName}, saya ingin pesan kopi / info meja.`
+    data?.contactSettings?.whatsapp || '',
+    `Halo ${data?.siteSettings?.brandName || 'Leton Coffee'}, saya ingin pesan kopi / info meja.`
   );
 
   return (

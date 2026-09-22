@@ -248,7 +248,7 @@ export async function subscribeAdminPush(username: string, outletId: string, rol
     const nowIso = new Date().toISOString();
     const swScope = reg ? reg.scope : '/';
     const swScriptURL = reg && reg.active ? reg.active.scriptURL : '';
-    const swVersion = '1.0.9-ios-bg-push';
+    const swVersion = '1.1.2-ios-telemetry';
 
     const subscriptionPayload = {
       endpoint: subscription.endpoint,

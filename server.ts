@@ -2341,6 +2341,50 @@ app.get('/api/push/telemetry', async (_req, res) => {
   }
 });
 
+app.get('/api/push/info', async (_req, res) => {
+  try {
+    const { data: vapidData } = await supabase
+      .from('leton_content')
+      .select('content')
+      .eq('id', 'vapid_keys')
+      .maybeSingle();
+
+    const pubKey = vapidData?.content?.publicKey || '';
+    const pubFingerprint = crypto.createHash('sha256').update(pubKey).digest('hex').slice(0, 12);
+
+    const { data: subData } = await supabase
+      .from('leton_content')
+      .select('content')
+      .eq('id', 'push_subscriptions')
+      .maybeSingle();
+
+    const subs = subData?.content?.subscriptions || [];
+    const sudirmanSub = subs.find((s: any) => s.username === 'sudirman' || s.outletId === 'sudirman');
+
+    let provider = 'none';
+    let age = 'none';
+
+    if (sudirmanSub) {
+      provider = new URL(sudirmanSub.endpoint).hostname;
+      const createdAt = sudirmanSub.createdAt || sudirmanSub.created_at;
+      if (createdAt) {
+        const ageMs = Date.now() - new Date(createdAt).getTime();
+        const ageMins = Math.floor(ageMs / (1000 * 60));
+        age = `${ageMins} minutes ago`;
+      }
+    }
+
+    res.json({
+      subscription_provider: provider,
+      subscription_age: age,
+      vapid_public_key_fingerprint: pubFingerprint,
+      service_worker_version: '1.1.2-ios-telemetry'
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch diagnostic info.' });
+  }
+});
+
 async function executeTestPush(options: { title?: string; body?: string; subscription?: any; outletId?: string }) {
   console.log('====================================');
   console.log('[TEST PUSH START]');

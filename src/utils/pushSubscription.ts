@@ -476,3 +476,71 @@ export async function testAdminPush(): Promise<{ success: boolean; error?: strin
     }
   }
 }
+
+export interface PushDebugInfo {
+  supported: boolean;
+  permission: NotificationPermission | 'unsupported';
+  serviceWorkerReady: boolean;
+  hasActiveSubscription: boolean;
+  endpoint?: string;
+  backendConnected: boolean;
+  subscriptionsCount?: number;
+}
+
+/**
+ * Diagnostic helper to retrieve push subscription environment & debug information
+ */
+export async function fetchPushDebugInfo(): Promise<PushDebugInfo> {
+  if (!isPushSupported()) {
+    return {
+      supported: false,
+      permission: 'unsupported',
+      serviceWorkerReady: false,
+      hasActiveSubscription: false,
+      backendConnected: false
+    };
+  }
+
+  const permission = Notification.permission;
+  let serviceWorkerReady = false;
+  let hasActiveSubscription = false;
+  let endpoint: string | undefined = undefined;
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    serviceWorkerReady = !!(reg && reg.active);
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      hasActiveSubscription = true;
+      endpoint = sub.endpoint;
+    }
+  } catch (err) {
+    console.warn('[WebPush Debug] Error reading local push status:', err);
+  }
+
+  let backendConnected = false;
+  let subscriptionsCount = 0;
+
+  try {
+    const statusUrl = getApiUrl('/api/push/status');
+    const res = await fetch(statusUrl);
+    if (res.ok) {
+      const data = await res.json();
+      backendConnected = true;
+      subscriptionsCount = data.count || 0;
+    }
+  } catch (err) {
+    // Backend fetch failed
+  }
+
+  return {
+    supported: true,
+    permission,
+    serviceWorkerReady,
+    hasActiveSubscription,
+    endpoint,
+    backendConnected,
+    subscriptionsCount
+  };
+}
+

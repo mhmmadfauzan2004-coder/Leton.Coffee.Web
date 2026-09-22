@@ -1,5 +1,5 @@
 // Leton Coffee - Production PWA Service Worker for Background Web Push
-const SW_VERSION = '1.0.9-ios-bg-push';
+const SW_VERSION = '1.1.0-ios-bg-push';
 
 self.addEventListener('install', (event) => {
   console.log(`[SW ${SW_VERSION}] Installing Service Worker...`);
@@ -13,7 +13,7 @@ self.addEventListener('activate', (event) => {
 
 // Single clean independent push handler
 self.addEventListener('push', (event) => {
-  console.log(`[SW ${SW_VERSION}] Push event received`);
+  console.log(`[SW ${SW_VERSION}] PUSH_EVENT_RECEIVED`);
 
   event.waitUntil(
     (async () => {
@@ -21,33 +21,36 @@ self.addEventListener('push', (event) => {
 
       try {
         data = event.data ? event.data.json() : {};
+        console.log(`[SW ${SW_VERSION}] PAYLOAD_PARSED:`, data);
       } catch (err) {
         data = {
-          title: 'TEST BACKGROUND PUSH',
-          body: event.data ? event.data.text() : 'Background push received'
+          title: '🔔 Leton Coffee',
+          body: event.data ? event.data.text() : 'Pesanan baru telah diterima.'
         };
       }
 
       const title = data.title || '🔔 Leton Coffee';
-      const baseUrl = self.location ? self.location.origin : '';
+      const baseUrl = 'https://leton-coffee-web.pages.dev';
 
+      // Lightweight 23KB notification icon for iOS background memory limit
       const options = {
         body: data.body || 'Pesanan baru telah diterima.',
-        icon: data.icon ? (data.icon.startsWith('http') ? data.icon : `${baseUrl}${data.icon}`) : `${baseUrl}/logo_icon.jpg`,
-        badge: data.badge ? (data.badge.startsWith('http') ? data.badge : `${baseUrl}${data.badge}`) : `${baseUrl}/logo_icon.jpg`,
+        icon: data.icon || `${baseUrl}/logo_icon_small.png`,
         tag: data.tag || `push-${data.orderId || data.orderNumber || Date.now()}`,
         data: data.data || {
           orderId: data.orderId,
           outletId: data.outletId,
-          url: data.data?.url || '/#admin'
+          url: data.data?.url || '/#admin?tab=orders'
         }
       };
 
+      console.log(`[SW ${SW_VERSION}] SHOW_NOTIFICATION_CALLED with tag: ${options.tag}`);
+
       try {
         await self.registration.showNotification(title, options);
-        console.log(`[SW ${SW_VERSION}] showNotification SUCCESS for tag: ${options.tag}`);
+        console.log(`[SW ${SW_VERSION}] SHOW_NOTIFICATION_SUCCESS for tag: ${options.tag}`);
       } catch (error) {
-        console.error(`[SW ${SW_VERSION}] showNotification ERROR:`, error);
+        console.error(`[SW ${SW_VERSION}] SHOW_NOTIFICATION_ERROR:`, error);
 
         // Fallback minimal notification without custom images
         try {
@@ -56,9 +59,9 @@ self.addEventListener('push', (event) => {
             tag: options.tag,
             data: options.data
           });
-          console.log(`[SW ${SW_VERSION}] Minimal fallback showNotification SUCCESS`);
+          console.log(`[SW ${SW_VERSION}] Minimal fallback SHOW_NOTIFICATION_SUCCESS`);
         } catch (fallbackErr) {
-          console.error(`[SW ${SW_VERSION}] Minimal fallback showNotification FAILED:`, fallbackErr);
+          console.error(`[SW ${SW_VERSION}] Minimal fallback SHOW_NOTIFICATION_FAILED:`, fallbackErr);
         }
       }
     })()

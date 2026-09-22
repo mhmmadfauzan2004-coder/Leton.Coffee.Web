@@ -2064,8 +2064,8 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
     const payload = JSON.stringify({
       title: '🔔 Leton Coffee',
       body: `Pesanan Baru Masuk!\n#${orderNum} • ${customerName} • ${totalFormatted}`,
-      icon: '/logo_icon.jpg',
-      badge: '/logo_icon.jpg',
+      icon: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
+      tag: `order-push-${order.id || Date.now()}`,
       data: {
         type: 'NEW_ORDER',
         orderId: order.id,
@@ -2360,11 +2360,10 @@ async function executeTestPush(options: { title?: string; body?: string; subscri
     const payload = JSON.stringify({
       title: customTitle,
       body: customBody,
-      icon: '/logo_icon.jpg',
-      badge: '/logo_icon.jpg',
+      icon: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
       tag: `test-push-${Date.now()}`,
       data: {
-        url: '/#admin'
+        url: '/#admin?tab=orders'
       }
     });
 

@@ -235,9 +235,11 @@ export async function subscribeOneSignalAdmin(
 
     // 6. Wait for valid PushSubscription ID (OneSignal v16 creates it asynchronously)
     let subscriptionId = await waitForOneSignalSubscriptionId(oneSignal);
-    console.log('[OneSignal] Retrieved subscription ID:', subscriptionId);
+    console.log('[ONESIGNAL] subscription_id:', subscriptionId);
+    console.log('[ONESIGNAL] outlet_id:', targetOutlet);
 
     if (!subscriptionId) {
+      console.error('[ONESIGNAL] Push subscription ID was empty or null after optIn.');
       return {
         success: false,
         error: 'Gagal mendapatkan OneSignal Subscription ID. Pastikan perangkat Anda terhubung ke internet dan izin notifikasi aktif, lalu coba lagi.',
@@ -245,66 +247,120 @@ export async function subscribeOneSignalAdmin(
       };
     }
 
-    // 7. Save subscription record to backend Supabase
     const deviceInfo = typeof navigator !== 'undefined' ? `${navigator.platform || ''} ${navigator.userAgent.slice(0, 80)}` : 'web';
-    
-    // Call backend API /api/onesignal/subscribe
-    let savedToBackend = false;
+
+    // 7. Call Supabase Edge Function: register-onesignal-subscription
+    const { getSupabaseUrl, getSupabaseAnonKey } = await import('./supabase');
+    const supabaseBaseUrl = getSupabaseUrl();
+    const supabaseAnonKey = getSupabaseAnonKey();
+    const edgeFunctionEndpoint = `${supabaseBaseUrl}/functions/v1/register-onesignal-subscription`;
+
+    console.log('[ONESIGNAL] edge_function_url:', edgeFunctionEndpoint);
+    console.log('[ONESIGNAL] request_started');
+
+    const registerPayload = {
+      subscription_id: subscriptionId,
+      username: username || 'admin',
+      outlet_id: targetOutlet,
+      role: targetRole,
+      device_info: deviceInfo
+    };
+
+    let edgeFuncSuccess = false;
+    let verifiedData: any = null;
+    let edgeFuncError = '';
+
     try {
-      const backendRes = await fetch(getApiUrl('/api/onesignal/subscribe'), {
+      const edgeRes = await fetch(edgeFunctionEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subscriptionId,
-          username,
-          outletId: targetOutlet,
-          role: targetRole,
-          deviceInfo
-        })
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseAnonKey,
+          'Authorization': `Bearer ${supabaseAnonKey}`
+        },
+        body: JSON.stringify(registerPayload)
       });
 
-      if (backendRes.ok) {
-        const resJson = await backendRes.json().catch(() => null);
-        if (resJson?.tableSaved) {
-          savedToBackend = true;
-        }
+      console.log('[ONESIGNAL] response_status:', edgeRes.status);
+      const edgeJson = await edgeRes.json().catch(() => null);
+      console.log('[ONESIGNAL] response_body:', edgeJson);
+
+      if (edgeRes.ok && edgeJson && edgeJson.success && edgeJson.verified) {
+        edgeFuncSuccess = true;
+        verifiedData = edgeJson.data;
+        console.log('[ONESIGNAL] database verification = verified in Edge Function:', verifiedData);
+      } else {
+        edgeFuncError = edgeJson?.error || `Edge Function returned HTTP ${edgeRes.status}`;
+        console.warn('[ONESIGNAL] Edge function registration failed:', edgeFuncError);
       }
-    } catch (apiErr) {
-      console.warn('[OneSignal] Backend proxy call notice:', apiErr);
+    } catch (edgeCallErr: any) {
+      edgeFuncError = edgeCallErr?.message || String(edgeCallErr);
+      console.warn('[ONESIGNAL] Edge function invocation exception:', edgeCallErr);
     }
 
-    // 8. If backend proxy couldn't confirm database table save, perform direct Supabase upsert from client
-    if (!savedToBackend) {
-      try {
-        const { getSupabase } = await import('./supabase');
-        const supabase = getSupabase();
-        if (supabase) {
-          const { error: directErr } = await supabase
-            .from('admin_onesignal_subscriptions')
-            .upsert({
-              subscription_id: subscriptionId,
-              username: username || 'unknown_admin',
-              outlet_id: targetOutlet,
-              role: targetRole,
-              device_info: deviceInfo,
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'subscription_id' });
+    // 8. If Edge Function succeeded, we have verified proof from the server!
+    if (edgeFuncSuccess) {
+      console.log('[ONESIGNAL] Registration and database persistence complete and verified.');
+      return {
+        success: true,
+        subscriptionId,
+        permission: Notification.permission
+      };
+    }
 
-          if (!directErr) {
-            console.log('[OneSignal] Direct Supabase table insert successful.');
-          } else {
-            console.warn('[OneSignal] Direct Supabase table insert error:', directErr);
-          }
+    // 9. Fallback: If Edge function is not deployed yet or encounters network issues,
+    // execute direct Supabase client upsert + verification as fallback
+    console.log('[ONESIGNAL] Attempting client-side Supabase verification fallback...');
+    try {
+      const { getSupabase } = await import('./supabase');
+      const supabase = getSupabase();
+      if (supabase) {
+        const { error: upsertErr } = await supabase
+          .from('admin_onesignal_subscriptions')
+          .upsert({
+            subscription_id: subscriptionId,
+            username: username || 'admin',
+            outlet_id: targetOutlet,
+            role: targetRole,
+            device_info: deviceInfo,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'subscription_id' });
+
+        if (upsertErr) {
+          console.error('[ONESIGNAL] Client fallback upsert failed:', upsertErr);
+          throw new Error(upsertErr.message || edgeFuncError || 'Database write error');
         }
-      } catch (clientDbErr) {
-        console.warn('[OneSignal] Client database save exception:', clientDbErr);
+
+        // Verify select directly
+        const { data: verifiedDirect, error: selectErr } = await supabase
+          .from('admin_onesignal_subscriptions')
+          .select('*')
+          .eq('subscription_id', subscriptionId)
+          .maybeSingle();
+
+        if (selectErr || !verifiedDirect) {
+          console.error('[ONESIGNAL] Client fallback select verification failed:', selectErr);
+          throw new Error(selectErr?.message || 'Data verification in database failed.');
+        }
+
+        console.log('[ONESIGNAL] database verification = verified via Supabase client fallback:', verifiedDirect);
+        return {
+          success: true,
+          subscriptionId,
+          permission: Notification.permission
+        };
       }
+    } catch (fallbackDbErr: any) {
+      console.error('[ONESIGNAL] All registration attempts failed:', fallbackDbErr);
+      return {
+        success: false,
+        error: fallbackDbErr?.message || edgeFuncError || 'Gagal menyimpan subscription ke database Supabase.'
+      };
     }
 
     return {
-      success: true,
-      subscriptionId,
-      permission: Notification.permission
+      success: false,
+      error: edgeFuncError || 'Gagal menyimpan subscription ke database Supabase.'
     };
   } catch (err: any) {
     console.error('[OneSignal] Error during admin subscription:', err);

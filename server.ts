@@ -2436,6 +2436,70 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
       console.error('[FCM Admin Dispatch] Fatal error in FCM dispatch loop:', fcmDispatchErr);
     }
 
+    // ONESIGNAL PUSH NOTIFICATION DISPATCH
+    try {
+      const oneSignalAppId = process.env.ONESIGNAL_APP_ID || process.env.VITE_ONESIGNAL_APP_ID;
+      const oneSignalApiKey = process.env.ONESIGNAL_REST_API_KEY;
+
+      if (oneSignalAppId && oneSignalApiKey) {
+        let targetOutlet = '';
+        const combined = `${orderOutlet} ${orderOutletName}`.toLowerCase();
+        if (isKelakapOutlet(combined)) {
+          targetOutlet = 'kelakap_7';
+        } else if (isLetgoOutlet(combined)) {
+          targetOutlet = 'letgo';
+        } else if (isSudirmanOutlet(combined)) {
+          targetOutlet = 'sudirman';
+        }
+
+        if (targetOutlet) {
+          console.log(`[OneSignal Server Dispatch] Sending push notification for Order #${orderNum} to outlet "${targetOutlet}"...`);
+          const targetUrl = `https://leton-coffee-web.pages.dev/#admin?tab=orders&orderId=${encodeURIComponent(order.id)}&outletId=${encodeURIComponent(targetOutlet)}`;
+
+          const osPayload = {
+            app_id: oneSignalAppId,
+            headings: { en: '🔔 Leton Coffee' },
+            contents: {
+              en: `Pesanan Baru Masuk!\n#${orderNum} • ${customerName} • ${totalFormatted}`
+            },
+            filters: [
+              { field: 'tag', key: 'outlet_id', relation: '=', value: targetOutlet }
+            ],
+            url: targetUrl,
+            web_url: targetUrl,
+            chrome_web_icon: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
+            chrome_web_badge: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
+            data: {
+              type: 'NEW_ORDER',
+              orderId: String(order.id),
+              orderNumber: String(orderNum),
+              outletId: targetOutlet,
+              url: targetUrl
+            },
+            collapse_id: `order-${order.id}`
+          };
+
+          const osRes = await fetch('https://onesignal.com/api/v1/notifications', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Key ${oneSignalApiKey}`
+            },
+            body: JSON.stringify(osPayload)
+          });
+
+          const osData = await osRes.json();
+          console.log('[OneSignal Server Dispatch] Response from OneSignal:', osData);
+        } else {
+          console.log(`[OneSignal Server Dispatch] Skipped: outlet "${combined}" is not an operational outlet.`);
+        }
+      } else {
+        console.log('[OneSignal Server Dispatch] Notice: ONESIGNAL_APP_ID or ONESIGNAL_REST_API_KEY not configured on backend.');
+      }
+    } catch (osErr) {
+      console.error('[OneSignal Server Dispatch] Error dispatching push:', osErr);
+    }
+
     console.log(`[REAL ORDER PUSH TRACE - COMPLETE] Order #${orderNum} push notification lifecycle finished.`);
     console.log('================================================================');
   } catch (err) {
@@ -2557,6 +2621,149 @@ app.get('/api/push/debug', async (req, res) => {
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Gagal mengambil data debug push notification' });
+  }
+});
+
+// ---------------------------------------------
+// ONESIGNAL WEB PUSH ENDPOINTS
+// ---------------------------------------------
+
+// Public dynamic OneSignal configuration for the frontend
+app.get('/api/onesignal/config', (req, res) => {
+  res.json({
+    appId: process.env.ONESIGNAL_APP_ID || process.env.VITE_ONESIGNAL_APP_ID || "517cbdc4-cd11-4661-b4e6-aec93387acb1"
+  });
+});
+
+app.post('/api/onesignal/subscribe', async (req, res) => {
+  const { subscriptionId, username, outletId, role, deviceInfo } = req.body;
+  if (!subscriptionId) {
+    return res.status(400).json({ error: 'subscriptionId is required.' });
+  }
+
+  try {
+    // 1. Save to structured admin_onesignal_subscriptions table in Supabase
+    try {
+      await supabase
+        .from('admin_onesignal_subscriptions')
+        .upsert({
+          subscription_id: subscriptionId,
+          username: username || 'unknown_admin',
+          outlet_id: outletId || 'unknown',
+          role: role || 'outlet_admin',
+          device_info: deviceInfo || 'web',
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'subscription_id' });
+    } catch (dbErr) {
+      console.warn('[OneSignal API] Database table upsert warning:', dbErr);
+    }
+
+    // 2. Also save to leton_content fallback for multi-layer redundancy
+    try {
+      const { data } = await supabase
+        .from('leton_content')
+        .select('content')
+        .eq('id', 'admin_onesignal_subscriptions')
+        .maybeSingle();
+
+      const existing = (data?.content && Array.isArray(data.content.subscriptions)) ? data.content.subscriptions : [];
+      const filtered = existing.filter((s: any) => s.subscriptionId !== subscriptionId);
+      filtered.push({
+        subscriptionId,
+        username: username || 'unknown_admin',
+        outletId: outletId || 'unknown',
+        role: role || 'outlet_admin',
+        deviceInfo: deviceInfo || 'web',
+        updatedAt: new Date().toISOString()
+      });
+
+      await supabase
+        .from('leton_content')
+        .upsert({
+          id: 'admin_onesignal_subscriptions',
+          content: { subscriptions: filtered.slice(-100) },
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+    } catch (fallbackErr) {}
+
+    console.log(`[OneSignal API] Subscription registered for user "${username}" (outlet: ${outletId}).`);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to register OneSignal subscription' });
+  }
+});
+
+app.post('/api/onesignal/unsubscribe', async (req, res) => {
+  const { subscriptionId } = req.body;
+  if (!subscriptionId) return res.json({ success: true });
+  try {
+    await supabase
+      .from('admin_onesignal_subscriptions')
+      .delete()
+      .eq('subscription_id', subscriptionId);
+  } catch (e) {}
+  res.json({ success: true });
+});
+
+app.post('/api/onesignal/test', async (req, res) => {
+  const { outletId, username } = req.body;
+  const appId = process.env.ONESIGNAL_APP_ID || process.env.VITE_ONESIGNAL_APP_ID;
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY;
+
+  if (!appId || !apiKey) {
+    return res.status(503).json({
+      success: false,
+      error: 'OneSignal credential (ONESIGNAL_APP_ID / ONESIGNAL_REST_API_KEY) belum dikonfigurasi pada server.'
+    });
+  }
+
+  const targetOutlet = isKelakapOutlet(outletId) ? 'kelakap_7' : isLetgoOutlet(outletId) ? 'letgo' : 'sudirman';
+
+  try {
+    const osRes = await fetch('https://onesignal.com/api/v1/notifications', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Key ${apiKey}`
+      },
+      body: JSON.stringify({
+        app_id: appId,
+        headings: { en: '🔔 Leton Coffee' },
+        contents: {
+          en: `Tes Notifikasi Background OneSignal Berhasil! Outlet: ${targetOutlet.toUpperCase()}`
+        },
+        filters: [
+          { field: 'tag', key: 'outlet_id', relation: '=', value: targetOutlet }
+        ],
+        url: 'https://leton-coffee-web.pages.dev/#admin?tab=orders',
+        web_url: 'https://leton-coffee-web.pages.dev/#admin?tab=orders',
+        chrome_web_icon: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
+        chrome_web_badge: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
+        data: {
+          type: 'TEST_PUSH',
+          outletId: targetOutlet,
+          url: 'https://leton-coffee-web.pages.dev/#admin?tab=orders'
+        }
+      })
+    });
+
+    const osData = await osRes.json();
+    console.log('[OneSignal Test] Response from OneSignal:', osData);
+    if (osData.errors) {
+      const errStr = JSON.stringify(osData.errors);
+      if (errStr.includes('not subscribed') || errStr.includes('no players') || errStr.includes('All included players')) {
+        return res.json({
+          success: true,
+          recipients: 0,
+          id: null,
+          message: 'OneSignal API aktif, namun belum ada perangkat admin yang terdaftar dengan tag outlet ini.'
+        });
+      }
+      return res.status(400).json({ success: false, error: errStr });
+    }
+    res.json({ success: true, recipients: osData.recipients || 0, id: osData.id });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Gagal mengirim test notification.' });
   }
 });
 

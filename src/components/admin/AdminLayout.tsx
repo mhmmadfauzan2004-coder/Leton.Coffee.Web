@@ -30,6 +30,13 @@ import {
   testFcmPush
 } from '../../utils/pushSubscription';
 import {
+  initOneSignal,
+  subscribeOneSignalAdmin,
+  unsubscribeOneSignalAdmin,
+  isOneSignalSubscribed,
+  testOneSignalPush
+} from '../../utils/oneSignal';
+import {
   LayoutDashboard,
   Home,
   MapPin,
@@ -125,14 +132,30 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
     setIsTestingPush(true);
     setTestPushStatus(null);
 
+    const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
+
     try {
+      // 1. Try OneSignal Test Push first
+      const osTest = await testOneSignalPush(outletContext, auth.username);
+      if (osTest.success) {
+        setTestPushStatus('Test berhasil dikirim');
+        if (osTest.recipients && osTest.recipients > 0) {
+          alert(`Test OneSignal BERHASIL TERKIRIM ke ${osTest.recipients} perangkat aktif untuk outlet ${outletContext.toUpperCase()}!\n\nPeriksa notifikasi pop-up / status bar pada perangkat Anda.`);
+        } else {
+          alert(`Permintaan test OneSignal berhasil diproses, namun jumlah penerima aktif adalah 0 untuk outlet ${outletContext.toUpperCase()}.\n\nPastikan Anda sudah mengklik tombol "AKTIFKAN NOTIFIKASI" di HP Admin ini terlebih dahulu agar perangkat terdaftar.`);
+        }
+        setTimeout(() => setTestPushStatus(null), 3500);
+        return;
+      }
+
+      // 2. Fallback to standard test push if OneSignal server credentials not yet configured
       const res = await testAdminPush();
       if (res.success) {
         setTestPushStatus('Test berhasil dikirim');
         alert('Test berhasil dikirim! Periksa perangkat Anda (pastikan browser di-background atau ditutup untuk melihat system notification).');
         setTimeout(() => setTestPushStatus(null), 3500);
       } else {
-        alert(`Test gagal dikirim:\n${res.error || 'Terjadi kesalahan sistem.'}`);
+        alert(`Test gagal dikirim:\n${osTest.error || res.error || 'Terjadi kesalahan sistem.'}`);
         setTestPushStatus(null);
       }
     } catch (err: any) {
@@ -148,21 +171,21 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
       const capable = isPushSupported();
       setIsPushCapable(capable);
       if (capable) {
+        // Initialize OneSignal
+        await initOneSignal().catch(() => null);
+        const isOsActive = await isOneSignalSubscribed();
         const sub = await getPushSubscription();
-        setIsPushActive(!!sub && Notification.permission === 'granted');
+        const isActive = isOsActive || (!!sub && Notification.permission === 'granted');
+        setIsPushActive(isActive);
         
         // Auto-refresh/register if already active to ensure backend subscription is up to date
-        if (sub && Notification.permission === 'granted' && auth.username) {
+        if (isActive && Notification.permission === 'granted' && auth.username) {
           try {
             const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
+            await subscribeOneSignalAdmin(auth.username, outletContext, auth.role);
             await subscribeAdminPush(auth.username, outletContext, auth.role);
-            
-            // Also auto-refresh FCM if FCM is supported
-            if (isFcmSupported()) {
-              await subscribeFcmPush(auth.username, outletContext, auth.role);
-            }
           } catch (e) {
-            console.warn('[WebPush] Auto-refresh subscription failed:', e);
+            console.warn('[Push] Auto-refresh subscription failed:', e);
           }
         }
       }
@@ -173,66 +196,52 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
   const handleTogglePushNotifications = async (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('[WebPush UI] Notification toggle button triggered via event type:', e.type);
+    console.log('[Push UI] Notification toggle button triggered via event type:', e.type);
     
     if (isSubscribing) {
-      console.warn('[WebPush UI] Already processing subscription. Ignoring trigger.');
+      console.warn('[Push UI] Already processing subscription. Ignoring trigger.');
       return;
     }
 
     setIsSubscribing(true);
     try {
       if (isPushActive) {
-        console.log('[WebPush UI] User requested unsubscription.');
-        const success = await unsubscribeAdminPush();
+        console.log('[Push UI] User requested unsubscription.');
+        await unsubscribeOneSignalAdmin();
+        await unsubscribeAdminPush();
         
-        // Also unsubscribe FCM if supported
-        if (isFcmSupported()) {
-          await unsubscribeFcmPush();
-        }
-
-        if (success) {
-          setIsPushActive(false);
-          alert('Notifikasi pesanan dinonaktifkan untuk perangkat ini.');
-        } else {
-          alert('Gagal mematikan notifikasi. Silakan coba lagi.');
-        }
+        setIsPushActive(false);
+        alert('Notifikasi pesanan dinonaktifkan untuk perangkat ini.');
       } else {
-        console.log('[WebPush UI] User requested subscription. Checking browser capabilities...');
+        console.log('[Push UI] User requested subscription. Checking browser capabilities...');
         const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
         
-        // 1. Subscribe to Web Push (Standard fallback / iOS direct support)
-        const res = await subscribeAdminPush(auth.username || 'Admin', outletContext, auth.role);
-        console.log('[WebPush UI] Web Push subscription result:', res);
+        // 1. Subscribe to OneSignal Push
+        console.log('[Push UI] Registering OneSignal Push for outlet:', outletContext);
+        const osRes = await subscribeOneSignalAdmin(auth.username || 'Admin', outletContext, auth.role);
+        console.log('[Push UI] OneSignal subscription result:', osRes);
         
-        if (!res.success) {
-          if (res.error === 'PERMISSION_DENIED') {
+        if (!osRes.success) {
+          if (osRes.error === 'PERMISSION_DENIED') {
             alert('Izin Notifikasi Ditolak!\n\nUntuk menerima notifikasi pesanan baru, Anda harus mengizinkan permission notifikasi di HP Anda:\n1. Buka pengaturan browser atau ikon gembok di sebelah URL.\n2. Ubah Izin Notifikasi menjadi "Izinkan/Allow".');
           } else {
-            alert(`Gagal mengaktifkan notifikasi:\n${res.error || 'Terjadi kesalahan sistem.'}`);
+            alert(`Gagal mengaktifkan notifikasi OneSignal:\n${osRes.error || 'Terjadi kesalahan sistem.'}`);
           }
           return;
         }
 
-        // 2. Also subscribe to FCM if supported and treat it as a STRICT REQUIREMENT
-        if (isFcmSupported()) {
-          console.log('[WebPush UI] FCM is supported, registering FCM strictly...');
-          const fcmRes = await subscribeFcmPush(auth.username || 'Admin', outletContext, auth.role);
-          console.log('[WebPush UI] FCM subscription result:', fcmRes);
-          
-          if (!fcmRes.success) {
-            // Unsubscribe standard push to keep states in sync
-            await unsubscribeAdminPush();
-            alert(`Gagal mengaktifkan notifikasi FCM:\n${fcmRes.error || 'Gagal mendaftarkan FCM Token di server.'}`);
-            return;
-          }
+        // 2. Also register standard web push for dual layer redundancy
+        try {
+          await subscribeAdminPush(auth.username || 'Admin', outletContext, auth.role);
+        } catch (wpErr) {
+          console.warn('[Push UI] Standard WebPush fallback registration notice:', wpErr);
         }
         
         setIsPushActive(true);
-        alert('Selamat! Perangkat Anda berhasil didaftarkan. Anda akan menerima notifikasi sistem untuk setiap pesanan baru!');
+        alert('Selamat! Perangkat Anda berhasil didaftarkan ke OneSignal. Anda akan menerima notifikasi sistem untuk setiap pesanan baru!');
       }
     } catch (err: any) {
-      console.error('[WebPush UI] Error handling toggle event:', err);
+      console.error('[Push UI] Error handling toggle event:', err);
       alert(`Error: ${err?.message || String(err)}`);
     } finally {
       setIsSubscribing(false);

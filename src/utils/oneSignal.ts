@@ -369,6 +369,69 @@ export async function isOneSignalSubscribed(): Promise<boolean> {
   }
 }
 
+// Get comprehensive push & PWA diagnostics
+export async function getPushDiagnostics(): Promise<{
+  notificationPermission: string;
+  swRegistered: boolean;
+  swScope?: string;
+  swActiveState?: string;
+  swScriptUrl?: string;
+  osSubscriptionId?: string | null;
+  osPermissionState?: string;
+  isPwaStandalone: boolean;
+  userAgent: string;
+}> {
+  let swRegistered = false;
+  let swScope = 'None';
+  let swActiveState = 'None';
+  let swScriptUrl = 'None';
+
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        swRegistered = true;
+        swScope = reg.scope || 'Registered';
+        if (reg.active) {
+          swActiveState = reg.active.state;
+          swScriptUrl = reg.active.scriptURL;
+        } else if (reg.installing) {
+          swActiveState = 'installing';
+        } else if (reg.waiting) {
+          swActiveState = 'waiting';
+        }
+      }
+    } catch (e) {}
+  }
+
+  let osSubscriptionId: string | null = null;
+  let osPermissionState = 'unknown';
+
+  try {
+    const oneSignal = await initOneSignal().catch(() => null);
+    if (oneSignal?.User?.PushSubscription) {
+      osSubscriptionId = oneSignal.User.PushSubscription.id || null;
+      osPermissionState = oneSignal.User.PushSubscription.optedIn ? 'opted-in' : 'opted-out';
+    }
+  } catch (e) {}
+
+  const isPwaStandalone =
+    (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    (typeof navigator !== 'undefined' && (navigator as any).standalone === true);
+
+  return {
+    notificationPermission: typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
+    swRegistered,
+    swScope,
+    swActiveState,
+    swScriptUrl,
+    osSubscriptionId,
+    osPermissionState,
+    isPwaStandalone: Boolean(isPwaStandalone),
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  };
+}
+
 // Trigger a test notification via OneSignal Edge Function directly
 export async function testOneSignalPush(outletId: string, username?: string): Promise<{ success: boolean; recipients?: number; id?: string; message?: string; error?: string; target?: any }> {
   try {

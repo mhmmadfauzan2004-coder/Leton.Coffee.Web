@@ -1,5 +1,7 @@
-// Leton Coffee - Production PWA Service Worker for Background Web Push
-const SW_VERSION = '1.1.2-ios-telemetry';
+// Leton Coffee - Production PWA Service Worker for Background Web Push with OneSignal v16
+importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+
+const SW_VERSION = '1.2.0-onesignal';
 
 const SUPABASE_URL = 'https://galwyavdonfzuibrmswt.supabase.co';
 const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdhbHd5YXZkb25menVpYnJtc3d0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDIzOTY3MjAsImV4cCI6MjA1Nzk3MjcyMH0.KqY9Y637n2f-qf14d8x2X_57h8hQy7kL5bM1qP9R2Yw';

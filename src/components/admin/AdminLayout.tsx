@@ -34,7 +34,8 @@ import {
   subscribeOneSignalAdmin,
   unsubscribeOneSignalAdmin,
   isOneSignalSubscribed,
-  testOneSignalPush
+  testOneSignalPush,
+  getPushDiagnostics
 } from '../../utils/oneSignal';
 import {
   LayoutDashboard,
@@ -126,6 +127,22 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
   const [isTestingPush, setIsTestingPush] = useState<boolean>(false);
   const [testPushStatus, setTestPushStatus] = useState<string | null>(null);
   const [showIosGuide, setShowIosGuide] = useState<boolean>(false);
+  const [showPushDiagnostics, setShowPushDiagnostics] = useState<boolean>(false);
+  const [diagnosticsInfo, setDiagnosticsInfo] = useState<any>(null);
+  const [isLoadingDiag, setIsLoadingDiag] = useState<boolean>(false);
+
+  const handleOpenDiagnostics = async () => {
+    setShowPushDiagnostics(true);
+    setIsLoadingDiag(true);
+    try {
+      const diag = await getPushDiagnostics();
+      setDiagnosticsInfo(diag);
+    } catch (err: any) {
+      setDiagnosticsInfo({ error: err?.message || String(err) });
+    } finally {
+      setIsLoadingDiag(false);
+    }
+  };
 
   const handleTestPush = async () => {
     if (isTestingPush) return;
@@ -396,9 +413,16 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
                     onClick={handleTestPush}
                     className="w-full py-1.5 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-sm"
                   >
-                    {isTestingPush ? 'Mengirim...' : (testPushStatus || 'Tes Suara & Pop-up')}
+                    {isTestingPush ? 'Mengirim...' : (testPushStatus || 'TEST BACKGROUND NOTIFICATION')}
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={handleOpenDiagnostics}
+                  className="w-full py-1 px-2 text-[9px] font-semibold tracking-wider uppercase text-[#64748B] hover:text-[#0284C7] bg-[#F1F5F9] hover:bg-[#E2E8F0] rounded-md transition-all flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  🔍 Diagnostik & Status PWA iOS
+                </button>
               </div>
             ) : (
               <div className="space-y-1">
@@ -655,9 +679,16 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
                     onClick={handleTestPush}
                     className="w-full py-1.5 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-sm"
                   >
-                    {isTestingPush ? 'Mengirim...' : (testPushStatus || 'Tes Suara & Pop-up')}
+                    {isTestingPush ? 'Mengirim...' : (testPushStatus || 'TEST BACKGROUND NOTIFICATION')}
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={handleOpenDiagnostics}
+                  className="w-full py-1 px-2 text-[9px] font-semibold tracking-wider uppercase text-[#64748B] hover:text-[#0284C7] bg-[#F1F5F9] hover:bg-[#E2E8F0] rounded-md transition-all flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  🔍 Diagnostik & Status PWA iOS
+                </button>
               </div>
             ) : (
               <div className="space-y-1">
@@ -818,6 +849,133 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
               className="w-full py-2 bg-[#0284C7] hover:bg-[#0369a1] text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
             >
               Saya Mengerti
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Diagnostics Modal */}
+      {showPushDiagnostics && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-[#E2E8F0] relative max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-lg bg-sky-50 text-[#0284C7]">
+                  🔍
+                </span>
+                <h3 className="text-base font-bold text-[#172033]">
+                  Status & Diagnostik Web Push iOS / PWA
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowPushDiagnostics(false)}
+                className="p-1 rounded-lg text-[#64748B] hover:text-[#172033]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="my-4 text-xs space-y-3 text-[#172033]">
+              {isLoadingDiag ? (
+                <div className="py-8 text-center text-[#64748B]">Memeriksa konfigurasi browser & OneSignal...</div>
+              ) : (
+                <div className="space-y-3 font-mono">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-slate-500">Notification.permission:</span>
+                      <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                        diagnosticsInfo?.notificationPermission === 'granted'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {diagnosticsInfo?.notificationPermission || 'unknown'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-slate-500">PWA Mode Standalone:</span>
+                      <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                        diagnosticsInfo?.isPwaStandalone
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {diagnosticsInfo?.isPwaStandalone ? 'YA (Home Screen)' : 'TIDAK (Safari Tab)'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-slate-500">Service Worker Active:</span>
+                      <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                        diagnosticsInfo?.swRegistered
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {diagnosticsInfo?.swRegistered ? `Registered (${diagnosticsInfo.swActiveState})` : 'Not Registered'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-slate-500">SW Scope:</span>
+                      <span className="font-mono text-slate-700 text-[10px]">
+                        {diagnosticsInfo?.swScope || '-'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-slate-500">SW Script URL:</span>
+                      <span className="font-mono text-slate-700 text-[10px] truncate max-w-[200px]">
+                        {diagnosticsInfo?.swScriptUrl || '-'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-sky-50 rounded-xl border border-sky-200 space-y-1.5">
+                    <div className="text-[11px] font-bold text-sky-900 border-b border-sky-100 pb-1">
+                      OneSignal Registration
+                    </div>
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-sky-700">Status Opt-In:</span>
+                      <span className="font-bold text-sky-900 text-[10px]">
+                        {diagnosticsInfo?.osPermissionState || 'unknown'}
+                      </span>
+                    </div>
+                    <div className="text-[10px] break-all">
+                      <span className="text-sky-700 block mb-0.5">Subscription ID:</span>
+                      <code className="bg-white px-2 py-1 rounded border border-sky-200 block text-sky-900 font-bold">
+                        {diagnosticsInfo?.osSubscriptionId || 'Belum terdaftar'}
+                      </code>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 space-y-2">
+                    <div className="text-[11px] font-bold text-emerald-900">
+                      Uji Push Notifikasi Langsung
+                    </div>
+                    <p className="text-[10px] text-emerald-700 font-sans">
+                      Klik tombol di bawah ini, lalu segera kunci layar iPhone Anda atau pindah ke aplikasi lain untuk memverifikasi banner notifikasi pada Lock Screen.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={isTestingPush}
+                      onClick={async () => {
+                        await handleTestPush();
+                        const updated = await getPushDiagnostics();
+                        setDiagnosticsInfo(updated);
+                      }}
+                      className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                    >
+                      {isTestingPush ? 'Mengirim Test Push...' : 'TEST BACKGROUND NOTIFICATION'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setShowPushDiagnostics(false)}
+              className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
+            >
+              Tutup
             </button>
           </div>
         </div>

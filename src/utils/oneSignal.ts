@@ -189,7 +189,7 @@ export async function subscribeOneSignalAdmin(
 
     // 1. Request Notification Permission
     const permission = await oneSignal.Notifications.requestPermission();
-    console.log('[OneSignal] Notification permission status:', permission);
+    console.log('[ONESIGNAL] permission =', permission || Notification.permission);
 
     if (permission !== 'granted' && Notification.permission !== 'granted') {
       return {
@@ -235,8 +235,7 @@ export async function subscribeOneSignalAdmin(
 
     // 6. Wait for valid PushSubscription ID (OneSignal v16 creates it asynchronously)
     let subscriptionId = await waitForOneSignalSubscriptionId(oneSignal);
-    console.log('[ONESIGNAL] subscription_id:', subscriptionId);
-    console.log('[ONESIGNAL] outlet_id:', targetOutlet);
+    console.log('[ONESIGNAL] subscription_id =', subscriptionId);
 
     if (!subscriptionId) {
       console.error('[ONESIGNAL] Push subscription ID was empty or null after optIn.');
@@ -247,16 +246,14 @@ export async function subscribeOneSignalAdmin(
       };
     }
 
-    const deviceInfo = typeof navigator !== 'undefined' ? `${navigator.platform || ''} ${navigator.userAgent.slice(0, 80)}` : 'web';
+    const deviceInfo = typeof navigator !== 'undefined' ? navigator.userAgent : 'web';
 
-    // 7. Call Supabase Edge Function: register-onesignal-subscription
-    const { getSupabaseUrl, getSupabaseAnonKey } = await import('./supabase');
-    const supabaseBaseUrl = getSupabaseUrl();
+    // 7. Call Supabase Edge Function: register-onesignal-subscription directly
+    const edgeFunctionEndpoint = 'https://galwyavdonfzuibrmswt.supabase.co/functions/v1/register-onesignal-subscription';
+    console.log('[ONESIGNAL] edge_function =', edgeFunctionEndpoint);
+
+    const { getSupabaseAnonKey } = await import('./supabase');
     const supabaseAnonKey = getSupabaseAnonKey();
-    const edgeFunctionEndpoint = `${supabaseBaseUrl}/functions/v1/register-onesignal-subscription`;
-
-    console.log('[ONESIGNAL] edge_function_url:', edgeFunctionEndpoint);
-    console.log('[ONESIGNAL] request_started');
 
     const registerPayload = {
       subscription_id: subscriptionId,
@@ -265,10 +262,6 @@ export async function subscribeOneSignalAdmin(
       role: targetRole,
       device_info: deviceInfo
     };
-
-    let edgeFuncSuccess = false;
-    let verifiedData: any = null;
-    let edgeFuncError = '';
 
     try {
       const edgeRes = await fetch(edgeFunctionEndpoint, {
@@ -281,87 +274,37 @@ export async function subscribeOneSignalAdmin(
         body: JSON.stringify(registerPayload)
       });
 
-      console.log('[ONESIGNAL] response_status:', edgeRes.status);
+      console.log('[ONESIGNAL] response_status =', edgeRes.status);
       const edgeJson = await edgeRes.json().catch(() => null);
-      console.log('[ONESIGNAL] response_body:', edgeJson);
+      console.log('[ONESIGNAL] response_body =', edgeJson);
 
-      if (edgeRes.ok && edgeJson && edgeJson.success && edgeJson.verified) {
-        edgeFuncSuccess = true;
-        verifiedData = edgeJson.data;
-        console.log('[ONESIGNAL] database verification = verified in Edge Function:', verifiedData);
-      } else {
-        edgeFuncError = edgeJson?.error || `Edge Function returned HTTP ${edgeRes.status}`;
-        console.warn('[ONESIGNAL] Edge function registration failed:', edgeFuncError);
-      }
-    } catch (edgeCallErr: any) {
-      edgeFuncError = edgeCallErr?.message || String(edgeCallErr);
-      console.warn('[ONESIGNAL] Edge function invocation exception:', edgeCallErr);
-    }
-
-    // 8. If Edge Function succeeded, we have verified proof from the server!
-    if (edgeFuncSuccess) {
-      console.log('[ONESIGNAL] Registration and database persistence complete and verified.');
-      return {
-        success: true,
-        subscriptionId,
-        permission: Notification.permission
-      };
-    }
-
-    // 9. Fallback: If Edge function is not deployed yet or encounters network issues,
-    // execute direct Supabase client upsert + verification as fallback
-    console.log('[ONESIGNAL] Attempting client-side Supabase verification fallback...');
-    try {
-      const { getSupabase } = await import('./supabase');
-      const supabase = getSupabase();
-      if (supabase) {
-        const { error: upsertErr } = await supabase
-          .from('admin_onesignal_subscriptions')
-          .upsert({
-            subscription_id: subscriptionId,
-            username: username || 'admin',
-            outlet_id: targetOutlet,
-            role: targetRole,
-            device_info: deviceInfo,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'subscription_id' });
-
-        if (upsertErr) {
-          console.error('[ONESIGNAL] Client fallback upsert failed:', upsertErr);
-          throw new Error(upsertErr.message || edgeFuncError || 'Database write error');
-        }
-
-        // Verify select directly
-        const { data: verifiedDirect, error: selectErr } = await supabase
-          .from('admin_onesignal_subscriptions')
-          .select('*')
-          .eq('subscription_id', subscriptionId)
-          .maybeSingle();
-
-        if (selectErr || !verifiedDirect) {
-          console.error('[ONESIGNAL] Client fallback select verification failed:', selectErr);
-          throw new Error(selectErr?.message || 'Data verification in database failed.');
-        }
-
-        console.log('[ONESIGNAL] database verification = verified via Supabase client fallback:', verifiedDirect);
+      // 8. Sukses HANYA jika response.success === true DAN response.verified === true
+      if (edgeRes.ok && edgeJson && edgeJson.success === true && edgeJson.verified === true) {
+        console.log('[ONESIGNAL] Subscription successfully registered and verified in Supabase.');
         return {
           success: true,
           subscriptionId,
           permission: Notification.permission
         };
       }
-    } catch (fallbackDbErr: any) {
-      console.error('[ONESIGNAL] All registration attempts failed:', fallbackDbErr);
+
+      // If Edge Function failed or returned unverified, extract real error
+      const realError = edgeJson?.error || `Pendaftaran gagal: HTTP ${edgeRes.status} ${edgeRes.statusText}`;
+      console.error('[ONESIGNAL] Edge Function registration unverified:', realError);
       return {
         success: false,
-        error: fallbackDbErr?.message || edgeFuncError || 'Gagal menyimpan subscription ke database Supabase.'
+        error: realError,
+        permission: Notification.permission
+      };
+    } catch (edgeCallErr: any) {
+      const errorMsg = edgeCallErr?.message || String(edgeCallErr);
+      console.error('[ONESIGNAL] Edge Function network exception:', edgeCallErr);
+      return {
+        success: false,
+        error: `Gagal menghubungi server pendaftaran notifikasi: ${errorMsg}`,
+        permission: Notification.permission
       };
     }
-
-    return {
-      success: false,
-      error: edgeFuncError || 'Gagal menyimpan subscription ke database Supabase.'
-    };
   } catch (err: any) {
     console.error('[OneSignal] Error during admin subscription:', err);
     return {

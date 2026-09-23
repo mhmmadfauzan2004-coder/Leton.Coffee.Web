@@ -378,9 +378,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
             {isPushCapable ? (
               <div className="space-y-1.5">
                 <button
+                  type="button"
                   disabled={isSubscribing}
                   onClick={handleTogglePushNotifications}
-                  onTouchEnd={handleTogglePushNotifications}
                   className={`w-full py-1.5 px-3 rounded-lg text-[11px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     isPushActive
                       ? 'bg-red-50 text-red-600 hover:bg-red-100'
@@ -391,6 +391,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
                 </button>
                 {isPushActive && (
                   <button
+                    type="button"
                     disabled={isTestingPush}
                     onClick={handleTestPush}
                     className="w-full py-1.5 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-sm"
@@ -636,9 +637,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
             {isPushCapable ? (
               <div className="space-y-1.5">
                 <button
+                  type="button"
                   disabled={isSubscribing}
                   onClick={handleTogglePushNotifications}
-                  onTouchEnd={handleTogglePushNotifications}
                   className={`w-full py-1.5 px-3 rounded-lg text-[11px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     isPushActive
                       ? 'bg-red-50 text-red-600 hover:bg-red-100'
@@ -649,6 +650,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
                 </button>
                 {isPushActive && (
                   <button
+                    type="button"
                     disabled={isTestingPush}
                     onClick={handleTestPush}
                     className="w-full py-1.5 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all flex items-center justify-center gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer shadow-sm"

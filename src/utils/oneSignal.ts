@@ -250,7 +250,9 @@ export async function subscribeOneSignalAdmin(
 
     // 7. Call Supabase Edge Function: register-onesignal-subscription directly
     const edgeFunctionEndpoint = 'https://galwyavdonfzuibrmswt.supabase.co/functions/v1/register-onesignal-subscription';
+    console.log('[ONESIGNAL] outlet_id =', targetOutlet);
     console.log('[ONESIGNAL] edge_function =', edgeFunctionEndpoint);
+    console.log('[ONESIGNAL] request_started');
 
     const { getSupabaseAnonKey } = await import('./supabase');
     const supabaseAnonKey = getSupabaseAnonKey();
@@ -275,12 +277,19 @@ export async function subscribeOneSignalAdmin(
       });
 
       console.log('[ONESIGNAL] response_status =', edgeRes.status);
-      const edgeJson = await edgeRes.json().catch(() => null);
-      console.log('[ONESIGNAL] response_body =', edgeJson);
+      const rawText = await edgeRes.text();
+      console.log('[ONESIGNAL] response_body =', rawText);
+
+      let edgeJson: any = null;
+      try {
+        edgeJson = JSON.parse(rawText);
+      } catch (parseErr) {
+        console.error('[ONESIGNAL] Failed to parse JSON response from Edge Function:', parseErr);
+      }
 
       // 8. Sukses HANYA jika response.success === true DAN response.verified === true
       if (edgeRes.ok && edgeJson && edgeJson.success === true && edgeJson.verified === true) {
-        console.log('[ONESIGNAL] Subscription successfully registered and verified in Supabase.');
+        console.log('[ONESIGNAL] registration_verified = true. Verified row:', edgeJson.data);
         return {
           success: true,
           subscriptionId,
@@ -289,8 +298,8 @@ export async function subscribeOneSignalAdmin(
       }
 
       // If Edge Function failed or returned unverified, extract real error
-      const realError = edgeJson?.error || `Pendaftaran gagal: HTTP ${edgeRes.status} ${edgeRes.statusText}`;
-      console.error('[ONESIGNAL] Edge Function registration unverified:', realError);
+      const realError = edgeJson?.error || `Pendaftaran gagal (HTTP ${edgeRes.status}): ${rawText || edgeRes.statusText}`;
+      console.error('[ONESIGNAL] registration_verified = false. Error:', realError);
       return {
         success: false,
         error: realError,

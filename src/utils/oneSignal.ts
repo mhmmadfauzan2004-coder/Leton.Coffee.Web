@@ -369,20 +369,41 @@ export async function isOneSignalSubscribed(): Promise<boolean> {
   }
 }
 
-// Trigger a test notification via OneSignal
-export async function testOneSignalPush(outletId: string, username?: string): Promise<{ success: boolean; recipients?: number; id?: string; message?: string; error?: string }> {
+// Trigger a test notification via OneSignal Edge Function directly
+export async function testOneSignalPush(outletId: string, username?: string): Promise<{ success: boolean; recipients?: number; id?: string; message?: string; error?: string; target?: any }> {
   try {
     const normalizedOutlet = normalizeOutletTag(outletId);
-    const res = await fetch(getApiUrl('/api/onesignal/test'), {
+    const { getSupabaseAnonKey } = await import('./supabase');
+    const supabaseAnonKey = getSupabaseAnonKey();
+
+    const edgeFunctionEndpoint = 'https://galwyavdonfzuibrmswt.supabase.co/functions/v1/send-order-push';
+
+    console.log('[ONESIGNAL TEST PUSH] Calling Edge Function:', edgeFunctionEndpoint, 'for outlet:', normalizedOutlet);
+
+    const res = await fetch(edgeFunctionEndpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAnonKey}`
+      },
       body: JSON.stringify({
-        outletId: normalizedOutlet,
+        type: 'TEST',
+        outlet_id: normalizedOutlet,
         username: username || 'Admin'
       })
     });
 
-    const data = await res.json();
+    const rawText = await res.text();
+    console.log('[ONESIGNAL TEST PUSH] Response status:', res.status, 'body:', rawText);
+
+    let data: any = null;
+    try {
+      data = JSON.parse(rawText);
+    } catch (e) {
+      data = { error: rawText };
+    }
+
     return data;
   } catch (err: any) {
     return {

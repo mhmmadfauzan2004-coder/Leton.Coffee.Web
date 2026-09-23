@@ -35,7 +35,8 @@ import {
   unsubscribeOneSignalAdmin,
   isOneSignalSubscribed,
   testOneSignalPush,
-  getPushDiagnostics
+  getPushDiagnostics,
+  syncSubscriptionIdToBackend
 } from '../../utils/oneSignal';
 import {
   LayoutDashboard,
@@ -189,7 +190,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
       setIsPushCapable(capable);
       if (capable) {
         // Initialize OneSignal
-        await initOneSignal().catch(() => null);
+        const osInstance = await initOneSignal().catch(() => null);
         const isOsActive = await isOneSignalSubscribed();
         const sub = await getPushSubscription();
         const isActive = isOsActive || (!!sub && Notification.permission === 'granted');
@@ -199,7 +200,12 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
         if (isActive && Notification.permission === 'granted' && auth.username) {
           try {
             const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
-            await subscribeOneSignalAdmin(auth.username, outletContext, auth.role);
+            const currentSubId = osInstance?.User?.PushSubscription?.id;
+            if (currentSubId) {
+              await syncSubscriptionIdToBackend(currentSubId, auth.username, outletContext, auth.role);
+            } else {
+              await subscribeOneSignalAdmin(auth.username, outletContext, auth.role);
+            }
             await subscribeAdminPush(auth.username, outletContext, auth.role);
           } catch (e) {
             console.warn('[Push] Auto-refresh subscription failed:', e);

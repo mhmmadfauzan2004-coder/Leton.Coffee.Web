@@ -163,6 +163,68 @@ export async function waitForOneSignalSubscriptionId(oneSignal: any, maxWaitMs =
   return oneSignal?.User?.PushSubscription?.id || null;
 }
 
+// Helper to register / upsert a subscription ID directly to backend
+export async function syncSubscriptionIdToBackend(
+  subscriptionId: string,
+  username: string,
+  outletId: string,
+  role?: string
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const normalizedOutlet = normalizeOutletTag(outletId);
+    const { getSupabaseAnonKey } = await import('./supabase');
+    const supabaseAnonKey = getSupabaseAnonKey();
+
+    const isCentral = (
+      normalizedOutlet === 'all' ||
+      username === 'admin' ||
+      username === 'superadmin' ||
+      username === 'pusat' ||
+      username === 'admin_pusat'
+    ) && normalizedOutlet !== 'sudirman' && normalizedOutlet !== 'kelakap_7' && normalizedOutlet !== 'letgo';
+
+    const targetOutlet = isCentral ? 'central' : normalizedOutlet;
+    const targetRole = isCentral ? 'central_admin' : (role || 'outlet_admin');
+
+    const deviceInfo = typeof navigator !== 'undefined' ? navigator.userAgent : 'web';
+    const registerPayload = {
+      subscription_id: subscriptionId,
+      username: username || 'admin',
+      outlet_id: targetOutlet,
+      role: targetRole,
+      device_info: deviceInfo
+    };
+
+    const edgeFunctionEndpoint = 'https://galwyavdonfzuibrmswt.supabase.co/functions/v1/register-onesignal-subscription';
+    console.log('[ONESIGNAL SYNC] Syncing subscription ID to backend:', subscriptionId, 'for outlet:', targetOutlet);
+
+    const edgeRes = await fetch(edgeFunctionEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${supabaseAnonKey}`
+      },
+      body: JSON.stringify(registerPayload)
+    });
+
+    const rawText = await edgeRes.text();
+    let edgeJson: any = null;
+    try {
+      edgeJson = JSON.parse(rawText);
+    } catch (e) {}
+
+    if (edgeRes.ok && edgeJson && edgeJson.success === true) {
+      console.log('[ONESIGNAL SYNC] Successfully synced subscription ID to DB:', edgeJson.data);
+      return { success: true, data: edgeJson.data };
+    }
+    return { success: false, error: edgeJson?.error || rawText };
+  } catch (err: any) {
+    console.error('[ONESIGNAL SYNC] Failed to sync subscription ID:', err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
 // Subscribe Admin to OneSignal Web Push with outlet tagging
 export async function subscribeOneSignalAdmin(
   username: string,

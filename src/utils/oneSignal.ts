@@ -141,6 +141,28 @@ export interface OneSignalSubscriptionResult {
   permission?: NotificationPermission;
 }
 
+// Helper to wait until OneSignal PushSubscription ID is populated
+export async function waitForOneSignalSubscriptionId(oneSignal: any, maxWaitMs = 12000): Promise<string | null> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < maxWaitMs) {
+    const subId = oneSignal?.User?.PushSubscription?.id;
+    const isOptedIn = Boolean(oneSignal?.User?.PushSubscription?.optedIn);
+    if (subId && typeof subId === 'string' && subId.trim().length > 0) {
+      return subId.trim();
+    }
+
+    // Attempt to opt-in again if not opted in
+    if (!isOptedIn && oneSignal?.User?.PushSubscription?.optIn) {
+      try {
+        await oneSignal.User.PushSubscription.optIn();
+      } catch (e) {}
+    }
+
+    await new Promise((r) => setTimeout(r, 600));
+  }
+  return oneSignal?.User?.PushSubscription?.id || null;
+}
+
 // Subscribe Admin to OneSignal Web Push with outlet tagging
 export async function subscribeOneSignalAdmin(
   username: string,
@@ -199,36 +221,84 @@ export async function subscribeOneSignalAdmin(
       username === 'admin_pusat'
     ) && normalizedOutlet !== 'sudirman' && normalizedOutlet !== 'kelakap_7' && normalizedOutlet !== 'letgo';
 
+    const targetOutlet = isCentral ? 'central' : normalizedOutlet;
+    const targetRole = isCentral ? 'central_admin' : normalizedRole;
+
     const tags: Record<string, string> = {
-      role: isCentral ? 'central_admin' : normalizedRole,
-      outlet_id: isCentral ? 'central' : normalizedOutlet,
+      role: targetRole,
+      outlet_id: targetOutlet,
       username: username || 'admin'
     };
 
     console.log('[OneSignal] Attaching tags for push filtering:', tags);
     await oneSignal.User.addTags(tags);
 
-    // 6. Get Subscription ID
-    const subscriptionId = oneSignal.User.PushSubscription.id;
-    console.log('[OneSignal] Registered subscription ID:', subscriptionId);
+    // 6. Wait for valid PushSubscription ID (OneSignal v16 creates it asynchronously)
+    let subscriptionId = await waitForOneSignalSubscriptionId(oneSignal);
+    console.log('[OneSignal] Retrieved subscription ID:', subscriptionId);
+
+    if (!subscriptionId) {
+      return {
+        success: false,
+        error: 'Gagal mendapatkan OneSignal Subscription ID. Pastikan perangkat Anda terhubung ke internet dan izin notifikasi aktif, lalu coba lagi.',
+        permission: Notification.permission
+      };
+    }
 
     // 7. Save subscription record to backend Supabase
+    const deviceInfo = typeof navigator !== 'undefined' ? `${navigator.platform || ''} ${navigator.userAgent.slice(0, 80)}` : 'web';
+    
+    // Call backend API /api/onesignal/subscribe
+    let savedToBackend = false;
     try {
-      const deviceInfo = typeof navigator !== 'undefined' ? `${navigator.platform || ''} ${navigator.userAgent.slice(0, 80)}` : 'web';
-      await fetch(getApiUrl('/api/onesignal/subscribe'), {
+      const backendRes = await fetch(getApiUrl('/api/onesignal/subscribe'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subscriptionId: subscriptionId || 'active',
+          subscriptionId,
           username,
-          outletId: isCentral ? 'central' : normalizedOutlet,
-          role: tags.role,
+          outletId: targetOutlet,
+          role: targetRole,
           deviceInfo
         })
       });
-      console.log('[OneSignal] Subscription saved to backend database.');
-    } catch (syncErr) {
-      console.warn('[OneSignal] Backend subscription save warning:', syncErr);
+
+      if (backendRes.ok) {
+        const resJson = await backendRes.json().catch(() => null);
+        if (resJson?.tableSaved) {
+          savedToBackend = true;
+        }
+      }
+    } catch (apiErr) {
+      console.warn('[OneSignal] Backend proxy call notice:', apiErr);
+    }
+
+    // 8. If backend proxy couldn't confirm database table save, perform direct Supabase upsert from client
+    if (!savedToBackend) {
+      try {
+        const { getSupabase } = await import('./supabase');
+        const supabase = getSupabase();
+        if (supabase) {
+          const { error: directErr } = await supabase
+            .from('admin_onesignal_subscriptions')
+            .upsert({
+              subscription_id: subscriptionId,
+              username: username || 'unknown_admin',
+              outlet_id: targetOutlet,
+              role: targetRole,
+              device_info: deviceInfo,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'subscription_id' });
+
+          if (!directErr) {
+            console.log('[OneSignal] Direct Supabase table insert successful.');
+          } else {
+            console.warn('[OneSignal] Direct Supabase table insert error:', directErr);
+          }
+        }
+      } catch (clientDbErr) {
+        console.warn('[OneSignal] Client database save exception:', clientDbErr);
+      }
     }
 
     return {

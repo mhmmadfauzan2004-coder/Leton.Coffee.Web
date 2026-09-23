@@ -18,7 +18,13 @@ dotenv.config();
 
 // Initialize Supabase Client on the server side
 const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://galwyavdonfzuibrmswt.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseKey = 
+  process.env.SUPABASE_SERVICE_ROLE_KEY || 
+  process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || 
+  process.env.VITE_SUPABASE_ANON_KEY || 
+  process.env.SUPABASE_ANON_KEY ||
+  'sb_publishable_lcKDS5QKJkqA4__0j10pZw_7bXUaoGg';
+
 const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     persistSession: false,
@@ -2642,9 +2648,12 @@ app.post('/api/onesignal/subscribe', async (req, res) => {
   }
 
   try {
+    let tableSaved = false;
+    let tableError = null;
+
     // 1. Save to structured admin_onesignal_subscriptions table in Supabase
     try {
-      await supabase
+      const { error: upsertErr } = await supabase
         .from('admin_onesignal_subscriptions')
         .upsert({
           subscription_id: subscriptionId,
@@ -2654,8 +2663,16 @@ app.post('/api/onesignal/subscribe', async (req, res) => {
           device_info: deviceInfo || 'web',
           updated_at: new Date().toISOString()
         }, { onConflict: 'subscription_id' });
-    } catch (dbErr) {
-      console.warn('[OneSignal API] Database table upsert warning:', dbErr);
+
+      if (upsertErr) {
+        tableError = upsertErr.message || JSON.stringify(upsertErr);
+        console.warn('[OneSignal API] Database table upsert warning:', upsertErr);
+      } else {
+        tableSaved = true;
+      }
+    } catch (dbErr: any) {
+      tableError = dbErr?.message || String(dbErr);
+      console.warn('[OneSignal API] Database table upsert exception:', dbErr);
     }
 
     // 2. Also save to leton_content fallback for multi-layer redundancy
@@ -2686,8 +2703,8 @@ app.post('/api/onesignal/subscribe', async (req, res) => {
         }, { onConflict: 'id' });
     } catch (fallbackErr) {}
 
-    console.log(`[OneSignal API] Subscription registered for user "${username}" (outlet: ${outletId}).`);
-    res.json({ success: true });
+    console.log(`[OneSignal API] Subscription registered for user "${username}" (outlet: ${outletId}, tableSaved: ${tableSaved}).`);
+    res.json({ success: true, tableSaved, tableError });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to register OneSignal subscription' });
   }

@@ -2458,47 +2458,10 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
           targetOutlet = 'sudirman';
         }
 
-        if (targetOutlet) {
-          console.log(`[OneSignal Server Dispatch] Sending push notification for Order #${orderNum} to outlet "${targetOutlet}"...`);
-          const targetUrl = `https://leton-coffee-web.pages.dev/#admin?tab=orders&orderId=${encodeURIComponent(order.id)}&outletId=${encodeURIComponent(targetOutlet)}`;
-
-          const osPayload = {
-            app_id: oneSignalAppId,
-            headings: { en: '🔔 Leton Coffee' },
-            contents: {
-              en: `Pesanan Baru Masuk!\n#${orderNum} • ${customerName} • ${totalFormatted}`
-            },
-            filters: [
-              { field: 'tag', key: 'outlet_id', relation: '=', value: targetOutlet }
-            ],
-            url: targetUrl,
-            web_url: targetUrl,
-            chrome_web_icon: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
-            chrome_web_badge: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
-            data: {
-              type: 'NEW_ORDER',
-              orderId: String(order.id),
-              orderNumber: String(orderNum),
-              outletId: targetOutlet,
-              url: targetUrl
-            },
-            collapse_id: `order-${order.id}`
-          };
-
-          const osRes = await fetch('https://onesignal.com/api/v1/notifications', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Key ${oneSignalApiKey}`
-            },
-            body: JSON.stringify(osPayload)
-          });
-
-          const osData = await osRes.json();
-          console.log('[OneSignal Server Dispatch] Response from OneSignal:', osData);
-        } else {
-          console.log(`[OneSignal Server Dispatch] Skipped: outlet "${combined}" is not an operational outlet.`);
-        }
+        // CANONICAL TRIGGER POLICY:
+        // OneSignal Web Push is handled exclusively and canonically by Supabase Database Webhook (send-order-push Edge Function).
+        // To prevent duplicate notifications, server.ts logs and delegates OneSignal push to the database webhook.
+        console.log(`[OneSignal Server Dispatch] Order #${orderNum} (${targetOutlet}) delegated to canonical Supabase Database Webhook (send-order-push).`);
       } else {
         console.log('[OneSignal Server Dispatch] Notice: ONESIGNAL_APP_ID or ONESIGNAL_REST_API_KEY not configured on backend.');
       }

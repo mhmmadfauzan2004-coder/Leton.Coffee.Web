@@ -86,11 +86,13 @@ export async function fetchRegisteredCustomers(adminRole?: string): Promise<Regi
 
     // Direct select first
     try {
-      const res = await client
-        .from('customers')
-        .select('id, nama_lengkap, nomor_hp, tanggal_lahir, points_balance, total_points_earned, total_points_redeemed, created_at, updated_at, password_hash');
+      const [res, loyRes] = await Promise.all([
+        client.from('customers').select('id, nama_lengkap, nomor_hp, tanggal_lahir, points_balance, total_points_earned, total_points_redeemed, created_at, updated_at, password_hash'),
+        client.from('leton_content').select('*').eq('id', 'loyalty_registry').maybeSingle(),
+      ]);
       custData = res.data;
       custErr = res.error;
+      var regBalances = loyRes?.data?.content?.balances || {};
     } catch (e: any) {
       custErr = e;
     }
@@ -117,6 +119,7 @@ export async function fetchRegisteredCustomers(adminRole?: string): Promise<Regi
     }
 
     if (Array.isArray(custData)) {
+      const reg = typeof regBalances !== 'undefined' ? regBalances : {};
       custData.forEach((row) => {
         // Only include customers with a valid password_hash (registered customers/members)
         if (!row.password_hash || String(row.password_hash).trim() === '') {
@@ -124,6 +127,11 @@ export async function fetchRegisteredCustomers(adminRole?: string): Promise<Regi
         }
 
         const normalized = normalizeCustomerRow(row);
+        if (row.id && reg[row.id]) {
+          normalized.pointsBalance = Number(reg[row.id].pointsBalance || 0);
+          normalized.totalPointsEarned = Number(reg[row.id].totalPointsEarned || 0);
+          normalized.totalPointsRedeemed = Number(reg[row.id].totalPointsRedeemed || 0);
+        }
         const cleanPhone = normalized.nomorHp.replace(/[^0-9]/g, '');
         const key = cleanPhone && cleanPhone.length >= 8 ? cleanPhone : (normalized.id || normalized.namaLengkap.toLowerCase());
         if (key) customerMap.set(key, normalized);

@@ -340,83 +340,39 @@ export async function getCustomerLoyalty(customerId: string, customerPhone?: str
   }
 
   try {
-    // 1. Fetch registry and orders in parallel from Supabase
-    const [registry, allOrders] = await Promise.all([
-      fetchCloudLoyaltyRegistry(),
-      fetchCloudOrders(),
-    ]);
+    const client = getSupabase('super_admin');
 
-    // Check direct balance in registry first
-    if (customerId && registry.balances && registry.balances[customerId]) {
+    // 1. Primary Source: Direct query from public.customers
+    let query = client.from('customers').select('id, points_balance, total_points_earned, total_points_redeemed');
+    if (customerId && customerPhone) {
+      query = query.or(`id.eq.${customerId},nomor_hp.eq.${customerPhone}`);
+    } else if (customerId) {
+      query = query.eq('id', customerId);
+    } else if (customerPhone) {
+      query = query.eq('nomor_hp', customerPhone);
+    }
+
+    const { data: custRows, error: custErr } = await query.limit(1);
+
+    if (!custErr && custRows && custRows.length > 0) {
+      const row = custRows[0];
+      return {
+        pointsBalance: Number(row.points_balance || 0),
+        totalPointsEarned: Number(row.total_points_earned || 0),
+        totalPointsRedeemed: Number(row.total_points_redeemed || 0),
+      };
+    }
+
+    // 2. Secondary Source: Check registry.balances in loyalty_registry
+    const registry = await fetchCloudLoyaltyRegistry();
+    if (customerId && registry.balances && registry.balances[customerId] !== undefined) {
       const data = registry.balances[customerId];
-      if (Number(data.totalPointsEarned) > 0 || Number(data.pointsBalance) > 0) {
-        return {
-          pointsBalance: Number(data.pointsBalance || 0),
-          totalPointsEarned: Number(data.totalPointsEarned || 0),
-          totalPointsRedeemed: Number(data.totalPointsRedeemed || 0),
-        };
-      }
+      return {
+        pointsBalance: Number(data.pointsBalance || 0),
+        totalPointsEarned: Number(data.totalPointsEarned || 0),
+        totalPointsRedeemed: Number(data.totalPointsRedeemed || 0),
+      };
     }
-
-    // Check transactions in registry
-    const registryTxs = (registry.transactions || []).filter(
-      (t) =>
-        (customerId && t.customerId === customerId) ||
-        (customerPhone && t.customerPhone === customerPhone)
-    );
-
-    // Calculate points from Supabase orders_registry
-    const userOrders = allOrders.filter(
-      (o) =>
-        (customerId && (o.customerId === customerId || o.userId === customerId)) ||
-        (customerPhone && o.customerPhone === customerPhone)
-    );
-
-    // Combine transactions and order earnings (deduplicated by referenceOrderId)
-    const recordedOrderIds = new Set(
-      registryTxs
-        .filter((t) => t.transactionType === 'EARN' && t.referenceOrderId)
-        .map((t) => t.referenceOrderId)
-    );
-
-    let totalEarned = 0;
-    let totalRedeemed = 0;
-
-    // Add points from explicitly recorded transactions
-    for (const tx of registryTxs) {
-      const pts = Number(tx.points || 0);
-      if (tx.transactionType === 'EARN' || tx.transactionType === 'MANUAL_ADD') {
-        totalEarned += Math.abs(pts);
-      } else if (tx.transactionType === 'REDEEM' || tx.transactionType === 'MANUAL_SUB' || tx.transactionType === 'EXPIRED') {
-        totalRedeemed += Math.abs(pts);
-      }
-    }
-
-    // Add points from orders in Supabase not yet in transactions
-    for (const order of userOrders) {
-      if (!recordedOrderIds.has(order.id)) {
-        const pts = Math.floor(Number(order.totalAmount || 0) / 10000);
-        totalEarned += pts;
-      }
-    }
-
-    // Add points redeemed from registry redemptions
-    const userRedemptions = (registry.redemptions || []).filter(
-      (r) => customerId && r.customerId === customerId
-    );
-    for (const r of userRedemptions) {
-      if (!registryTxs.some((t) => t.referenceRewardId === r.rewardId)) {
-        totalRedeemed += Number(r.pointsSpent || 0);
-      }
-    }
-
-    const currentBalance = Math.max(0, totalEarned - totalRedeemed);
-
-    return {
-      pointsBalance: currentBalance,
-      totalPointsEarned: totalEarned,
-      totalPointsRedeemed: totalRedeemed,
-    };
   } catch (err) {
     console.warn('[Get Customer Loyalty Note]:', err);
   }
@@ -429,11 +385,7 @@ export async function getCustomerLoyalty(customerId: string, customerPhone?: str
  */
 export async function getLoyaltyTransactions(customerId?: string, customerPhone?: string): Promise<PointTransaction[]> {
   try {
-    const [registry, allOrders] = await Promise.all([
-      fetchCloudLoyaltyRegistry(),
-      fetchCloudOrders(),
-    ]);
-
+    const registry = await fetchCloudLoyaltyRegistry();
     let txs = [...(registry.transactions || [])];
 
     if (customerId || customerPhone) {
@@ -442,41 +394,6 @@ export async function getLoyaltyTransactions(customerId?: string, customerPhone?
           (customerId && t.customerId === customerId) ||
           (customerPhone && t.customerPhone === customerPhone)
       );
-    }
-
-    const recordedOrderIds = new Set(
-      txs
-        .filter((t) => t.transactionType === 'EARN' && t.referenceOrderId)
-        .map((t) => t.referenceOrderId)
-    );
-
-    // If there are orders in Supabase orders_registry not yet in transactions, dynamically add them
-    const relevantOrders = allOrders.filter(
-      (o) =>
-        (customerId && (o.customerId === customerId || o.userId === customerId)) ||
-        (customerPhone && o.customerPhone === customerPhone) ||
-        (!customerId && !customerPhone)
-    );
-
-    for (const order of relevantOrders) {
-      if (!recordedOrderIds.has(order.id)) {
-        const pts = Math.floor(Number(order.totalAmount || 0) / 10000);
-        if (pts > 0) {
-          txs.push({
-            id: 'TX-' + order.id,
-            customerId: order.customerId || order.userId || '',
-            customerName: order.customerName,
-            customerPhone: order.customerPhone,
-            transactionType: 'EARN',
-            points: pts,
-            balanceBefore: 0,
-            balanceAfter: pts,
-            referenceOrderId: order.id,
-            reason: `Automatic Earning: Pesanan #${order.orderNumber || order.id}`,
-            createdAt: order.createdAt || new Date().toISOString(),
-          });
-        }
-      }
     }
 
     return txs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -565,8 +482,19 @@ export async function redeemReward(
     };
     registry.transactions = [tx, ...(registry.transactions || [])];
 
-    // Save to Cloud Supabase
+    // Save to Cloud Supabase Registry and public.customers
     await saveCloudLoyaltyRegistry(registry);
+
+    try {
+      const adminClient = getSupabase('super_admin');
+      await adminClient.from('customers').update({
+        points_balance: after,
+        total_points_earned: currentLoyalty.totalPointsEarned,
+        total_points_redeemed: currentLoyalty.totalPointsRedeemed + reward.pointsRequired,
+      }).eq('id', customerId);
+    } catch (dbErr) {
+      console.warn('[Loyalty Redeem DB update notice]:', dbErr);
+    }
 
     return { success: true, redemptionId };
   } catch (err: any) {
@@ -620,6 +548,18 @@ export async function adjustCustomerPointsManual(
     registry.transactions = [tx, ...(registry.transactions || [])];
 
     await saveCloudLoyaltyRegistry(registry);
+
+    try {
+      const adminClient = getSupabase('super_admin');
+      await adminClient.from('customers').update({
+        points_balance: after,
+        total_points_earned: currentLoyalty.totalPointsEarned + (adjustVal > 0 ? adjustVal : 0),
+        total_points_redeemed: currentLoyalty.totalPointsRedeemed + (adjustVal < 0 ? Math.abs(adjustVal) : 0),
+      }).eq('id', customerId);
+    } catch (dbErr) {
+      console.warn('[Loyalty Adjust DB update notice]:', dbErr);
+    }
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: 'Gagal menyesuaikan poin: ' + err.message };
@@ -670,10 +610,11 @@ export async function processOrderPointsEarning(
     const currentLoyalty = await getCustomerLoyalty(custId, order.customerPhone);
     const before = currentLoyalty.pointsBalance;
     const after = before + pointsToEarn;
+    const newEarned = currentLoyalty.totalPointsEarned + pointsToEarn;
 
     registry.balances[custId] = {
       pointsBalance: after,
-      totalPointsEarned: currentLoyalty.totalPointsEarned + pointsToEarn,
+      totalPointsEarned: newEarned,
       totalPointsRedeemed: currentLoyalty.totalPointsRedeemed,
     };
 
@@ -695,10 +636,17 @@ export async function processOrderPointsEarning(
 
     registry.transactions = [tx, ...(registry.transactions || [])];
 
-    // 7. Persist to Cloud Supabase
-    const saved = await saveCloudLoyaltyRegistry(registry);
-    if (!saved) {
-      console.warn('[Loyalty Save Warning]: Failed to save loyalty points to cloud database.');
+    // 7. Persist to Cloud Supabase Registry & public.customers
+    await saveCloudLoyaltyRegistry(registry);
+
+    try {
+      const adminClient = getSupabase('super_admin');
+      await adminClient.from('customers').update({
+        points_balance: after,
+        total_points_earned: newEarned,
+      }).eq('id', custId);
+    } catch (dbErr) {
+      console.warn('[Loyalty Order DB update notice]:', dbErr);
     }
 
     console.log(`[Loyalty Success]: Awarded ${pointsToEarn} points to customer ${custId} for order ${order.id}. New balance: ${after}`);
@@ -714,62 +662,28 @@ export async function processOrderPointsEarning(
  */
 export async function getCustomersWithLoyalty(): Promise<any[]> {
   try {
-    const client = getSupabase();
-    const [custRowsRes, allOrders, registry] = await Promise.all([
-      client.from('customers').select('id, nama_lengkap, nomor_hp').order('nama_lengkap', { ascending: true }),
-      fetchCloudOrders(),
+    const client = getSupabase('super_admin');
+    const [custRowsRes, registry] = await Promise.all([
+      client.from('customers').select('id, nama_lengkap, nomor_hp, points_balance, total_points_earned, total_points_redeemed').order('nama_lengkap', { ascending: true }),
       fetchCloudLoyaltyRegistry(),
     ]);
 
     const custRows = custRowsRes.data || [];
-    const customerMap = new Map<string, { id: string; namaLengkap: string; nomorHp: string }>();
+    return custRows.map((c: any) => {
+      const regBal = registry.balances?.[c.id];
+      const bal = regBal?.pointsBalance !== undefined ? Number(regBal.pointsBalance) : Number(c.points_balance || 0);
+      const earned = regBal?.totalPointsEarned !== undefined ? Number(regBal.totalPointsEarned) : Number(c.total_points_earned || 0);
+      const redeemed = regBal?.totalPointsRedeemed !== undefined ? Number(regBal.totalPointsRedeemed) : Number(c.total_points_redeemed || 0);
 
-    custRows.forEach((c: any) => {
-      customerMap.set(c.id, {
+      return {
         id: c.id,
         namaLengkap: c.nama_lengkap,
         nomorHp: c.nomor_hp,
-      });
-    });
-
-    // Also include any customers who placed orders in orders_registry
-    allOrders.forEach((o) => {
-      const id = o.customerId || o.userId;
-      if (id && !customerMap.has(id)) {
-        customerMap.set(id, {
-          id,
-          namaLengkap: o.customerName || 'Pelanggan Leton',
-          nomorHp: o.customerPhone || '-',
-        });
-      }
-    });
-
-    const result: any[] = [];
-    for (const [id, c] of customerMap.entries()) {
-      let earned = 0;
-      let redeemed = 0;
-
-      if (registry.balances[id]) {
-        earned = Number(registry.balances[id].totalPointsEarned || 0);
-        redeemed = Number(registry.balances[id].totalPointsRedeemed || 0);
-      } else {
-        const custOrders = allOrders.filter((o) => o.customerId === id || o.userId === id || o.customerPhone === c.nomorHp);
-        for (const ord of custOrders) {
-          earned += Math.floor(Number(ord.totalAmount || 0) / 10000);
-        }
-      }
-
-      result.push({
-        id: c.id,
-        namaLengkap: c.namaLengkap,
-        nomorHp: c.nomorHp,
-        pointsBalance: Math.max(0, earned - redeemed),
+        pointsBalance: bal,
         totalPointsEarned: earned,
         totalPointsRedeemed: redeemed,
-      });
-    }
-
-    return result;
+      };
+    });
   } catch (err) {
     console.warn('[Get Customers With Loyalty Note]:', err);
     return [];

@@ -872,6 +872,15 @@ app.get('/api/admin/customers', async (req, res) => {
       return res.status(500).json({ error: `Gagal memuat data dari Supabase: ${custErr.message || custErr}` });
     }
 
+    // Fetch official loyalty balances from loyalty_registry
+    let loyaltyBalances: Record<string, any> = {};
+    try {
+      const { data: regRow } = await supabase.from('leton_content').select('*').eq('id', 'loyalty_registry').maybeSingle();
+      if (regRow && regRow.content && regRow.content.balances) {
+        loyaltyBalances = regRow.content.balances;
+      }
+    } catch {}
+
     if (Array.isArray(custRows)) {
       for (const row of custRows) {
         // Only include customers with a valid password_hash (registered customers/members)
@@ -890,15 +899,20 @@ app.get('/api/admin/customers', async (req, res) => {
 
         const key = cleanPhone && cleanPhone.length >= 8 ? cleanPhone : (id || name.toLowerCase());
 
+        const regBal = loyaltyBalances[id];
+        const bal = regBal !== undefined ? Number(regBal.pointsBalance || 0) : Number(row.points_balance || 0);
+        const earned = regBal !== undefined ? Number(regBal.totalPointsEarned || 0) : Number(row.total_points_earned || 0);
+        const redeemed = regBal !== undefined ? Number(regBal.totalPointsRedeemed || 0) : Number(row.total_points_redeemed || 0);
+
         if (key) {
           customerMap.set(key, {
             id: id || `cust-${key}`,
             nama_lengkap: name || 'Pelanggan Leton',
             nomor_hp: phone || '-',
             tanggal_lahir: row.tanggal_lahir || '',
-            points_balance: Number(row.points_balance || 0),
-            total_points_earned: Number(row.total_points_earned || 0),
-            total_points_redeemed: Number(row.total_points_redeemed || 0),
+            points_balance: bal,
+            total_points_earned: earned,
+            total_points_redeemed: redeemed,
             created_at: row.created_at || new Date().toISOString(),
             updated_at: row.updated_at,
           });

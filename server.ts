@@ -581,28 +581,57 @@ app.post('/api/customer/register', async (req, res) => {
   }
 });
 
-// Login Customer (Nama Lengkap & Password)
+// Login Customer (Nomor HP & Password)
 app.post('/api/customer/login', async (req, res) => {
   try {
-    const { namaLengkap, password } = req.body;
-    const cleanNama = (namaLengkap || '').trim();
+    const { nomorHp, phone, inputPhone, namaLengkap, password } = req.body;
+    const rawInput = (nomorHp || phone || inputPhone || namaLengkap || '').toString().trim();
 
-    if (!cleanNama || !password) {
-      return res.status(400).json({ success: false, error: 'Nama Lengkap dan Password wajib diisi.' });
+    if (!rawInput || !password) {
+      return res.status(400).json({ success: false, error: 'Nomor HP dan Password wajib diisi.' });
     }
 
+    // Normalisasi format nomor HP ke 08xxxxxxxxxx
+    let normalizedPhone = rawInput.replace(/[^0-9]/g, '');
+    if (normalizedPhone.startsWith('62')) {
+      normalizedPhone = '0' + normalizedPhone.slice(2);
+    } else if (normalizedPhone.length > 0 && !normalizedPhone.startsWith('0')) {
+      normalizedPhone = '0' + normalizedPhone;
+    }
+
+    // 1. Cari customer berdasarkan nomor_hp yang sudah dinormalisasi
+    let customer: any = null;
+
+    if (normalizedPhone && normalizedPhone.length >= 8) {
+      const { data: custByPhone, error: phoneErr } = await supabase
+        .from('customers')
+        .select('id, nama_lengkap, nomor_hp, password_hash, tanggal_lahir')
+        .eq('nomor_hp', normalizedPhone)
+        .maybeSingle();
+
+      if (!phoneErr && custByPhone) {
+        customer = custByPhone;
+      }
+    }
+
+    // Jika nomor HP tidak ditemukan: tampilkan pesan seragam
+    if (!customer) {
+      return res.status(401).json({ success: false, error: 'Nomor HP atau password salah.' });
+    }
+
+    // 2. Verifikasi password via RPC customer_login menggunakan session generator bawaan
     const { data, error } = await supabase.rpc('customer_login', {
-      p_nama: cleanNama,
+      p_nama: customer.nama_lengkap,
       p_password: password,
     });
 
     if (error) {
       console.error('[API customer_login RPC error]:', error);
-      return res.status(401).json({ success: false, error: 'Nama Lengkap atau Password salah.' });
+      return res.status(401).json({ success: false, error: 'Nomor HP atau password salah.' });
     }
 
     if (!data || !data.success) {
-      return res.status(401).json({ success: false, error: data?.error || 'Nama Lengkap atau Password salah.' });
+      return res.status(401).json({ success: false, error: 'Nomor HP atau password salah.' });
     }
 
     return res.json(data);

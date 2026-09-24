@@ -5,6 +5,30 @@
  */
 
 /**
+ * Normalizes any Indonesian phone number format into standard local format '08xxxxxxxxxx'.
+ * Examples:
+ *   085761519565    -> 085761519565
+ *   +6285761519565  -> 085761519565
+ *   6285761519565   -> 085761519565
+ *   85761519565     -> 085761519565
+ *   0857-6151-9565  -> 085761519565
+ *   +62 857 6151 9565 -> 085761519565
+ */
+export function normalizePhoneTo08(phone: string): string {
+  if (!phone) return '';
+  let digits = phone.trim().replace(/[^0-9]/g, '');
+  if (!digits) return '';
+
+  if (digits.startsWith('62')) {
+    digits = '0' + digits.slice(2);
+  } else if (!digits.startsWith('0')) {
+    digits = '0' + digits;
+  }
+
+  return digits;
+}
+
+/**
  * Normalizes any Indonesian phone number format into standard E.164 (+628xxxxxxxxxx).
  * Examples:
  *   085761519565    -> +6285761519565

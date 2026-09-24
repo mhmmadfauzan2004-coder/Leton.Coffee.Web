@@ -33,8 +33,8 @@ export default function CustomerAuthForm({
   const [regPassword, setRegPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  // Login Form States (Nama Lengkap & Password)
-  const [loginNama, setLoginNama] = useState('');
+  // Login Form States (Nomor HP & Password)
+  const [loginPhone, setLoginPhone] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
   // Clear any existing alert messages when user types in any input
@@ -53,7 +53,7 @@ export default function CustomerAuthForm({
     setTanggalLahir('');
     setRegPassword('');
     setConfirmPassword('');
-    setLoginNama('');
+    setLoginPhone('');
     setLoginPassword('');
   };
 
@@ -61,9 +61,9 @@ export default function CustomerAuthForm({
     e.preventDefault();
     clearAlerts();
 
-    const cleanInput = loginNama.trim();
+    const cleanInput = loginPhone.trim();
     if (!cleanInput) {
-      setErrorMsg('Nama Lengkap wajib diisi.');
+      setErrorMsg('Nomor HP wajib diisi.');
       return;
     }
     if (!loginPassword) {
@@ -78,11 +78,11 @@ export default function CustomerAuthForm({
         setSuccessMsg('Masuk berhasil! Membuka akun member...');
         onAuthSuccess(res.profile);
       } else {
-        setErrorMsg(res.error || 'Nama Lengkap atau Password salah.');
+        setErrorMsg(res.error || 'Nomor HP atau password salah.');
       }
     } catch (err: any) {
       console.error('[CustomerAuthForm handleLogin exception]:', err);
-      setErrorMsg(err?.message || 'Nama Lengkap atau Password salah.');
+      setErrorMsg(err?.message || 'Nomor HP atau password salah.');
     } finally {
       setLoading(false);
     }
@@ -194,7 +194,7 @@ export default function CustomerAuthForm({
         <p className="text-sm text-[#475467] mt-1.5 leading-relaxed">
           {isRegisterMode
             ? 'Daftar sekarang untuk kemudahan pemesanan dan nikmati keuntungan member Leton Coffee.'
-            : 'Masukkan nama lengkap dan password untuk melanjutkan pemesanan.'}
+            : 'Masukkan nomor HP dan password untuk melanjutkan pemesanan.'}
         </p>
       </div>
 
@@ -365,25 +365,27 @@ export default function CustomerAuthForm({
       ) : (
         /* Form Login (Masuk) */
         <form onSubmit={handleLogin} className="space-y-4">
-          {/* Nama Lengkap */}
+          {/* Nomor HP */}
           <div>
             <label className="block text-xs font-semibold text-[#344054] mb-1.5 uppercase tracking-wider">
-              Nama Lengkap
+              Nomor HP
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[#98A2B3]">
-                <User className="w-4 h-4" />
+                <Phone className="w-4 h-4" />
               </span>
               <input
-                id="input-login-nama"
-                type="text"
+                id="input-login-phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
                 required
                 disabled={loading}
-                placeholder="Contoh: Budi Santoso"
-                value={loginNama}
+                placeholder="Contoh: 081234567890"
+                value={loginPhone}
                 onChange={(e) => {
                   clearAlerts();
-                  setLoginNama(e.target.value);
+                  setLoginPhone(e.target.value);
                 }}
                 className="w-full pl-10 pr-4 py-2.5 bg-[#F9FAFB] border border-[#D0D5DD] rounded-xl text-sm text-[#172033] focus:outline-none focus:ring-2 focus:ring-[#C39A6B]/20 focus:border-[#C39A6B] disabled:opacity-60 transition-all"
               />
@@ -404,7 +406,7 @@ export default function CustomerAuthForm({
                 type="password"
                 required
                 disabled={loading}
-                placeholder="••••••"
+                placeholder="••••••••"
                 value={loginPassword}
                 onChange={(e) => {
                   clearAlerts();
@@ -428,10 +430,7 @@ export default function CustomerAuthForm({
                 <span>Memproses Masuk...</span>
               </>
             ) : (
-              <>
-                <span>Masuk ke Akun</span>
-                <ArrowRight className="w-4 h-4" />
-              </>
+              <span>Masuk ke Akun →</span>
             )}
           </button>
         </form>

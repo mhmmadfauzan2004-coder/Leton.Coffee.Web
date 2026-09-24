@@ -6,11 +6,13 @@ import { stripHeavyBase64Images } from './safeStorage';
 import {
   normalizeIndonesianPhone,
   isValidIndonesianPhone,
+  normalizePhoneTo08,
 } from './phone';
 
 export {
   normalizeIndonesianPhone,
   isValidIndonesianPhone,
+  normalizePhoneTo08,
 };
 
 // 1. Supabase Credentials Configuration
@@ -570,26 +572,65 @@ export async function registerCustomer(
 }
 
 /**
- * Customer Login using Nama Lengkap and Password.
+ * Customer Login using Nomor HP and Password.
+ * Normalizes phone number, queries customer, and validates password.
  * Generates and returns a secure server-side session token upon bcrypt verification.
  */
 export async function loginCustomer(
-  inputNamaOrPhone: string,
+  inputPhone: string,
   password: string
 ): Promise<{ success: boolean; profile?: CustomerProfile; error?: string }> {
   try {
-    const rawInput = (inputNamaOrPhone || '').trim();
+    const rawInput = (inputPhone || '').trim();
 
     if (!rawInput) {
-      return { success: false, error: 'Nama Lengkap wajib diisi.' };
+      return { success: false, error: 'Nomor HP wajib diisi.' };
     }
     if (!password) {
       return { success: false, error: 'Password wajib diisi.' };
     }
 
-    const client = getSupabase();
+    const normalizedPhone = normalizePhoneTo08(rawInput);
 
-    // Call secure PostgreSQL function (SECURITY DEFINER)
+    // 1. Call backend API /api/customer/login which securely normalizes phone, looks up customer, and verifies bcrypt
+    try {
+      const apiBase = typeof window !== 'undefined' ? (window.location.origin || '') : '';
+      const res = await fetch(`${apiBase}/api/customer/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nomorHp: normalizedPhone,
+          password: password,
+        }),
+      });
+
+      const parsed = await res.json().catch(() => null);
+      if (res.ok && parsed && parsed.success) {
+        const sessionToken = parsed.token;
+        const profile = extractCustomerProfile(parsed.customer);
+
+        if (typeof window !== 'undefined') {
+          if (sessionToken) {
+            localStorage.setItem(CUSTOMER_TOKEN_KEY, sessionToken);
+          }
+          localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
+        }
+
+        return { success: true, profile };
+      }
+
+      if (parsed && !parsed.success) {
+        return {
+          success: false,
+          error: parsed.error || 'Nomor HP atau password salah.',
+        };
+      }
+    } catch (apiErr) {
+      console.warn('[loginCustomer] API route exception, trying fallback:', apiErr);
+    }
+
+    // Direct fallback if API route fails (call RPC customer_login)
+    const client = getSupabase();
     const { data, error } = await client.rpc('customer_login', {
       p_nama: rawInput,
       p_password: password,
@@ -597,15 +638,14 @@ export async function loginCustomer(
 
     if (error) {
       console.error('[Customer Login RPC Error]:', error);
-      return { success: false, error: error.message || 'Nama Lengkap atau Password salah.' };
+      return { success: false, error: 'Nomor HP atau password salah.' };
     }
 
     const parsed = parseRpcResponse(data);
     if (!parsed.success) {
-      console.error('[Customer Login Business Error]:', parsed.error);
       return {
         success: false,
-        error: parsed.error || 'Nama Lengkap atau Password salah.',
+        error: 'Nomor HP atau password salah.',
       };
     }
 
@@ -622,7 +662,7 @@ export async function loginCustomer(
     return { success: true, profile };
   } catch (err: any) {
     console.error('[Customer Login] Exception:', err);
-    return { success: false, error: 'Nama Lengkap atau Password salah.' };
+    return { success: false, error: 'Nomor HP atau password salah.' };
   }
 }
 

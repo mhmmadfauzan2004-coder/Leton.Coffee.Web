@@ -963,53 +963,110 @@ export async function createNewOrder(
       updated_at: new Date().toISOString(),
     };
 
+    console.log('[Order] Creating order:', orderData.orderNumber);
+    console.log('[Order] Primary orders INSERT started');
     const { error: insertError } = await client.from('orders').insert(payload);
-    if (!insertError) {
-      console.log('[Supabase Orders] Order inserted successfully into public.orders:', orderData.orderNumber);
+    
+    if (insertError) {
+      console.error('[Order] Primary orders INSERT FAILED:', insertError);
+      
+      // Still write to orders_registry backup for recovery/debugging if desired, but return success: false
+      try {
+        const { data: regRow } = await client
+          .from('leton_content')
+          .select('*')
+          .eq('id', 'orders_registry')
+          .maybeSingle();
 
-      // Try inserting into order_items table
-      try {
-        const itemRows = orderData.items.map((it, idx) => ({
-          id: `${orderData.id}-item-${idx}`,
-          order_id: orderData.id,
-          product_id: it.productId,
-          name: it.name,
-          price: it.price,
-          quantity: it.quantity,
-          image: it.image || null,
-          note: it.note || null,
-          topping: it.topping || null,
-          syrup: it.syrup || null,
-          created_at: new Date().toISOString(),
-        }));
-        await client.from('order_items').insert(itemRows);
-      } catch (itemErr) {
-        console.warn('[Supabase Order Items Note]:', itemErr);
-      }
-      // 1b. Instant Realtime Broadcast via Supabase Channel
-      try {
-        const broadcastChannel = client.channel('leton_orders_stream');
-        broadcastChannel.subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            broadcastChannel.send({
-              type: 'broadcast',
-              event: 'ORDER_CREATED',
-              payload: orderData,
-            });
-          }
+        const existingList: CustomerOrder[] =
+          regRow?.content?.orders && Array.isArray(regRow.content.orders)
+            ? regRow.content.orders
+            : [];
+
+        const mergedList = [orderData, ...existingList.filter((o) => o.id !== orderData.id)].slice(0, 500);
+
+        await client.from('leton_content').upsert({
+          id: 'orders_registry',
+          content: { orders: mergedList, last_error: insertError },
+          updated_at: new Date().toISOString(),
         });
-      } catch (bcErr) {
-        console.warn('[Supabase Broadcast Warning]:', bcErr);
+      } catch (regErr) {
+        console.warn('[Orders Registry Backup Note on failure]:', regErr);
       }
-    } else {
-      console.warn('[Supabase Order Insert Notice]:', insertError.message);
+
+      return {
+        success: false,
+        order: orderData,
+        error: `Gagal menyimpan pesanan ke database: ${insertError.message || 'Silakan coba lagi.'}`,
+      };
     }
+
+    console.log('[Order] Primary orders INSERT SUCCESS');
+
+    // Try inserting into order_items table
+    try {
+      const itemRows = orderData.items.map((it, idx) => ({
+        id: `${orderData.id}-item-${idx}`,
+        order_id: orderData.id,
+        product_id: it.productId,
+        name: it.name,
+        price: it.price,
+        quantity: it.quantity,
+        image: it.image || null,
+        note: it.note || null,
+        topping: it.topping || null,
+        syrup: it.syrup || null,
+        created_at: new Date().toISOString(),
+      }));
+      
+      const { error: itemsError } = await client.from('order_items').insert(itemRows);
+      if (itemsError) {
+        console.error('[Supabase Order Items Error]:', itemsError);
+        // Rollback parent order to avoid orphan records
+        await client.from('orders').delete().eq('id', orderData.id);
+        return {
+          success: false,
+          order: orderData,
+          error: `Gagal menyimpan detail menu pesanan: ${itemsError.message || 'Silakan coba lagi.'}`,
+        };
+      }
+    } catch (itemErr: any) {
+      console.error('[Supabase Order Items Exception]:', itemErr);
+      // Rollback parent order
+      await client.from('orders').delete().eq('id', orderData.id);
+      return {
+        success: false,
+        order: orderData,
+        error: `Gagal menyimpan detail menu pesanan: ${itemErr?.message || 'Silakan coba lagi.'}`,
+      };
+    }
+
+    // 1b. Instant Realtime Broadcast via Supabase Channel
+    try {
+      const broadcastChannel = client.channel('leton_orders_stream');
+      broadcastChannel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          broadcastChannel.send({
+            type: 'broadcast',
+            event: 'ORDER_CREATED',
+            payload: orderData,
+          });
+        }
+      });
+    } catch (bcErr) {
+      console.warn('[Supabase Broadcast Warning]:', bcErr);
+    }
+
   } catch (err: any) {
-    console.warn('[Supabase Orders Exception]:', err);
+    console.error('[Supabase Orders Exception]:', err);
+    return {
+      success: false,
+      order: orderData,
+      error: `Terjadi kendala saat memproses pesanan: ${err?.message || 'Silakan coba lagi.'}`,
+    };
   }
 
-  // 2. Cloud Database Backup to 'leton_content' (orders_registry)
-  // Ensures persistence even before the user executes the full SQL migration in Supabase
+  // 2. Cloud Database Backup to 'leton_content' (orders_registry) for successful orders
   try {
     const client = getSupabase();
     const { data: regRow } = await client

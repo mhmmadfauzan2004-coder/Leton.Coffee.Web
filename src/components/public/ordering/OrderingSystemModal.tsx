@@ -398,6 +398,8 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
         localStorage.removeItem('leton_ordering_cart');
         scrollToTop();
         setCurrentStep('confirmation');
+      } else {
+        alert(result.error || 'Gagal menyimpan pesanan. Silakan coba beberapa saat lagi.');
       }
     } catch (err) {
       console.error('Submit order error:', err);

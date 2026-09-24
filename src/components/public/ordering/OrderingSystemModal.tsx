@@ -303,6 +303,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
   }) => {
     if (!selectedOutlet) return;
     setIsSubmitting(true);
+    console.log('[ORDER UI] submit started');
 
     try {
       const orderNumber = generateOrderNumber();
@@ -379,25 +380,30 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
         createdAt: new Date().toISOString(),
       };
 
+      console.log('[ORDER UI] createNewOrder started');
       const result = await createNewOrder(newOrder);
       if (result.success) {
-        // Retrieve and log the updated loyalty balance from Supabase
+        console.log('[ORDER UI] createNewOrder success');
+        // Retrieve and log the updated loyalty balance from Supabase (non-blocking)
         if (newOrder.customerId) {
-          try {
-            const updatedLoyalty = await getCustomerLoyalty(newOrder.customerId);
-            console.log('[Loyalty Balance Synced]: New balance is:', updatedLoyalty.pointsBalance);
-          } catch (loyaltyErr) {
-            console.error('[Loyalty Earning Sync Error]: Failed to refresh loyalty balance from Supabase:', loyaltyErr);
-          }
+          getCustomerLoyalty(newOrder.customerId)
+            .then((updatedLoyalty) => {
+              console.log('[Loyalty Balance Synced]: New balance is:', updatedLoyalty.pointsBalance);
+            })
+            .catch((loyaltyErr) => {
+              console.error('[Loyalty Earning Sync Error]: Failed to refresh loyalty balance from Supabase:', loyaltyErr);
+            });
         } else {
-          console.warn('[Loyalty Earning Note]: Order tidak terhubung ke customer.');
+          console.warn('[Loyalty Earning Note]: Order tidak terhubung to customer.');
         }
 
+        console.log('[ORDER UI] confirmation transition started');
         setCompletedOrder(newOrder);
         setCart([]); // Clear cart
         localStorage.removeItem('leton_ordering_cart');
         scrollToTop();
         setCurrentStep('confirmation');
+        console.log('[ORDER UI] confirmation transition completed');
       } else {
         alert(result.error || 'Gagal menyimpan pesanan. Silakan coba beberapa saat lagi.');
       }

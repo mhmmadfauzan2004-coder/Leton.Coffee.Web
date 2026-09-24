@@ -1119,13 +1119,11 @@ export async function createNewOrder(
   // Dispatch asynchronously without blocking user confirmation
   notifyBackendPush();
 
-  // 4. Automatically award loyalty points immediately on order creation (Checkout)
+  // 4. Automatically award loyalty points immediately on order creation (Checkout - non-blocking)
   if (orderData.customerId || orderData.userId) {
-    try {
-      await processOrderPointsEarning(orderData);
-    } catch (earnErr) {
+    processOrderPointsEarning(orderData).catch((earnErr) => {
       console.warn('[Loyalty Points Earning Note]:', earnErr);
-    }
+    });
   }
 
   return {

@@ -915,6 +915,18 @@ export async function createNewOrder(
       }
     }
 
+    if (!validatedCustomerId && typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('leton_customer_profile');
+        if (cached) {
+          const parsedCached = JSON.parse(cached);
+          if (parsedCached?.id) {
+            validatedCustomerId = parsedCached.id;
+          }
+        }
+      } catch {}
+    }
+
     // Guest checkout has effectiveCustomerId = null; authenticated customer has validatedCustomerId
     const effectiveCustomerId = validatedCustomerId || null;
     orderData.customerId = effectiveCustomerId || undefined;

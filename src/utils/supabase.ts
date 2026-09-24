@@ -3,6 +3,7 @@ import { LetonData, CustomerProfile } from '../types';
 import { initialLetonData } from '../data/initialData';
 import { sanitizeLoadedData } from './storage';
 import { stripHeavyBase64Images } from './safeStorage';
+import { getApiUrl } from './api';
 import {
   normalizeIndonesianPhone,
   isValidIndonesianPhone,
@@ -592,13 +593,13 @@ export async function loginCustomer(
 
     const normalizedPhone = normalizePhoneTo08(rawInput);
 
-    // 1. Call backend API /api/customer/login which securely normalizes phone, looks up customer, and verifies bcrypt
+    // Prioritaskan backend Express/Cloud Run API sebagai satu-satunya flow login customer
     try {
-      const apiBase = typeof window !== 'undefined' ? (window.location.origin || '') : '';
-      const res = await fetch(`${apiBase}/api/customer/login`, {
+      const res = await fetch(getApiUrl('/api/customer/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          phone: normalizedPhone,
           nomorHp: normalizedPhone,
           password: password,
         }),
@@ -625,41 +626,18 @@ export async function loginCustomer(
           error: parsed.error || 'Nomor HP atau password salah.',
         };
       }
-    } catch (apiErr) {
-      console.warn('[loginCustomer] API route exception, trying fallback:', apiErr);
-    }
 
-    // Direct fallback if API route fails (call RPC customer_login)
-    const client = getSupabase();
-    const { data, error } = await client.rpc('customer_login', {
-      p_nama: rawInput,
-      p_password: password,
-    });
-
-    if (error) {
-      console.error('[Customer Login RPC Error]:', error);
-      return { success: false, error: 'Nomor HP atau password salah.' };
-    }
-
-    const parsed = parseRpcResponse(data);
-    if (!parsed.success) {
       return {
         success: false,
         error: 'Nomor HP atau password salah.',
       };
+    } catch (apiErr) {
+      console.error('[loginCustomer] API call error:', apiErr);
+      return {
+        success: false,
+        error: 'Gagal terhubung ke server login. Silakan periksa koneksi internet Anda.',
+      };
     }
-
-    const sessionToken = parsed.token;
-    const profile = extractCustomerProfile(parsed.customer);
-
-    if (typeof window !== 'undefined') {
-      if (sessionToken) {
-        localStorage.setItem(CUSTOMER_TOKEN_KEY, sessionToken);
-      }
-      localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
-    }
-
-    return { success: true, profile };
   } catch (err: any) {
     console.error('[Customer Login] Exception:', err);
     return { success: false, error: 'Nomor HP atau password salah.' };
@@ -668,7 +646,7 @@ export async function loginCustomer(
 
 /**
  * Retrieve current customer profile from active server-side session token.
- * Token is verified on the server against public.customer_sessions.
+ * Verified first against backend /api/customer/me, with fallback to Supabase RPC.
  */
 export async function getCurrentCustomerProfile(): Promise<CustomerProfile | null> {
   if (typeof window === 'undefined') return null;
@@ -676,47 +654,57 @@ export async function getCurrentCustomerProfile(): Promise<CustomerProfile | nul
   const token = localStorage.getItem(CUSTOMER_TOKEN_KEY);
   if (!token) return null;
 
+  // 1. Verifikasi melalui backend API terlebih dahulu
+  try {
+    const res = await fetch(getApiUrl('/api/customer/me'), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (res.ok) {
+      const parsed = await res.json().catch(() => null);
+      if (parsed && parsed.success && parsed.customer) {
+        const profile = extractCustomerProfile(parsed.customer);
+        localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
+        return profile;
+      }
+    }
+  } catch (apiErr) {
+    console.warn('[getCurrentCustomerProfile] Backend API check notice:', apiErr);
+  }
+
+  // 2. Fallback verifikasi ke Supabase RPC jika session dibuat via register
   try {
     const client = getSupabase();
     const { data, error } = await client.rpc('customer_get_session', {
       p_token: token,
     });
 
-    if (error) {
-      console.error('[Customer Get Session RPC Error]:', error);
-      // In case of transient network error, fallback to cached profile if available
-      try {
-        const cached = localStorage.getItem(CUSTOMER_PROFILE_KEY);
-        if (cached) {
-          return extractCustomerProfile(JSON.parse(cached));
-        }
-      } catch {}
-      return null;
-    }
-
-    const parsed = parseRpcResponse(data);
-    if (!parsed.success || !parsed.customer) {
-      // Session expired or invalid on server
-      localStorage.removeItem(CUSTOMER_TOKEN_KEY);
-      localStorage.removeItem(CUSTOMER_PROFILE_KEY);
-      return null;
-    }
-
-    const profile = extractCustomerProfile(parsed.customer);
-    localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
-
-    return profile;
-  } catch (err) {
-    console.error('[Customer Get Session Exception]:', err);
-    // In case of transient offline, fallback to cached profile if available
-    try {
-      const cached = localStorage.getItem(CUSTOMER_PROFILE_KEY);
-      if (cached) {
-        return extractCustomerProfile(JSON.parse(cached));
+    if (!error && data) {
+      const parsed = parseRpcResponse(data);
+      if (parsed.success && parsed.customer) {
+        const profile = extractCustomerProfile(parsed.customer);
+        localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
+        return profile;
       }
-    } catch {}
-    return null;
+    }
+  } catch (err) {
+    console.warn('[getCurrentCustomerProfile] RPC check notice:', err);
   }
+
+  // 3. Fallback profil cached jika jaringan sedang offline
+  try {
+    const cached = localStorage.getItem(CUSTOMER_PROFILE_KEY);
+    if (cached) {
+      return extractCustomerProfile(JSON.parse(cached));
+    }
+  } catch {}
+
+  // Jika token invalid di seluruh verifier, bersihkan session
+  localStorage.removeItem(CUSTOMER_TOKEN_KEY);
+  localStorage.removeItem(CUSTOMER_PROFILE_KEY);
+  return null;
 }
 
 /**
@@ -727,6 +715,15 @@ export async function logoutCustomer(): Promise<void> {
 
   const token = localStorage.getItem(CUSTOMER_TOKEN_KEY);
   if (token) {
+    try {
+      fetch(getApiUrl('/api/customer/logout'), {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }).catch(() => {});
+    } catch {}
+
     try {
       const client = getSupabase();
       await client.rpc('customer_logout', { p_token: token });

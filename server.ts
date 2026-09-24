@@ -155,6 +155,64 @@ function isCustomerDeleted(id: string, phone?: string): boolean {
   return false;
 }
 
+interface ServerCustomerSession {
+  id: string;
+  customer_id: string;
+  token: string;
+  expires_at: string;
+  customer: {
+    id: string;
+    userId: string;
+    namaLengkap: string;
+    nomorHp: string;
+    tanggalLahir: string | null;
+  };
+}
+
+const CUSTOMER_SESSIONS_FILE = path.join(DATA_DIR, 'customer_sessions.json');
+
+function getCustomerSessions(): ServerCustomerSession[] {
+  try {
+    if (fs.existsSync(CUSTOMER_SESSIONS_FILE)) {
+      const raw = fs.readFileSync(CUSTOMER_SESSIONS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const now = new Date().toISOString();
+        return parsed.filter(s => s && s.expires_at > now);
+      }
+    }
+  } catch (err) {
+    console.error('Error reading customer sessions file:', err);
+  }
+  return [];
+}
+
+function saveCustomerSession(session: ServerCustomerSession): void {
+  try {
+    const list = getCustomerSessions().filter(s => s.customer_id !== session.customer_id && s.token !== session.token);
+    list.push(session);
+    fs.writeFileSync(CUSTOMER_SESSIONS_FILE, JSON.stringify(list, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error saving customer session:', err);
+  }
+}
+
+function getCustomerSession(token: string): ServerCustomerSession | null {
+  if (!token) return null;
+  const list = getCustomerSessions();
+  return list.find(s => s.token === token) || null;
+}
+
+function deleteCustomerSession(token: string): void {
+  if (!token) return;
+  try {
+    const list = getCustomerSessions().filter(s => s.token !== token);
+    fs.writeFileSync(CUSTOMER_SESSIONS_FILE, JSON.stringify(list, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error deleting customer session:', err);
+  }
+}
+
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -584,14 +642,14 @@ app.post('/api/customer/register', async (req, res) => {
 // Login Customer (Nomor HP & Password)
 app.post('/api/customer/login', async (req, res) => {
   try {
-    const { nomorHp, phone, inputPhone, namaLengkap, password } = req.body;
-    const rawInput = (nomorHp || phone || inputPhone || namaLengkap || '').toString().trim();
+    const { phone, nomorHp, inputPhone, password } = req.body;
+    const rawInput = (phone || nomorHp || inputPhone || '').toString().trim();
 
     if (!rawInput || !password) {
       return res.status(400).json({ success: false, error: 'Nomor HP dan Password wajib diisi.' });
     }
 
-    // Normalisasi format nomor HP ke 08xxxxxxxxxx
+    // 2. Normalisasi nomor HP menggunakan fungsi normalisasi konsisten (08xxxxxxxxxx)
     let normalizedPhone = rawInput.replace(/[^0-9]/g, '');
     if (normalizedPhone.startsWith('62')) {
       normalizedPhone = '0' + normalizedPhone.slice(2);
@@ -599,7 +657,7 @@ app.post('/api/customer/login', async (req, res) => {
       normalizedPhone = '0' + normalizedPhone;
     }
 
-    // 1. Cari customer berdasarkan nomor_hp yang sudah dinormalisasi
+    // 3. Cari customer berdasarkan public.customers.nomor_hp
     let customer: any = null;
 
     if (normalizedPhone && normalizedPhone.length >= 8) {
@@ -614,27 +672,55 @@ app.post('/api/customer/login', async (req, res) => {
       }
     }
 
-    // Jika nomor HP tidak ditemukan: tampilkan pesan seragam
-    if (!customer) {
+    // 4. Jika customer tidak ditemukan atau password_hash tidak ada: return generic error
+    if (!customer || !customer.password_hash) {
       return res.status(401).json({ success: false, error: 'Nomor HP atau password salah.' });
     }
 
-    // 2. Verifikasi password via RPC customer_login menggunakan session generator bawaan
-    const { data, error } = await supabase.rpc('customer_login', {
-      p_nama: customer.nama_lengkap,
-      p_password: password,
+    // 5. Verifikasi password LANGSUNG terhadap customer.password_hash menggunakan bcryptjs
+    const validPassword = await bcrypt.compare(password, customer.password_hash);
+
+    // 6. Jika password salah: return generic error yang seragam
+    if (!validPassword) {
+      return res.status(401).json({ success: false, error: 'Nomor HP atau password salah.' });
+    }
+
+    // 7. Jika password benar: buat session customer
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const customerProfile = {
+      id: customer.id,
+      userId: customer.id,
+      namaLengkap: customer.nama_lengkap,
+      nomorHp: customer.nomor_hp,
+      tanggalLahir: customer.tanggal_lahir ? customer.tanggal_lahir.toString() : null,
+    };
+
+    // Simpan session pada server session store
+    saveCustomerSession({
+      id: crypto.randomUUID(),
+      customer_id: customer.id,
+      token: sessionToken,
+      expires_at: expiresAt,
+      customer: customerProfile,
     });
 
-    if (error) {
-      console.error('[API customer_login RPC error]:', error);
-      return res.status(401).json({ success: false, error: 'Nomor HP atau password salah.' });
-    }
+    // Upayakan juga sinkronisasi ke customer_sessions database jika didukung
+    try {
+      await supabase.from('customer_sessions').insert({
+        customer_id: customer.id,
+        token: sessionToken,
+        expires_at: expiresAt,
+      });
+    } catch {}
 
-    if (!data || !data.success) {
-      return res.status(401).json({ success: false, error: 'Nomor HP atau password salah.' });
-    }
-
-    return res.json(data);
+    // 8. Kembalikan profil customer yang memang dibutuhkan frontend (tanpa password/password_hash)
+    return res.json({
+      success: true,
+      token: sessionToken,
+      customer: customerProfile,
+    });
   } catch (err: any) {
     console.error('[API customer/login exception]:', err);
     return res.status(500).json({ success: false, error: 'Terjadi kesalahan sistem saat masuk.' });
@@ -650,6 +736,17 @@ app.get('/api/customer/me', async (req, res) => {
     }
 
     const token = authHeader.split(' ')[1];
+
+    // 1. Periksa session lokal server terlebih dahulu
+    const localSession = getCustomerSession(token);
+    if (localSession && localSession.customer) {
+      return res.json({
+        success: true,
+        customer: localSession.customer,
+      });
+    }
+
+    // 2. Fallback verifikasi ke Supabase RPC jika session dibuat via register RPC
     const { data, error } = await supabase.rpc('customer_get_session', {
       p_token: token,
     });
@@ -660,7 +757,8 @@ app.get('/api/customer/me', async (req, res) => {
 
     return res.json(data);
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: 'Gagal memverifikasi sesi pelanggan.' });
+    console.error('[API customer/me exception]:', err);
+    return res.status(500).json({ success: false, error: 'Terjadi kesalahan sistem.' });
   }
 });
 
@@ -670,7 +768,10 @@ app.post('/api/customer/logout', async (req, res) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
-      await supabase.rpc('customer_logout', { p_token: token });
+      deleteCustomerSession(token);
+      try {
+        await supabase.rpc('customer_logout', { p_token: token });
+      } catch {}
     }
     return res.json({ success: true });
   } catch {
@@ -687,15 +788,35 @@ app.get('/api/customer/orders', async (req, res) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const { data, error } = await supabase.rpc('customer_get_my_orders', {
-      p_token: token,
-    });
+    let customerId: string | null = null;
+
+    const localSession = getCustomerSession(token);
+    if (localSession?.customer?.id) {
+      customerId = localSession.customer.id;
+    } else {
+      try {
+        const { data } = await supabase.rpc('customer_get_session', { p_token: token });
+        if (data?.success && data?.customer?.id) {
+          customerId = data.customer.id;
+        }
+      } catch {}
+    }
+
+    if (!customerId) {
+      return res.status(401).json({ success: false, error: 'Sesi kedaluwarsa atau tidak valid.' });
+    }
+
+    const { data: orders, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('customer_id', customerId)
+      .order('created_at', { ascending: false });
 
     if (error) {
       return res.status(400).json({ success: false, error: error.message });
     }
 
-    return res.json({ success: true, orders: data || [] });
+    return res.json({ success: true, orders: orders || [] });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: 'Gagal memuat pesanan.' });
   }

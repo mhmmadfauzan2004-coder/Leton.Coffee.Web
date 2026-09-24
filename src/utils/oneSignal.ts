@@ -335,13 +335,16 @@ export async function syncSubscriptionIdToBackend(
     const targetOutlet = isCentral ? 'central' : normalizedOutlet;
     const targetRole = isCentral ? 'central_admin' : (role || 'outlet_admin');
 
-    const prevStoredSubId = oldSubscriptionId || (typeof localStorage !== 'undefined' ? localStorage.getItem('leton_last_synced_onesignal_sub') : null);
+    const prevStoredSubId = oldSubscriptionId !== undefined 
+      ? oldSubscriptionId 
+      : (typeof localStorage !== 'undefined' ? localStorage.getItem('leton_last_synced_onesignal_sub') : null);
+    
     const effectiveOldSubId = prevStoredSubId && prevStoredSubId !== subscriptionId ? prevStoredSubId : undefined;
 
     const deviceInfo = typeof navigator !== 'undefined' ? navigator.userAgent : 'web';
     const registerPayload = {
       subscription_id: subscriptionId,
-      old_subscription_id: effectiveOldSubId,
+      old_subscription_id: effectiveOldSubId || null,
       username: username || 'admin',
       outlet_id: targetOutlet,
       role: targetRole,
@@ -350,7 +353,10 @@ export async function syncSubscriptionIdToBackend(
     };
 
     const edgeFunctionEndpoint = 'https://galwyavdonfzuibrmswt.supabase.co/functions/v1/register-onesignal-subscription';
-    console.log('[ONESIGNAL SYNC] Syncing subscription ID to backend:', subscriptionId, 'oldSubId:', effectiveOldSubId || 'none', 'for outlet:', targetOutlet);
+    
+    console.log('[OneSignal] Current subscription ID:', subscriptionId);
+    console.log('[OneSignal] Previous synced subscription ID:', effectiveOldSubId || 'none');
+    console.log('[OneSignal] Registration started');
 
     const edgeRes = await fetch(edgeFunctionEndpoint, {
       method: 'POST',
@@ -368,19 +374,24 @@ export async function syncSubscriptionIdToBackend(
       edgeJson = JSON.parse(rawText);
     } catch (e) {}
 
-    if (edgeRes.ok && edgeJson && edgeJson.success === true) {
-      console.log('[ONESIGNAL SYNC] Successfully synced subscription ID to DB:', edgeJson.data);
+    if (edgeRes.ok && edgeJson && edgeJson.success === true && edgeJson.verified === true) {
+      console.log('[OneSignal] Registration success');
       try {
         if (typeof localStorage !== 'undefined') {
           localStorage.setItem('leton_last_synced_onesignal_sub', subscriptionId);
         }
+        lastSyncedSubId = subscriptionId;
       } catch (e) {}
       return { success: true, data: edgeJson.data };
     }
-    return { success: false, error: edgeJson?.error || rawText };
+
+    const errDetail = edgeJson?.error || `HTTP ${edgeRes.status}: ${rawText || edgeRes.statusText}`;
+    console.error('[OneSignal] Registration failed:', errDetail);
+    return { success: false, error: errDetail };
   } catch (err: any) {
-    console.error('[ONESIGNAL SYNC] Failed to sync subscription ID:', err);
-    return { success: false, error: err?.message || String(err) };
+    const errorMsg = err?.message || String(err);
+    console.error('[OneSignal] Registration failed:', errorMsg);
+    return { success: false, error: errorMsg };
   }
 }
 
@@ -410,7 +421,6 @@ export async function subscribeOneSignalAdmin(
 
     // 1. Request Notification Permission
     const permission = await oneSignal.Notifications.requestPermission();
-    console.log('[ONESIGNAL] permission =', permission || Notification.permission);
 
     if (permission !== 'granted' && Notification.permission !== 'granted') {
       return {
@@ -451,15 +461,13 @@ export async function subscribeOneSignalAdmin(
       username: username || 'admin'
     };
 
-    console.log('[OneSignal] Attaching tags for push filtering:', tags);
     await oneSignal.User.addTags(tags);
 
     // 6. Wait for valid PushSubscription ID (OneSignal v16 creates it asynchronously)
     let subscriptionId = await waitForOneSignalSubscriptionId(oneSignal);
-    console.log('[ONESIGNAL] subscription_id =', subscriptionId);
 
     if (!subscriptionId) {
-      console.error('[ONESIGNAL] Push subscription ID was empty or null after optIn.');
+      console.error('[OneSignal] Registration failed: Push subscription ID was empty or null after optIn.');
       return {
         success: false,
         error: 'Gagal mendapatkan OneSignal Subscription ID. Pastikan perangkat Anda terhubung ke internet dan izin notifikasi aktif, lalu coba lagi.',
@@ -467,71 +475,29 @@ export async function subscribeOneSignalAdmin(
       };
     }
 
-    const deviceInfo = typeof navigator !== 'undefined' ? navigator.userAgent : 'web';
+    const previousSubscriptionId = typeof localStorage !== 'undefined' 
+      ? localStorage.getItem('leton_last_synced_onesignal_sub') 
+      : null;
 
-    // 7. Call Supabase Edge Function: register-onesignal-subscription directly
-    const edgeFunctionEndpoint = 'https://galwyavdonfzuibrmswt.supabase.co/functions/v1/register-onesignal-subscription';
-    console.log('[ONESIGNAL] outlet_id =', targetOutlet);
-    console.log('[ONESIGNAL] edge_function =', edgeFunctionEndpoint);
-    console.log('[ONESIGNAL] request_started');
+    // 7. Await complete backend registration before returning success
+    const syncRes = await syncSubscriptionIdToBackend(
+      subscriptionId,
+      username || 'admin',
+      targetOutlet,
+      targetRole,
+      previousSubscriptionId
+    );
 
-    const { getSupabaseAnonKey } = await import('./supabase');
-    const supabaseAnonKey = getSupabaseAnonKey();
-
-    const registerPayload = {
-      subscription_id: subscriptionId,
-      username: username || 'admin',
-      outlet_id: targetOutlet,
-      role: targetRole,
-      device_info: deviceInfo
-    };
-
-    try {
-      const edgeRes = await fetch(edgeFunctionEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': supabaseAnonKey,
-          'Authorization': `Bearer ${supabaseAnonKey}`
-        },
-        body: JSON.stringify(registerPayload)
-      });
-
-      console.log('[ONESIGNAL] response_status =', edgeRes.status);
-      const rawText = await edgeRes.text();
-      console.log('[ONESIGNAL] response_body =', rawText);
-
-      let edgeJson: any = null;
-      try {
-        edgeJson = JSON.parse(rawText);
-      } catch (parseErr) {
-        console.error('[ONESIGNAL] Failed to parse JSON response from Edge Function:', parseErr);
-      }
-
-      // 8. Sukses HANYA jika response.success === true DAN response.verified === true
-      if (edgeRes.ok && edgeJson && edgeJson.success === true && edgeJson.verified === true) {
-        console.log('[ONESIGNAL] registration_verified = true. Verified row:', edgeJson.data);
-        return {
-          success: true,
-          subscriptionId,
-          permission: Notification.permission
-        };
-      }
-
-      // If Edge Function failed or returned unverified, extract real error
-      const realError = edgeJson?.error || `Pendaftaran gagal (HTTP ${edgeRes.status}): ${rawText || edgeRes.statusText}`;
-      console.error('[ONESIGNAL] registration_verified = false. Error:', realError);
+    if (syncRes.success) {
       return {
-        success: false,
-        error: realError,
+        success: true,
+        subscriptionId,
         permission: Notification.permission
       };
-    } catch (edgeCallErr: any) {
-      const errorMsg = edgeCallErr?.message || String(edgeCallErr);
-      console.error('[ONESIGNAL] Edge Function network exception:', edgeCallErr);
+    } else {
       return {
         success: false,
-        error: `Gagal menghubungi server pendaftaran notifikasi: ${errorMsg}`,
+        error: syncRes.error || 'Gagal mendaftarkan perangkat ke server notifikasi.',
         permission: Notification.permission
       };
     }

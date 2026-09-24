@@ -17,6 +17,7 @@ import { OrderCheckout } from './OrderCheckout';
 import { OrderConfirmation } from './OrderConfirmation';
 import CustomerAuthForm from './CustomerAuthForm';
 import CustomerProfileTab from './CustomerProfileTab';
+import { CustomerHeader } from '../../common/CustomerHeader';
 import { createNewOrder, generateOrderNumber } from '../../../utils/supabaseOrders';
 import { findOrCreateCustomerMember } from '../../../utils/supabaseCustomers';
 import { getCurrentCustomerProfile, getSupabase, logoutCustomer } from '../../../utils/supabase';
@@ -421,144 +422,59 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
           : 'bg-[#070b12] text-slate-100'
       }`}
     >
-      {/* Universal Ordering Header */}
-      <header className={`sticky top-0 z-30 backdrop-blur-md px-4 sm:px-6 py-3.5 flex items-center justify-between border-b ${
-        currentStep === 'menu' || currentStep === 'checkout'
-          ? 'bg-white/95 border-[#e4efff] text-[#041d32]'
-          : 'bg-[#070b12]/95 border-slate-800 text-white'
-      }`}>
-        <div className="flex items-center gap-3">
-          {currentStep !== 'confirmation' && (
-            <button
-              onClick={() => {
-                if (currentStep === 'member_choice') {
-                  if (memberChoiceStep !== 'choice') {
-                    setMemberChoiceStep('choice');
-                  } else {
-                    onClose();
-                  }
-                } else if (currentStep === 'profile') {
-                  if (isMemberOnlyFlow) {
-                    onClose();
-                  } else if (customerProfile) {
-                    setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
-                  } else {
-                    setCurrentStep('member_choice');
-                    setMemberChoiceStep('choice');
-                  }
-                } else if (currentStep === 'checkout') {
-                  setCurrentStep('menu');
-                } else if (currentStep === 'menu') {
-                  setCurrentStep('outlet');
-                } else if (currentStep === 'outlet') {
-                  if (!customerProfile) {
-                    setCurrentStep('member_choice');
-                    setMemberChoiceStep('choice');
-                  } else {
-                    onClose();
-                  }
-                }
-              }}
-              className={`p-2 rounded-xl transition-colors cursor-pointer border ${
-                currentStep === 'menu' || currentStep === 'checkout'
-                  ? 'bg-[#eef4ff] border-[#e4efff] text-[#041d32] hover:bg-[#e4efff]'
-                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white'
-              }`}
-              title="Kembali"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-          )}
-
-          <div className="flex items-center gap-2.5">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm shadow-xs ${
-              currentStep === 'menu' || currentStep === 'checkout'
-                ? 'bg-[#006389] text-white'
-                : 'bg-gradient-to-br from-[#00E5FF] to-blue-600 text-slate-950 shadow-cyan-500/20'
-            }`}>
-              L
-            </div>
-            <div>
-              <h1 className={`font-display font-black text-sm sm:text-base uppercase tracking-wider leading-none ${
-                currentStep === 'menu' || currentStep === 'checkout' ? 'text-[#041d32]' : 'text-white'
-              }`}>
-                LETON COFFEE • ONLINE ORDER
-              </h1>
-              <span className={`text-[10px] font-mono tracking-widest uppercase font-bold block mt-0.5 ${
-                currentStep === 'menu' || currentStep === 'checkout' ? 'text-[#006389]' : 'text-[#00E5FF]'
-              }`}>
-                DUMAI SPECIALTY COFFEE
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Actions */}
-        <div className="flex items-center gap-2">
-          {/* Member Profile Access Button */}
-          <button
-            onClick={() => {
-              if (!customerProfile) {
-                setCurrentStep('member_choice');
-                setMemberChoiceStep('choice');
-                return;
-              }
-              if (currentStep === 'profile') {
-                setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
-              } else {
-                setCurrentStep('profile');
-              }
-            }}
-            className={`p-2 sm:px-3.5 sm:py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer tracking-wide ${
-              currentStep === 'profile' || currentStep === 'member_choice'
-                ? 'bg-[#C39A6B] text-white border-[#C39A6B] hover:bg-[#B38A5B]'
-                : customerProfile
-                ? 'bg-amber-500/10 border-[#C39A6B]/30 text-[#C39A6B] hover:bg-amber-500/20'
-                : currentStep === 'menu' || currentStep === 'checkout'
-                ? 'bg-white border-[#e4efff] text-[#041d32] hover:bg-[#eef4ff]'
-                : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-            title={customerProfile?.namaLengkap ? `Akun: ${customerProfile.namaLengkap}` : 'Akses Member'}
-          >
-            <User className={`w-4 h-4 ${customerProfile ? 'text-[#C39A6B]' : ''}`} />
-            <span className="hidden sm:inline font-semibold">
-              {(customerProfile?.namaLengkap ? customerProfile.namaLengkap.trim().split(' ')[0] : '') || 'MEMBER'}
-            </span>
-          </button>
-
-          {selectedOutlet && currentStep === 'menu' && (
-            <button
-              onClick={() => setIsCartOpen(true)}
-              className={`relative p-2 sm:px-3 sm:py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
-                currentStep === 'menu' || currentStep === 'checkout'
-                  ? 'bg-white border-[#e4efff] text-[#041d32] hover:bg-[#eef4ff]'
-                  : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-200 font-mono'
-              }`}
-            >
-              <ShoppingBag className={`w-4 h-4 ${currentStep === 'menu' ? 'text-[#006389]' : 'text-[#00E5FF]'}`} />
-              <span className="hidden sm:inline uppercase">Keranjang</span>
-              {cart.length > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full bg-[#006389] text-white text-[10px] font-black">
-                  {cart.reduce((a, b) => a + b.quantity, 0)}
-                </span>
-              )}
-            </button>
-          )}
-
-          <button
-            onClick={onClose}
-            className={`p-2 rounded-xl border transition-colors cursor-pointer flex items-center gap-1.5 text-xs ${
-              currentStep === 'menu' || currentStep === 'checkout'
-                ? 'bg-white hover:bg-[#eef4ff] border-[#e4efff] text-[#3e484f] hover:text-[#041d32]'
-                : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-white font-mono'
-            }`}
-            aria-label="Tutup Order"
-          >
-            <span className="hidden sm:inline text-[11px] uppercase tracking-wider">Tutup</span>
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      </header>
+      {/* Master Reusable Header */}
+      <CustomerHeader
+        showBack={currentStep !== 'confirmation'}
+        onBack={() => {
+          if (currentStep === 'member_choice') {
+            if (memberChoiceStep !== 'choice') {
+              setMemberChoiceStep('choice');
+            } else {
+              onClose();
+            }
+          } else if (currentStep === 'profile') {
+            if (isMemberOnlyFlow) {
+              onClose();
+            } else if (customerProfile) {
+              setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+            } else {
+              setCurrentStep('member_choice');
+              setMemberChoiceStep('choice');
+            }
+          } else if (currentStep === 'checkout') {
+            setCurrentStep('menu');
+          } else if (currentStep === 'menu') {
+            setCurrentStep('outlet');
+          } else if (currentStep === 'outlet') {
+            if (!customerProfile) {
+              setCurrentStep('member_choice');
+              setMemberChoiceStep('choice');
+            } else {
+              onClose();
+            }
+          }
+        }}
+        showProfile={true}
+        isProfileActive={currentStep === 'profile'}
+        profileName={customerProfile?.namaLengkap}
+        onOpenProfile={() => {
+          if (!customerProfile) {
+            setCurrentStep('member_choice');
+            setMemberChoiceStep('choice');
+            return;
+          }
+          if (currentStep === 'profile') {
+            setCurrentStep(selectedOutlet ? 'menu' : 'outlet');
+          } else {
+            setCurrentStep('profile');
+          }
+        }}
+        showCart={Boolean(selectedOutlet && currentStep === 'menu')}
+        cartCount={cart.reduce((a, b) => a + b.quantity, 0)}
+        onOpenCart={() => setIsCartOpen(true)}
+        showClose={true}
+        onClose={onClose}
+      />
 
       {/* Main Step Body */}
       <main className={`flex-1 w-full min-h-[calc(100vh-65px)] ${

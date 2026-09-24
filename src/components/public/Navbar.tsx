@@ -3,6 +3,7 @@ import { useContent } from '../../context/ContentContext';
 import { createWhatsAppLink } from '../../utils/formatters';
 import { resolveMediaUrl } from '../../utils/api';
 import { Menu, X, MessageCircle, ShoppingBag, Coffee, User } from 'lucide-react';
+import { CustomerHeader } from '../common/CustomerHeader';
 
 interface NavbarProps {
   onOpenMember?: () => void;
@@ -79,110 +80,42 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMember, onOpenOrder }) => 
 
   return (
     <>
-      <header
-        id="main-navbar"
-        className="fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-b border-[#E0F2FE] shadow-[0_1px_8px_rgba(0,0,0,0.03)] transition-all duration-300"
+      <CustomerHeader
+        onBrandClick={() => {
+          const target = document.querySelector('#home');
+          if (target) target.scrollIntoView({ behavior: 'smooth' });
+        }}
+        showWhatsApp={true}
+        whatsappLink={generalWhatsAppLink}
+        showProfile={onOpenMember !== undefined}
+        onOpenProfile={onOpenMember}
+        showMenuToggle={true}
+        isMenuOpen={mobileMenuOpen}
+        onToggleMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
+        showLocationPill={true}
       >
-        {/* Main Nav Container */}
-        <div className="h-16 sm:h-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
-          {/* Logo & Brand Identity */}
-          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-            <a
-              href="#home"
-              onClick={(e) => handleNavClick(e, '#home')}
-              className="flex items-center gap-2.5 sm:gap-3 group focus:outline-none"
-              id="navbar-brand-logo"
-            >
-              <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-[#E0F2FE] shadow-sm bg-white shrink-0 flex items-center justify-center">
-                {siteSettings.logoUrl ? (
-                  <img
-                    src={resolveMediaUrl(siteSettings.logoUrl)}
-                    alt={siteSettings.brandName}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-[#F0F7FF] text-[#0284C7] flex items-center justify-center font-black">
-                    <Coffee className="w-5 h-5" />
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col justify-center text-left">
-                <span className="font-display font-extrabold text-sm sm:text-base md:text-lg tracking-tight text-[#172033] group-hover:text-[#0284C7] transition-colors leading-snug">
-                  {siteSettings.brandName || 'LETON COFFEE'}
-                </span>
-                <span className="text-[10px] sm:text-[11px] text-[#64748B] font-semibold uppercase tracking-wider leading-none mt-0.5">
-                  Dumai Specialty Coffee
-                </span>
-              </div>
-            </a>
-
-            {/* Location Status Pill */}
-            <div className="hidden xl:flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F0F7FF] text-[#0284C7] border border-[#E0F2FE] text-xs font-semibold ml-2">
-              <span className="w-2 h-2 rounded-full bg-[#38BDF8] animate-pulse" />
-              <span>Dumai, Riau • Open Daily 08:00 - 23:00</span>
-            </div>
-          </div>
-
-          {/* Desktop Navigation Pills */}
-          <nav className="hidden lg:flex items-center gap-1 bg-[#F0F7FF]/80 p-1.5 rounded-full border border-[#E0F2FE]">
-            {navItems.map((item) => {
-              const isActive = activeSection === item.id;
-              return (
-                <a
-                  key={item.id}
-                  href={item.href}
-                  id={`nav-link-${item.id}`}
-                  onClick={(e) => handleNavClick(e, item.href)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                    isActive
-                      ? 'bg-[#E0F2FE] text-[#0284C7] font-bold shadow-sm'
-                      : 'text-[#64748B] hover:text-[#172033] hover:bg-white'
-                  }`}
-                >
-                  {item.label}
-                </a>
-              );
-            })}
-          </nav>
-
-          {/* Action CTAs: WA, Member Profile, Mobile Menu */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            <a
-              href={generalWhatsAppLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              id="navbar-wa-cta"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#0284C7] shadow-sm transition-all"
-            >
-              <MessageCircle className="w-3.5 h-3.5" />
-              <span>WA</span>
-            </a>
-
-            {onOpenMember && (
-              <button
-                onClick={onOpenMember}
-                id="navbar-member-btn"
-                title="Login / Akun Member"
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#0284C7] text-white flex items-center justify-center shadow-sm hover:bg-[#0369A1] transition-colors cursor-pointer"
+        {/* Desktop Navigation Pills */}
+        <nav className="hidden lg:flex items-center gap-1 bg-[#F0F7FF]/80 p-1.5 rounded-full border border-[#E0F2FE]">
+          {navItems.map((item) => {
+            const isActive = activeSection === item.id;
+            return (
+              <a
+                key={item.id}
+                href={item.href}
+                id={`nav-link-${item.id}`}
+                onClick={(e) => handleNavClick(e, item.href)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  isActive
+                    ? 'bg-[#E0F2FE] text-[#0284C7] font-bold shadow-sm'
+                    : 'text-[#64748B] hover:text-[#172033] hover:bg-white'
+                }`}
               >
-                <User className="w-4 h-4 text-white" />
-              </button>
-            )}
-
-            {/* Mobile menu trigger */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              id="mobile-menu-toggle-btn"
-              className="p-2 rounded-xl bg-[#F0F7FF] border border-[#E0F2FE] text-[#172033] hover:text-[#0284C7] lg:hidden focus:outline-none"
-              aria-label="Toggle Navigation Menu"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-          </div>
-        </div>
-      </header>
+                {item.label}
+              </a>
+            );
+          })}
+        </nav>
+      </CustomerHeader>
 
       {/* Mobile Menu Drawer */}
       {mobileMenuOpen && (

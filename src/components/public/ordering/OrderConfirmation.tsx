@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { CustomerOrder, OrderOutlet } from '../../../types';
-import { formatRupiah, createWhatsAppLink } from '../../../utils/formatters';
+import {
+  formatRupiah,
+  createWhatsAppLink,
+  formatOrderDate,
+  formatOrderTime,
+  formatOrderDateTime,
+} from '../../../utils/formatters';
 import { subscribeToSingleOrder } from '../../../utils/supabaseOrders';
 import { getSupabase } from '../../../utils/supabase';
 import {
@@ -168,6 +174,8 @@ export const OrderConfirmation: React.FC<OrderConfirmationProps> = ({
   const waMessage = `*PESANAN ONLINE LETON COFFEE* ☕
 ---------------------------------
 *No. Order:* ${currentOrder.orderNumber}
+*Tanggal:* ${formatOrderDate(currentOrder.createdAt)}
+*Jam:* ${formatOrderTime(currentOrder.createdAt)}
 *Outlet:* ${currentOrder.outletName}
 *Customer:* ${currentOrder.customerName}
 *Tipe:* ${currentOrder.orderType}${currentOrder.orderType === 'DINE IN' ? ` (Meja: ${currentOrder.tableNumber || '-'})` : ''}
@@ -390,56 +398,75 @@ Halo Barista ${currentOrder.outletName}, saya ingin menanyakan status pesanan no
           </p>
         </div>
 
-        {/* Meta Grid: Order Number, Outlet, Customer Name, Order Type */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2 text-xs">
-          <div className="space-y-1">
-            <span className="font-mono text-[11px] text-[#64748B] uppercase block">Nomor Order:</span>
-            <div className="flex items-center gap-2">
-              <span className="font-mono font-black text-lg text-[#0284C7]">
-                {currentOrder.orderNumber}
-              </span>
-              <button
-                type="button"
-                onClick={handleCopyOrderNumber}
-                className="px-2 py-0.5 rounded-md bg-[#F0F7FF] hover:bg-[#E0F2FE] text-[#0284C7] text-[11px] font-mono font-bold border border-[#BAE6FD] cursor-pointer transition-colors"
-                title="Salin nomor order"
-              >
-                {copied ? 'Tersalin' : 'Salin'}
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <span className="font-mono text-[11px] text-[#64748B] uppercase block">Outlet:</span>
-            <span className="font-display font-bold text-sm text-[#172033] block">
-              {currentOrder.outletName}
+        {/* RINGKASAN PESANAN (Meta Grid) */}
+        <div className="bg-[#F8FBFF] rounded-2xl p-4 sm:p-5 border border-[#E0F2FE] space-y-4">
+          <div className="flex items-center justify-between border-b border-[#E0F2FE] pb-2.5">
+            <h3 className="font-display font-black text-xs uppercase tracking-wider text-[#0284C7] flex items-center gap-1.5">
+              <Receipt className="w-4 h-4" />
+              <span>RINGKASAN PESANAN</span>
+            </h3>
+            <span className="text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              TERCATAT DI SISTEM
             </span>
           </div>
 
-          <div className="space-y-1">
-            <span className="font-mono text-[11px] text-[#64748B] uppercase block">Nama Customer:</span>
-            <span className="font-display font-bold text-sm text-[#172033] block">
-              {currentOrder.customerName}
-            </span>
-            {currentOrder.customerPhone && (
-              <span className="font-mono text-[11px] text-[#64748B] block">
-                {currentOrder.customerPhone}
-              </span>
-            )}
-          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+            <div className="space-y-1">
+              <span className="font-mono text-[11px] text-[#64748B] uppercase block">No. Pesanan:</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-black text-base sm:text-lg text-[#0284C7]">
+                  {currentOrder.orderNumber}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyOrderNumber}
+                  className="px-2 py-0.5 rounded-md bg-white hover:bg-[#E0F2FE] text-[#0284C7] text-[11px] font-mono font-bold border border-[#BAE6FD] cursor-pointer transition-colors"
+                  title="Salin nomor order"
+                >
+                  {copied ? 'Tersalin' : 'Salin'}
+                </button>
+              </div>
+            </div>
 
-          <div className="space-y-1">
-            <span className="font-mono text-[11px] text-[#64748B] uppercase block">Order Type:</span>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-[#172033]">
-                {currentOrder.orderType === 'DINE IN' ? 'Dine In (Makan di Tempat)' : 'Take Away (Bawa Pulang)'}
+            <div className="space-y-1">
+              <span className="font-mono text-[11px] text-[#64748B] uppercase block">Tanggal:</span>
+              <span className="font-bold text-sm text-[#172033] block">
+                {formatOrderDate(currentOrder.createdAt)}
               </span>
             </div>
-            {currentOrder.orderType === 'DINE IN' && (
-              <span className="font-mono font-bold text-xs text-[#0284C7] block">
-                Nomor Meja: {currentOrder.tableNumber || '-'}
+
+            <div className="space-y-1">
+              <span className="font-mono text-[11px] text-[#64748B] uppercase block">Jam:</span>
+              <span className="font-mono font-bold text-sm text-[#0284C7] block">
+                {formatOrderTime(currentOrder.createdAt)}
               </span>
-            )}
+            </div>
+
+            <div className="space-y-1">
+              <span className="font-mono text-[11px] text-[#64748B] uppercase block">Outlet:</span>
+              <span className="font-display font-bold text-sm text-[#172033] block">
+                {currentOrder.outletName}
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              <span className="font-mono text-[11px] text-[#64748B] uppercase block">Total:</span>
+              <span className="font-mono font-black text-base text-[#0284C7] block">
+                {formatRupiah(currentOrder.totalAmount)}
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              <span className="font-mono text-[11px] text-[#64748B] uppercase block">Customer / Tipe:</span>
+              <span className="font-display font-bold text-xs text-[#172033] block">
+                {currentOrder.customerName} • {currentOrder.orderType === 'DINE IN' ? `Dine In (Meja ${currentOrder.tableNumber || '-'})` : 'Take Away'}
+              </span>
+              {currentOrder.customerPhone && (
+                <span className="font-mono text-[11px] text-[#64748B] block">
+                  {currentOrder.customerPhone}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -603,13 +630,7 @@ Halo Barista ${currentOrder.outletName}, saya ingin menanyakan status pesanan no
               “Silakan tunjukkan nomor order ini saat mengambil pesanan di outlet.”
             </p>
             <p className="text-[11px] text-[#64748B] font-mono">
-              Waktu Transaksi: {new Date(currentOrder.createdAt).toLocaleDateString('id-ID', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })} WIB
+              Waktu Transaksi: {formatOrderDateTime(currentOrder.createdAt)}
             </p>
           </div>
 

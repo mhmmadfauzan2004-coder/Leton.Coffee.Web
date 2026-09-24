@@ -9,7 +9,7 @@ import {
   CustomerProfile,
 } from '../../../types';
 import { calculateItemUnitPrice } from '../../../data/addOnsData';
-import { formatRupiah } from '../../../utils/formatters';
+import { formatRupiah, formatOrderDate, formatOrderTime } from '../../../utils/formatters';
 import { uploadPaymentReceipt } from '../../../utils/supabaseOrders';
 import { isMenuItemAvailableForOutlet } from '../../../utils/supabaseStock';
 import {
@@ -91,12 +91,14 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [uploadedFileSize, setUploadedFileSize] = useState<string | null>(null);
 
-  // Timer countdown
+  // Timer countdown & Current Live Clock (Asia/Jakarta timezone)
   const [timeLeft, setTimeLeft] = useState<number>(15 * 60);
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+      setCurrentTime(new Date());
     }, 1000);
     return () => clearInterval(timer);
   }, []);
@@ -299,6 +301,28 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
           >
             Ubah
           </button>
+        </div>
+
+        {/* Section 1.5: Informasi Waktu Checkout (Asia/Jakarta WIB) */}
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#e4efff] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-[#eef4ff] text-[#006389] flex items-center justify-center shrink-0">
+              <Clock className="w-4.5 h-4.5" />
+            </div>
+            <div>
+              <span className="text-[10px] uppercase tracking-wider text-[#3e484f] font-bold block">
+                Informasi Waktu Checkout (Asia/Jakarta • UTC+7)
+              </span>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs sm:text-sm font-extrabold text-[#041d32]">
+                <span>Tanggal: <span className="font-mono text-[#006389]">{formatOrderDate(currentTime)}</span></span>
+                <span className="hidden sm:inline text-slate-300">•</span>
+                <span>Jam: <span className="font-mono text-[#006389]">{formatOrderTime(currentTime)}</span></span>
+              </div>
+            </div>
+          </div>
+          <div className="text-[11px] font-medium text-[#3e484f] bg-[#f8f9ff] px-3 py-1.5 rounded-lg border border-[#e4efff] shrink-0">
+            Timestamp resmi dicatat saat pesanan dikonfirmasi
+          </div>
         </div>
 
         {/* Section 2: Ringkasan Pesanan (Order Items Summary) */}
@@ -895,7 +919,7 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
                 : 'bg-[#006389] hover:bg-[#004c6b] text-white shadow-[0_4px_16px_rgba(0,99,137,0.25)] active:scale-[0.99] cursor-pointer'
             }`}
           >
-            <span>{isSubmitting ? 'MEMPROSES PESANAN...' : 'KONFIRMASI PEMBAYARAN & PLACE ORDER'}</span>
+            <span>{isSubmitting ? 'MEMPROSES PESANAN...' : 'BUAT PESANAN SEKARANG'}</span>
             <Bolt className="w-4.5 h-4.5" />
           </button>
 

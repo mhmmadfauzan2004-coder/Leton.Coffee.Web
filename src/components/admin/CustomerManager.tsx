@@ -8,6 +8,7 @@ import {
 } from '../../utils/supabaseCustomers';
 import { fetchCustomerOrdersForAdmin } from '../../utils/supabaseOrders';
 import { CustomerOrder } from '../../types';
+import { formatOrderDateTime } from '../../utils/formatters';
 import {
   Users,
   Search,
@@ -146,21 +147,9 @@ export const CustomerManager: React.FC = () => {
     }
   };
 
-  // Format date helper (Indonesian locale)
+  // Format date helper (Indonesian locale in Asia/Jakarta timezone)
   const formatDate = (isoString: string) => {
-    if (!isoString) return '-';
-    try {
-      const date = new Date(isoString);
-      return new Intl.DateTimeFormat('id-ID', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }).format(date);
-    } catch {
-      return isoString;
-    }
+    return formatOrderDateTime(isoString);
   };
 
   // Filter customers by Search Query (Nama atau Nomor HP)

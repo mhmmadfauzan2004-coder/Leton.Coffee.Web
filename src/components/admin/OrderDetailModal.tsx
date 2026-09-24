@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { CustomerOrder } from '../../types';
-import { formatRupiah, createWhatsAppLink } from '../../utils/formatters';
+import {
+  formatRupiah,
+  createWhatsAppLink,
+  formatOrderDate,
+  formatOrderTime,
+  formatOrderDateTime,
+} from '../../utils/formatters';
 import { useContent } from '../../context/ContentContext';
 import { processOrderPointsEarning } from '../../utils/supabaseLoyalty';
 import {
@@ -223,16 +229,17 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ isOpen, onCl
                       </div>
 
                       <div className="grid grid-cols-3">
-                        <span className="text-slate-400">Waktu Transaksi</span>
-                        <span className="col-span-2 font-mono text-slate-300 flex items-center gap-1">
+                        <span className="text-slate-400">Tanggal</span>
+                        <span className="col-span-2 font-mono text-slate-300">
+                          {formatOrderDate(order.createdAt)}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-3">
+                        <span className="text-slate-400">Jam</span>
+                        <span className="col-span-2 font-mono font-bold text-[#00E5FF] flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5 text-slate-400" />
-                          {new Date(order.createdAt).toLocaleDateString('id-ID', {
-                            day: 'numeric',
-                            month: 'long',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {formatOrderTime(order.createdAt)}
                         </span>
                       </div>
                     </div>

@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { CustomerOrder } from '../../types';
-import { formatRupiah } from '../../utils/formatters';
+import { formatRupiah, formatOrderDateTime, formatOrderDate, formatOrderTime } from '../../utils/formatters';
 import { X, Printer, Phone, MapPin, ClipboardList, Clock, Layers } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -126,13 +126,12 @@ export const KitchenSlipModal: React.FC<KitchenSlipModalProps> = ({ isOpen, onCl
 
           <div style="font-size: 11px;">
             <div class="flex-between">
-              <span>WAKTU:</span>
-              <span>${new Date(order.createdAt).toLocaleDateString('id-ID', {
-                day: 'numeric',
-                month: 'short',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}</span>
+              <span>TANGGAL:</span>
+              <span class="bold">${formatOrderDate(order.createdAt)}</span>
+            </div>
+            <div class="flex-between">
+              <span>JAM:</span>
+              <span class="bold">${formatOrderTime(order.createdAt)}</span>
             </div>
             <div class="flex-between">
               <span>TIPE:</span>
@@ -277,14 +276,15 @@ export const KitchenSlipModal: React.FC<KitchenSlipModalProps> = ({ isOpen, onCl
                   {/* Metadata fields */}
                   <div className="space-y-1.5 font-mono text-xs border-b border-dashed border-slate-300 pb-3 mb-3">
                     <div className="flex justify-between">
-                      <span className="text-slate-500">WAKTU:</span>
+                      <span className="text-slate-500">TANGGAL:</span>
                       <span className="font-bold text-slate-900">
-                        {new Date(order.createdAt).toLocaleDateString('id-ID', {
-                          day: 'numeric',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        {formatOrderDate(order.createdAt)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">JAM:</span>
+                      <span className="font-bold text-slate-900">
+                        {formatOrderTime(order.createdAt)}
                       </span>
                     </div>
                     <div className="flex justify-between">

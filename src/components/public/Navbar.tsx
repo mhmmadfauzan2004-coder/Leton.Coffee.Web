@@ -86,11 +86,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMember, onOpenOrder }) => 
         {/* Main Nav Container */}
         <div className="h-16 sm:h-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
           {/* Logo & Brand Identity */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
             <a
               href="#home"
               onClick={(e) => handleNavClick(e, '#home')}
-              className="flex items-center gap-3 group focus:outline-none"
+              className="flex items-center gap-2.5 sm:gap-3 group focus:outline-none"
               id="navbar-brand-logo"
             >
               <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-[#E0F2FE] shadow-sm bg-white shrink-0 flex items-center justify-center">
@@ -108,11 +108,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMember, onOpenOrder }) => 
                 )}
               </div>
 
-              <div className="flex flex-col">
-                <span className="font-display font-extrabold text-base sm:text-lg tracking-tight text-[#172033] group-hover:text-[#0284C7] transition-colors leading-tight">
+              <div className="flex flex-col justify-center text-left">
+                <span className="font-display font-extrabold text-sm sm:text-base md:text-lg tracking-tight text-[#172033] group-hover:text-[#0284C7] transition-colors leading-snug">
                   {siteSettings.brandName || 'LETON COFFEE'}
                 </span>
-                <span className="text-[11px] text-[#64748B] font-semibold uppercase tracking-wider">
+                <span className="text-[10px] sm:text-[11px] text-[#64748B] font-semibold uppercase tracking-wider leading-none mt-0.5">
                   Dumai Specialty Coffee
                 </span>
               </div>
@@ -147,19 +147,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMember, onOpenOrder }) => 
             })}
           </nav>
 
-          {/* Action CTAs */}
+          {/* Action CTAs: WA, Member Profile, Mobile Menu */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {onOpenOrder && (
-              <button
-                onClick={onOpenOrder}
-                id="navbar-order-now-cta"
-                className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold text-xs sm:text-sm tracking-wide shadow-[0_4px_14px_rgba(2,132,199,0.25)] hover:shadow-none transition-all cursor-pointer"
-              >
-                <ShoppingBag className="w-4 h-4" />
-                <span>ORDER ONLINE</span>
-              </button>
-            )}
-
             <a
               href={generalWhatsAppLink}
               target="_blank"

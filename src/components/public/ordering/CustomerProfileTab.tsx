@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CustomerProfile, CustomerOrder } from '../../../types';
 import { getSupabase, updateCustomerProfile, getCustomerOrdersRpc, getCustomerSessionToken } from '../../../utils/supabase';
+import { formatOrderDateTime } from '../../../utils/formatters';
 import {
   User,
   Calendar,
@@ -310,18 +311,7 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
   };
 
   const formatDate = (dateString: string) => {
-    try {
-      const d = new Date(dateString);
-      return d.toLocaleDateString('id-ID', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return dateString;
-    }
+    return formatOrderDateTime(dateString);
   };
 
   const filteredOrders = orders.filter((o) => {

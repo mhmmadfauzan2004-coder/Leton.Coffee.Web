@@ -236,6 +236,30 @@ export function sanitizeLoadedData(raw: any): LetonData {
       ...initialLetonData.contactSettings,
       ...(raw.contactSettings || {}),
     },
+    promoBanners:
+      Array.isArray(raw.promoBanners) && raw.promoBanners.length > 0
+        ? raw.promoBanners.map((p: any, idx: number) => ({
+            id: p?.id || `promo-banner-${idx + 1}`,
+            imageUrl: resolveCleanImage(p?.imageUrl, ''),
+            title: p?.title || '',
+            subtitle: p?.subtitle || '',
+            linkUrl: p?.linkUrl || '',
+            sortOrder: typeof p?.sortOrder === 'number' ? p.sortOrder : idx + 1,
+            isActive: typeof p?.isActive === 'boolean' ? p.isActive : true,
+            createdAt: p?.createdAt || new Date().toISOString(),
+            updatedAt: p?.updatedAt || new Date().toISOString(),
+          }))
+        : (initialLetonData.promoBanners || [
+            {
+              id: 'default-promo-1',
+              imageUrl: cleanedHeroBg || '/assets/leton-coffee-beans.jpg',
+              title: 'Welcome to Leton Coffee',
+              subtitle: 'Spesialti Kopi Asli Dumai',
+              sortOrder: 1,
+              isActive: true,
+              createdAt: new Date().toISOString(),
+            },
+          ]),
   };
 }
 

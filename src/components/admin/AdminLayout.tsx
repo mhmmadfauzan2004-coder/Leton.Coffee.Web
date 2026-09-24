@@ -12,6 +12,7 @@ import { BaristaManager } from './BaristaManager';
 import { ContactEditor } from './ContactEditor';
 import { SettingsEditor } from './SettingsEditor';
 import { QrisPaymentEditor } from './QrisPaymentEditor';
+import { PromoBannerManager } from './PromoBannerManager';
 import { OrderManager } from './OrderManager';
 import { StockManager } from './StockManager';
 import { SalesReportManager } from './SalesReportManager';
@@ -67,6 +68,7 @@ import {
   Search,
   Calendar,
   Coffee,
+  Sparkles,
   Gift,
   Bell,
   BellOff,
@@ -279,6 +281,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
   ];
 
   const contentItems = [
+    { id: 'promo-banner', label: 'PROMO BANNER', icon: Sparkles },
     { id: 'home', label: 'HOME / HERO', icon: Home },
     { id: 'qris-payment', label: 'QRIS PAYMENT', icon: QrCode },
     { id: 'chapter-5', label: 'CHAPTER 5 (SUDIRMAN)', icon: MapPin },
@@ -790,6 +793,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
           {activeTab === 'loyalty' && !isOutletAdmin && <LoyaltyManager />}
           {activeTab === 'orders' && <OrderManager />}
           {activeTab === 'stock' && <StockManager />}
+          {activeTab === 'promo-banner' && !isOutletAdmin && <PromoBannerManager />}
           {activeTab === 'home' && !isOutletAdmin && <HomeEditor />}
           {activeTab === 'qris-payment' && !isOutletAdmin && <QrisPaymentEditor />}
           {activeTab === 'chapter-5' && !isOutletAdmin && (

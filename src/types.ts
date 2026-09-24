@@ -168,8 +168,21 @@ export interface ContactSettings {
   footerText: string;
 }
 
+export interface PromoBanner {
+  id: string;
+  imageUrl: string;
+  title?: string;
+  subtitle?: string;
+  linkUrl?: string;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface LetonData {
   siteSettings: SiteSettings;
+  promoBanners?: PromoBanner[];
   branches: BranchItem[];
   mobileService: MobileService;
   menuCategories: MenuCategory[];

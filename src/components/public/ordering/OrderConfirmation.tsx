@@ -175,7 +175,8 @@ export const OrderConfirmation: React.FC<OrderConfirmationProps> = ({
 ---------------------------------
 *No. Order:* ${currentOrder.orderNumber}
 *Tanggal:* ${formatOrderDate(currentOrder.createdAt)}
-*Jam:* ${formatOrderTime(currentOrder.createdAt)}
+*Jam Order:* ${formatOrderTime(currentOrder.createdAt)}
+*Jam Pengambilan:* ${currentOrder.pickupTime || currentOrder.pickup_time || '-'}
 *Outlet:* ${currentOrder.outletName}
 *Customer:* ${currentOrder.customerName}
 *Tipe:* ${currentOrder.orderType}${currentOrder.orderType === 'DINE IN' ? ` (Meja: ${currentOrder.tableNumber || '-'})` : ''}
@@ -436,9 +437,19 @@ Halo Barista ${currentOrder.outletName}, saya ingin menanyakan status pesanan no
             </div>
 
             <div className="space-y-1">
-              <span className="font-mono text-[11px] text-[#64748B] uppercase block">Jam:</span>
+              <span className="font-mono text-[11px] text-[#64748B] uppercase block">Jam Order:</span>
               <span className="font-mono font-bold text-sm text-[#0284C7] block">
                 {formatOrderTime(currentOrder.createdAt)}
+              </span>
+            </div>
+
+            <div className="space-y-1 bg-[#eef4ff] p-2 rounded-xl border border-[#c6e7ff]">
+              <span className="font-mono text-[11px] text-[#006389] font-extrabold uppercase block flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Jam Pengambilan:</span>
+              </span>
+              <span className="font-mono font-black text-sm text-[#006389] block">
+                {currentOrder.pickupTime || currentOrder.pickup_time || '-'}
               </span>
             </div>
 

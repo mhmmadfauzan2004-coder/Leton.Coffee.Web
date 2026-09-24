@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useContent } from '../../../context/ContentContext';
 import { resolveMediaUrl } from '../../../utils/api';
 import {
@@ -53,6 +53,7 @@ interface OrderCheckoutProps {
     paymentReceiptUrl?: string;
     paymentReceiptPath?: string;
     isMemberChoice?: boolean;
+    pickupTime: string;
   }) => Promise<void>;
   isSubmitting: boolean;
   customerProfile?: CustomerProfile | null;
@@ -78,7 +79,45 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   const [isMemberChoice, setIsMemberChoice] = useState<boolean>(customerProfile ? true : false);
   const [orderNote, setOrderNote] = useState<string>(generalNote || '');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('QRIS');
+  const [pickupTime, setPickupTime] = useState<string>('');
   const [formError, setFormError] = useState<string>('');
+
+  // Generate pickup time options based on outlet operating hours
+  const pickupTimeOptions = useMemo(() => {
+    const slots: string[] = [];
+    let startHour = 8;
+    let endHour = 23;
+    let endMinute = 0;
+
+    const hoursStr = outlet?.hours || (outlet as any)?.openingHours || '';
+    if (hoursStr) {
+      const match = hoursStr.match(/(\d{1,2}):(\d{2})\s*[–\-]\s*(\d{1,2}):(\d{2})/);
+      if (match) {
+        startHour = parseInt(match[1], 10);
+        endHour = parseInt(match[3], 10);
+        endMinute = parseInt(match[4], 10);
+      }
+    }
+
+    for (let h = startHour; h <= endHour; h++) {
+      for (let m of [0, 30]) {
+        if (h === endHour && m > endMinute) break;
+        const hh = h.toString().padStart(2, '0');
+        const mm = m.toString().padStart(2, '0');
+        slots.push(`${hh}:${mm} WIB`);
+      }
+    }
+
+    if (slots.length === 0) {
+      return [
+        '17:00 WIB', '17:30 WIB', '18:00 WIB', '18:30 WIB',
+        '19:00 WIB', '19:30 WIB', '20:00 WIB', '20:30 WIB',
+        '21:00 WIB', '21:30 WIB', '22:00 WIB'
+      ];
+    }
+
+    return slots;
+  }, [outlet?.hours]);
   const [copiedAmount, setCopiedAmount] = useState<boolean>(false);
   const [showQrisInstructions, setShowQrisInstructions] = useState<boolean>(false);
   const [isQrisVisible, setIsQrisVisible] = useState<boolean>(false);
@@ -196,6 +235,11 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
       return;
     }
 
+    if (!pickupTime || !pickupTime.trim()) {
+      setFormError('Silakan pilih jam pengambilan pesanan.');
+      return;
+    }
+
     if (orderType === 'DINE IN' && !tableNumber.trim()) {
       setFormError('Nomor meja wajib diisi untuk pesanan Dine In (Makan di Tempat).');
       return;
@@ -215,6 +259,7 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
       paymentReceiptUrl: paymentMethod === 'QRIS' ? (uploadedReceiptUrl || undefined) : undefined,
       paymentReceiptPath: paymentMethod === 'QRIS' ? (uploadedReceiptPath || undefined) : undefined,
       isMemberChoice,
+      pickupTime,
     });
   };
 
@@ -323,6 +368,67 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
           <div className="text-[11px] font-medium text-[#3e484f] bg-[#f8f9ff] px-3 py-1.5 rounded-lg border border-[#e4efff] shrink-0">
             Timestamp resmi dicatat saat pesanan dikonfirmasi
           </div>
+        </div>
+
+        {/* Section 1.8: Jam Pengambilan Pesanan */}
+        <div className="bg-white rounded-xl p-4 sm:p-5 border border-[#e4efff] shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <label htmlFor="pickup-time-select" className="block text-xs font-black uppercase tracking-wider text-[#041d32] flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#006389]" />
+              <span>JAM PENGAMBILAN PESANAN</span>
+              <span className="text-rose-500 font-bold">*</span>
+            </label>
+            <span className="text-[10px] font-bold text-[#006389] bg-[#eef4ff] px-2.5 py-0.5 rounded-full border border-[#dbe9ff]">
+              Wajib Dipilih
+            </span>
+          </div>
+
+          <p className="text-xs text-[#3e484f] font-medium">
+            Pesanan ini mau diambil jam berapa? Silakan tentukan perkiraan jam mengambil pesanan di outlet {outlet.shortName || outlet.name}.
+          </p>
+
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#006389]">
+              <Clock className="w-4 h-4" />
+            </div>
+            <select
+              id="pickup-time-select"
+              value={pickupTime}
+              onChange={(e) => {
+                setPickupTime(e.target.value);
+                if (formError) setFormError('');
+              }}
+              className={`w-full pl-10 pr-10 py-3 rounded-xl border text-xs sm:text-sm font-extrabold appearance-none transition-all cursor-pointer ${
+                pickupTime
+                  ? 'bg-amber-50/60 border-amber-300 text-amber-950 ring-2 ring-amber-500/20 shadow-xs'
+                  : 'bg-[#f8f9ff] border-[#c2dcff] text-[#3e484f] hover:border-[#006389] focus:bg-white focus:border-[#006389] focus:ring-2 focus:ring-[#006389]/20'
+              }`}
+            >
+              <option value="" disabled>
+                🕐 Pilih Jam Pengambilan ▼
+              </option>
+              {pickupTimeOptions.map((slot) => (
+                <option key={slot} value={slot}>
+                  🕐 {slot}
+                </option>
+              ))}
+            </select>
+            <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-[#006389]">
+              <ChevronDown className="w-4 h-4" />
+            </div>
+          </div>
+
+          {pickupTime && (
+            <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200/80 text-amber-900 text-xs font-bold flex items-center justify-between shadow-2xs">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Jam Pengambilan Terpilih:</span>
+              </div>
+              <span className="font-mono text-sm font-black text-amber-900 bg-white px-3 py-1 rounded-lg border border-amber-300 shadow-2xs">
+                🕐 {pickupTime}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Section 2: Ringkasan Pesanan (Order Items Summary) */}

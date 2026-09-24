@@ -1333,6 +1333,8 @@ app.get('/api/orders', async (req, res) => {
           rejectionReason: row.rejection_reason || row.rejectionReason,
           orderStatus: row.order_status || row.orderStatus || 'NEW',
           customerNote: row.customer_note || row.customerNote || '',
+          pickupTime: row.pickup_time || row.pickupTime || undefined,
+          pickup_time: row.pickup_time || row.pickupTime || undefined,
           createdAt: row.created_at || row.createdAt || new Date().toISOString(),
           updatedAt: row.updated_at || row.updatedAt,
         }));
@@ -1455,6 +1457,8 @@ app.patch('/api/orders/:id', async (req, res) => {
           rejectionReason: dbRow.rejection_reason || dbRow.rejectionReason,
           orderStatus: dbRow.order_status || dbRow.orderStatus || 'NEW',
           customerNote: dbRow.customer_note || dbRow.customerNote || '',
+          pickupTime: dbRow.pickup_time || dbRow.pickupTime || undefined,
+          pickup_time: dbRow.pickup_time || dbRow.pickupTime || undefined,
           createdAt: dbRow.created_at || dbRow.createdAt || new Date().toISOString(),
           updatedAt: dbRow.updated_at || dbRow.updatedAt,
         };
@@ -2264,6 +2268,13 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
   const rawTotal = order.totalAmount ?? order.total_amount ?? order.total ?? 0;
   const totalNum = typeof rawTotal === 'number' ? rawTotal : Number(rawTotal) || 0;
   const totalFormatted = `Rp${totalNum.toLocaleString('id-ID')}`;
+  const rawPickup = order.pickupTime || order.pickup_time || order.scheduled_pickup_time;
+  const pickupLine = rawPickup
+    ? (String(rawPickup).includes('WIB') ? `Ambil: ${rawPickup}` : `Ambil: ${rawPickup} WIB`)
+    : '';
+  const pushBodyMessage = pickupLine
+    ? `Pesanan Baru Masuk!\n#${orderNum} • ${customerName}\n${pickupLine}\n${totalFormatted}`
+    : `Pesanan Baru Masuk!\n#${orderNum} • ${customerName} • ${totalFormatted}`;
 
   if (processedPushOrderIds.has(order.id)) {
     console.log(`[WebPush Trace] Background Push already triggered for order ID: ${order.id} (#${orderNum}). Skipping duplicate.`);
@@ -2365,7 +2376,7 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
 
     const payload = JSON.stringify({
       title: '🔔 Leton Coffee',
-      body: `Pesanan Baru Masuk!\n#${orderNum} • ${customerName} • ${totalFormatted}`,
+      body: pushBodyMessage,
       icon: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
       tag: `order-push-${order.id || Date.now()}`,
       data: {
@@ -2397,14 +2408,14 @@ async function sendBackgroundPushNotificationForOrder(order: any, triggerSource 
         const subPayload = JSON.stringify({
           web_push: 8030,
           title: '🔔 Leton Coffee',
-          body: `Pesanan Baru Masuk!\n#${orderNum} • ${customerName} • ${totalFormatted}`,
+          body: pushBodyMessage,
           icon: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
           badge: 'https://leton-coffee-web.pages.dev/logo_icon_small.png',
           tag: `order-push-${order.id || Date.now()}`,
           navigate: `https://leton-coffee-web.pages.dev/#admin?tab=orders&orderId=${encodeURIComponent(order.id || '')}`,
           notification: {
             title: '🔔 Leton Coffee',
-            body: `Pesanan Baru Masuk! #${orderNum} • ${customerName} • ${totalFormatted}`,
+            body: pushBodyMessage,
             navigate: `https://leton-coffee-web.pages.dev/#admin?tab=orders&orderId=${encodeURIComponent(order.id || '')}`,
             silent: false
           },

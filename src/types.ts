@@ -291,6 +291,8 @@ export interface CustomerOrder {
   rejectionReason?: string;
   orderStatus: OrderStatus;
   customerNote?: string;
+  pickupTime?: string; // e.g. "20:45 WIB" or "20:45"
+  pickup_time?: string;
   createdAt: string; // ISO String
   updatedAt?: string;
 }

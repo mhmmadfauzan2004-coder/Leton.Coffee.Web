@@ -613,6 +613,10 @@ export const OrderManager: React.FC = () => {
                 <div className="mt-2 space-y-1 text-xs text-slate-300 font-mono">
                   <p>Order: <span className="font-bold text-white">{notificationState.currentOrder.orderNumber.startsWith('#') ? notificationState.currentOrder.orderNumber : `#${notificationState.currentOrder.orderNumber}`}</span></p>
                   <p>Customer: <span className="text-white">{notificationState.currentOrder.customerName}</span></p>
+                  <p className="text-amber-300 font-bold flex items-center gap-1">
+                    <span>🕐 Pengambilan:</span>
+                    <span className="font-mono bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-500/40 text-amber-200">{notificationState.currentOrder.pickupTime || notificationState.currentOrder.pickup_time || '-'}</span>
+                  </p>
                   <p>Outlet: <span className="text-white">{notificationState.currentOrder.outletName}</span></p>
                   <p>Total: <span className="font-bold text-[#00E5FF]">{formatRupiah(notificationState.currentOrder.totalAmount)}</span></p>
                 </div>
@@ -1068,7 +1072,7 @@ export const OrderManager: React.FC = () => {
                 </div>
 
                 {/* 2. Customer & Dining Context Bar */}
-                <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-[#eef4ff] my-2">
+                <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-[#eef4ff] my-1.5">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <User className="w-3.5 h-3.5 text-[#006389] shrink-0" />
                     <span className="text-xs text-[#041d32] font-bold truncate">
@@ -1088,6 +1092,17 @@ export const OrderManager: React.FC = () => {
                       </>
                     )}
                   </div>
+                </div>
+
+                {/* Pickup Time Badge for Baristas */}
+                <div className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-amber-50 border border-amber-200/90 my-1 text-amber-950 font-black text-xs">
+                  <span className="flex items-center gap-1.5 text-amber-900 font-extrabold">
+                    <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>AMBIL:</span>
+                  </span>
+                  <span className="font-mono text-xs font-black text-amber-950 bg-white px-2 py-0.5 rounded-md border border-amber-300 shadow-2xs">
+                    {order.pickupTime || order.pickup_time || '-'}
+                  </span>
                 </div>
 
                 {/* 3. Compact Menu Item Specs */}

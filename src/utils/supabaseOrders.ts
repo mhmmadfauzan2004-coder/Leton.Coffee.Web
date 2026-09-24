@@ -76,6 +76,7 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_receipt_url TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_receipt_path TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_note TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS pickup_time TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_verified_at TIMESTAMPTZ;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
@@ -957,6 +958,7 @@ export async function createNewOrder(
       rejection_reason: orderData.rejectionReason || null,
       order_status: originalOrderStatus,
       customer_note: orderData.customerNote || null,
+      pickup_time: orderData.pickupTime || orderData.pickup_time || null,
       created_at: orderData.createdAt || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -1117,6 +1119,8 @@ export async function fetchAllOrders(targetOutletId?: string): Promise<CustomerO
         rejectionReason: row.rejection_reason || row.rejectionReason,
         orderStatus: row.order_status || row.orderStatus || 'NEW',
         customerNote: row.customer_note || row.customerNote || '',
+        pickupTime: row.pickup_time || row.pickupTime || undefined,
+        pickup_time: row.pickup_time || row.pickupTime || undefined,
         createdAt: row.created_at || row.createdAt || new Date().toISOString(),
         updatedAt: row.updated_at || row.updatedAt,
       }));
@@ -1641,6 +1645,8 @@ export function subscribeToOrdersRealtime(
               rejectionReason: raw.rejection_reason || raw.rejectionReason,
               orderStatus: raw.order_status || raw.orderStatus || 'NEW',
               customerNote: raw.customer_note || raw.customerNote || '',
+              pickupTime: raw.pickup_time || raw.pickupTime || undefined,
+              pickup_time: raw.pickup_time || raw.pickupTime || undefined,
               createdAt: raw.created_at || raw.createdAt || new Date().toISOString(),
             };
             refresh(newOrder);
@@ -1771,6 +1777,8 @@ export async function fetchSingleOrder(orderIdOrNumber: string): Promise<Custome
         rejectionReason: data.rejection_reason || data.rejectionReason,
         orderStatus: data.order_status || data.orderStatus || 'NEW',
         customerNote: data.customer_note || data.customerNote || '',
+        pickupTime: data.pickup_time || data.pickupTime || undefined,
+        pickup_time: data.pickup_time || data.pickupTime || undefined,
         createdAt: data.created_at || data.createdAt || new Date().toISOString(),
         updatedAt: data.updated_at || data.updatedAt,
       };
@@ -1959,6 +1967,8 @@ export async function fetchCustomerOrdersForAdmin(
         rejectionReason: row.rejection_reason || row.rejectionReason,
         orderStatus: row.order_status || row.orderStatus || 'NEW',
         customerNote: row.customer_note || row.customerNote || '',
+        pickupTime: row.pickup_time || row.pickupTime || undefined,
+        pickup_time: row.pickup_time || row.pickupTime || undefined,
         createdAt: row.created_at || row.createdAt || new Date().toISOString(),
       }));
     }

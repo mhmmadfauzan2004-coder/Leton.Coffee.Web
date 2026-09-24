@@ -298,6 +298,7 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
     paymentReceiptUrl?: string;
     paymentReceiptPath?: string;
     isMemberChoice?: boolean;
+    pickupTime?: string;
   }) => {
     if (!selectedOutlet) return;
     setIsSubmitting(true);
@@ -372,6 +373,8 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
         paymentReceiptPath: details.paymentReceiptPath,
         orderStatus: 'NEW',
         customerNote: generalNote || undefined,
+        pickupTime: details.pickupTime || undefined,
+        pickup_time: details.pickupTime || undefined,
         createdAt: new Date().toISOString(),
       };
 

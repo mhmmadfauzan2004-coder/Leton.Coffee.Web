@@ -130,8 +130,12 @@ export const KitchenSlipModal: React.FC<KitchenSlipModalProps> = ({ isOpen, onCl
               <span class="bold">${formatOrderDate(order.createdAt)}</span>
             </div>
             <div class="flex-between">
-              <span>JAM:</span>
+              <span>JAM ORDER:</span>
               <span class="bold">${formatOrderTime(order.createdAt)}</span>
+            </div>
+            <div class="flex-between" style="background-color: #fef3c7; padding: 2px 4px; margin: 2px 0;">
+              <span class="bold" style="color: #92400e;">JAM AMBIL:</span>
+              <span class="bold" style="color: #92400e; font-size: 13px;">${order.pickupTime || order.pickup_time || '-'}</span>
             </div>
             <div class="flex-between">
               <span>TIPE:</span>
@@ -282,9 +286,18 @@ export const KitchenSlipModal: React.FC<KitchenSlipModalProps> = ({ isOpen, onCl
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">JAM:</span>
+                      <span className="text-slate-500">JAM ORDER:</span>
                       <span className="font-bold text-slate-900">
                         {formatOrderTime(order.createdAt)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between bg-amber-50 p-1.5 rounded border border-amber-200">
+                      <span className="font-bold text-amber-900 flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-amber-700" />
+                        JAM AMBIL:
+                      </span>
+                      <span className="font-black text-amber-950 font-mono text-xs">
+                        {order.pickupTime || order.pickup_time || '-'}
                       </span>
                     </div>
                     <div className="flex justify-between">

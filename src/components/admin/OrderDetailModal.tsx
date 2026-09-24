@@ -229,17 +229,27 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({ isOpen, onCl
                       </div>
 
                       <div className="grid grid-cols-3">
-                        <span className="text-slate-400">Tanggal</span>
+                        <span className="text-slate-400">Tanggal Order</span>
                         <span className="col-span-2 font-mono text-slate-300">
                           {formatOrderDate(order.createdAt)}
                         </span>
                       </div>
 
                       <div className="grid grid-cols-3">
-                        <span className="text-slate-400">Jam</span>
-                        <span className="col-span-2 font-mono font-bold text-[#00E5FF] flex items-center gap-1.5">
+                        <span className="text-slate-400">Jam Order</span>
+                        <span className="col-span-2 font-mono font-bold text-slate-300 flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5 text-slate-400" />
                           {formatOrderTime(order.createdAt)}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-3 bg-amber-950/40 p-2 rounded-xl border border-amber-500/30">
+                        <span className="text-amber-400 font-extrabold flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-amber-400" />
+                          Jam Pengambilan
+                        </span>
+                        <span className="col-span-2 font-mono font-black text-amber-300 text-sm">
+                          {order.pickupTime || order.pickup_time || '-'}
                         </span>
                       </div>
                     </div>

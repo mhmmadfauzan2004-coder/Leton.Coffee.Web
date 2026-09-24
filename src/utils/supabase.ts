@@ -490,10 +490,22 @@ function parseRpcResponse(rawData: any): { success: boolean; token?: string; cus
       return { success: false, error: 'Format response tidak valid' };
     }
   }
+
+  const cust = parsed.customer || (parsed.customer_id ? {
+    id: parsed.customer_id,
+    userId: parsed.customer_id,
+    namaLengkap: parsed.nama_lengkap,
+    nomorHp: parsed.nomor_hp,
+    tanggalLahir: parsed.tanggal_lahir,
+    pointsBalance: parsed.points_balance,
+    totalPointsEarned: parsed.total_points_earned,
+    totalPointsRedeemed: parsed.total_points_redeemed,
+  } : undefined);
+
   return {
     success: Boolean(parsed.success),
     token: parsed.token || parsed.session_token || parsed.p_token,
-    customer: parsed.customer,
+    customer: cust,
     error: parsed.error || parsed.message,
   };
 }
@@ -574,8 +586,9 @@ export async function registerCustomer(
 
 /**
  * Customer Login using Nomor HP and Password.
- * Normalizes phone number, queries customer, and validates password.
- * Generates and returns a secure server-side session token upon bcrypt verification.
+ * Strategy 1: Direct Supabase RPC `customer_login_by_phone`.
+ * Strategy 2: Backend API fallback `/api/customer/login` (with bcrypt validation).
+ * Strategy 3: Supabase RPC `customer_login`.
  */
 export async function loginCustomer(
   inputPhone: string,
@@ -592,23 +605,81 @@ export async function loginCustomer(
     }
 
     const normalizedPhone = normalizePhoneTo08(rawInput);
+    const client = getSupabase();
 
-    // Prioritaskan backend Express/Cloud Run API sebagai satu-satunya flow login customer
+    // ----------------------------------------------------
+    // STRATEGY 1: Direct Supabase RPC customer_login_by_phone
+    // ----------------------------------------------------
     try {
-      const res = await fetch(getApiUrl('/api/customer/login'), {
+      const resRpc = await client.rpc('customer_login_by_phone', {
+        p_phone: normalizedPhone,
+        p_password: password,
+      });
+
+      console.log('[loginCustomer DIAGNOSTIC 1 - customer_login_by_phone]', {
+        normalized_phone: normalizedPhone,
+        rpc_called: 'customer_login_by_phone',
+        rpc_error_code: resRpc.error?.code || null,
+        rpc_error_message: resRpc.error?.message || null,
+        rpc_data_received: Boolean(resRpc.data),
+        login_success: resRpc.data?.success || false,
+      });
+
+      if (!resRpc.error && resRpc.data) {
+        const parsed = parseRpcResponse(resRpc.data);
+        if (parsed.success) {
+          const sessionToken = parsed.token;
+          const profile = extractCustomerProfile(parsed.customer);
+
+          if (typeof window !== 'undefined') {
+            if (sessionToken) {
+              localStorage.setItem(CUSTOMER_TOKEN_KEY, sessionToken);
+            }
+            localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
+          }
+
+          return { success: true, profile };
+        } else {
+          // RPC executed and customer credentials were validly evaluated as incorrect
+          return {
+            success: false,
+            error: 'Nomor HP atau password salah.',
+          };
+        }
+      }
+    } catch (rpcErr) {
+      console.warn('[loginCustomer Strategy 1 exception]:', rpcErr);
+    }
+
+    // ----------------------------------------------------
+    // STRATEGY 2: Backend Express/Cloud Run API (/api/customer/login)
+    // Runs on same host in AI Studio Preview / Cloud Run
+    // ----------------------------------------------------
+    try {
+      const apiUrl = getApiUrl('/api/customer/login');
+      const apiRes = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: normalizedPhone,
           nomorHp: normalizedPhone,
+          inputPhone: normalizedPhone,
           password: password,
         }),
       });
 
-      const parsed = await res.json().catch(() => null);
-      if (res.ok && parsed && parsed.success) {
-        const sessionToken = parsed.token;
-        const profile = extractCustomerProfile(parsed.customer);
+      const parsedApi = await apiRes.json().catch(() => null);
+
+      console.log('[loginCustomer DIAGNOSTIC 2 - Backend API /api/customer/login]', {
+        api_url: apiUrl,
+        status: apiRes.status,
+        success: parsedApi?.success || false,
+        error: parsedApi?.error || null,
+      });
+
+      if (apiRes.ok && parsedApi && parsedApi.success) {
+        const sessionToken = parsedApi.token;
+        const profile = extractCustomerProfile(parsedApi.customer);
 
         if (typeof window !== 'undefined') {
           if (sessionToken) {
@@ -620,33 +691,72 @@ export async function loginCustomer(
         return { success: true, profile };
       }
 
-      if (parsed && !parsed.success) {
+      if (parsedApi && !parsedApi.success && (apiRes.status === 400 || apiRes.status === 401)) {
         return {
           success: false,
-          error: parsed.error || 'Nomor HP atau password salah.',
+          error: parsedApi.error || 'Nomor HP atau password salah.',
         };
       }
-
-      return {
-        success: false,
-        error: 'Nomor HP atau password salah.',
-      };
     } catch (apiErr) {
-      console.error('[loginCustomer] API call error:', apiErr);
-      return {
-        success: false,
-        error: 'Gagal terhubung ke server login. Silakan periksa koneksi internet Anda.',
-      };
+      console.warn('[loginCustomer Strategy 2 Backend API exception]:', apiErr);
     }
+
+    // ----------------------------------------------------
+    // STRATEGY 3: Supabase RPC customer_login fallback
+    // ----------------------------------------------------
+    try {
+      const resRpc2 = await client.rpc('customer_login', {
+        p_nama: normalizedPhone,
+        p_password: password,
+      });
+
+      console.log('[loginCustomer DIAGNOSTIC 3 - customer_login fallback]', {
+        normalized_phone: normalizedPhone,
+        rpc_called: 'customer_login',
+        rpc_error_code: resRpc2.error?.code || null,
+        rpc_error_message: resRpc2.error?.message || null,
+        rpc_data_received: Boolean(resRpc2.data),
+        login_success: resRpc2.data?.success || false,
+      });
+
+      if (!resRpc2.error && resRpc2.data) {
+        const parsed = parseRpcResponse(resRpc2.data);
+        if (parsed.success) {
+          const sessionToken = parsed.token;
+          const profile = extractCustomerProfile(parsed.customer);
+
+          if (typeof window !== 'undefined') {
+            if (sessionToken) {
+              localStorage.setItem(CUSTOMER_TOKEN_KEY, sessionToken);
+            }
+            localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
+          }
+
+          return { success: true, profile };
+        } else {
+          return {
+            success: false,
+            error: 'Nomor HP atau password salah.',
+          };
+        }
+      }
+    } catch (rpc2Err) {
+      console.warn('[loginCustomer Strategy 3 exception]:', rpc2Err);
+    }
+
+    return {
+      success: false,
+      error: 'Terjadi gangguan saat masuk. Silakan coba lagi.',
+    };
   } catch (err: any) {
-    console.error('[Customer Login] Exception:', err);
-    return { success: false, error: 'Nomor HP atau password salah.' };
+    console.error('[Customer Login Main Exception]:', err);
+    return { success: false, error: 'Terjadi gangguan saat masuk. Silakan coba lagi.' };
   }
 }
 
 /**
  * Retrieve current customer profile from active server-side session token.
- * Verified first against backend /api/customer/me, with fallback to Supabase RPC.
+ * Direct Supabase RPC verification (customer_get_session).
  */
 export async function getCurrentCustomerProfile(): Promise<CustomerProfile | null> {
   if (typeof window === 'undefined') return null;
@@ -654,27 +764,7 @@ export async function getCurrentCustomerProfile(): Promise<CustomerProfile | nul
   const token = localStorage.getItem(CUSTOMER_TOKEN_KEY);
   if (!token) return null;
 
-  // 1. Verifikasi melalui backend API terlebih dahulu
-  try {
-    const res = await fetch(getApiUrl('/api/customer/me'), {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (res.ok) {
-      const parsed = await res.json().catch(() => null);
-      if (parsed && parsed.success && parsed.customer) {
-        const profile = extractCustomerProfile(parsed.customer);
-        localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
-        return profile;
-      }
-    }
-  } catch (apiErr) {
-    console.warn('[getCurrentCustomerProfile] Backend API check notice:', apiErr);
-  }
-
-  // 2. Fallback verifikasi ke Supabase RPC jika session dibuat via register
+  // 1. Verifikasi langsung ke Supabase RPC (Direct & Fast, CORS-safe for Cloudflare Pages)
   try {
     const client = getSupabase();
     const { data, error } = await client.rpc('customer_get_session', {
@@ -690,7 +780,32 @@ export async function getCurrentCustomerProfile(): Promise<CustomerProfile | nul
       }
     }
   } catch (err) {
-    console.warn('[getCurrentCustomerProfile] RPC check notice:', err);
+    console.warn('[getCurrentCustomerProfile] Supabase RPC check notice:', err);
+  }
+
+  // 2. Fallback backend API jika tersedia di host yang sama
+  try {
+    const isSameHost = typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.includes('.run.app'));
+    
+    if (isSameHost) {
+      const res = await fetch(getApiUrl('/api/customer/me'), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        const parsed = await res.json().catch(() => null);
+        if (parsed && parsed.success && parsed.customer) {
+          const profile = extractCustomerProfile(parsed.customer);
+          localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
+          return profile;
+        }
+      }
+    }
+  } catch (apiErr) {
+    console.warn('[getCurrentCustomerProfile] Backend API check notice:', apiErr);
   }
 
   // 3. Fallback profil cached jika jaringan sedang offline
@@ -715,21 +830,28 @@ export async function logoutCustomer(): Promise<void> {
 
   const token = localStorage.getItem(CUSTOMER_TOKEN_KEY);
   if (token) {
-    try {
-      fetch(getApiUrl('/api/customer/logout'), {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }).catch(() => {});
-    } catch {}
-
+    // 1. Revoke session token directly in Supabase
     try {
       const client = getSupabase();
       await client.rpc('customer_logout', { p_token: token });
     } catch (err) {
       console.warn('Customer logout RPC notice:', err);
     }
+
+    // 2. Optionally notify backend if on same host
+    try {
+      const isSameHost = typeof window !== 'undefined' && 
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.includes('.run.app'));
+      
+      if (isSameHost) {
+        fetch(getApiUrl('/api/customer/logout'), {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }).catch(() => {});
+      }
+    } catch {}
   }
 
   localStorage.removeItem(CUSTOMER_TOKEN_KEY);

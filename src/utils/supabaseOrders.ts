@@ -578,6 +578,44 @@ CREATE POLICY "Admins manage loyalty_transactions" ON public.loyalty_transaction
 
 CREATE POLICY "Admins manage reward_redemptions" ON public.reward_redemptions 
   FOR ALL USING (get_current_admin_role() = 'super_admin');
+
+-- ==============================================================================
+-- 19. Table: OneSignal Admin Subscriptions (Web Push Notification Subscriptions)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.admin_onesignal_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscription_id TEXT NOT NULL UNIQUE,
+  username TEXT NOT NULL DEFAULT 'admin',
+  outlet_id TEXT NOT NULL DEFAULT 'sudirman',
+  role TEXT NOT NULL DEFAULT 'outlet_admin',
+  device_info TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+  last_push_at TIMESTAMPTZ,
+  last_push_status TEXT,
+  last_error TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Ensure all columns exist for existing deployments
+ALTER TABLE public.admin_onesignal_subscriptions ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.admin_onesignal_subscriptions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.admin_onesignal_subscriptions ADD COLUMN IF NOT EXISTS last_push_at TIMESTAMPTZ;
+ALTER TABLE public.admin_onesignal_subscriptions ADD COLUMN IF NOT EXISTS last_push_status TEXT;
+ALTER TABLE public.admin_onesignal_subscriptions ADD COLUMN IF NOT EXISTS last_error TEXT;
+ALTER TABLE public.admin_onesignal_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- Performance Indexes
+CREATE INDEX IF NOT EXISTS idx_admin_onesignal_active_outlet 
+  ON public.admin_onesignal_subscriptions(outlet_id, is_active);
+
+CREATE INDEX IF NOT EXISTS idx_admin_onesignal_sub_id 
+  ON public.admin_onesignal_subscriptions(subscription_id);
+
+ALTER TABLE public.admin_onesignal_subscriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read admin_onesignal_subscriptions" ON public.admin_onesignal_subscriptions FOR SELECT USING (true);
+CREATE POLICY "Allow service and admin write admin_onesignal_subscriptions" ON public.admin_onesignal_subscriptions FOR ALL USING (true);
 `;
 
 /**

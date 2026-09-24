@@ -153,11 +153,12 @@ Deno.serve(async (req) => {
 
       console.log(`[send-order-push:TEST] Processing test push for outlet: "${targetOutletTag}"...`);
 
-      // Query registered subscriptions for this outlet from database
+      // Query registered active subscriptions for this outlet from database
       const { data: subRows, error: subDbErr } = await supabase
         .from("admin_onesignal_subscriptions")
-        .select("subscription_id, username, outlet_id")
-        .or(`outlet_id.eq.${targetOutletTag},outlet_id.eq.central,outlet_id.eq.all`);
+        .select("subscription_id, username, outlet_id, is_active")
+        .or(`outlet_id.eq.${targetOutletTag},outlet_id.eq.central,outlet_id.eq.all`)
+        .or("is_active.eq.true,is_active.is.null");
 
       if (subDbErr) {
         console.warn("[send-order-push:TEST] Error fetching subscriptions from DB:", subDbErr);
@@ -177,7 +178,6 @@ Deno.serve(async (req) => {
         app_id: oneSignalAppId,
         headings: { en: testTitle },
         contents: { en: testBody },
-        url: targetUrl,
         web_url: targetUrl,
         chrome_web_icon: "https://leton-coffee-web.pages.dev/logo_icon_small.png",
         chrome_web_badge: "https://leton-coffee-web.pages.dev/logo_icon_small.png",
@@ -212,16 +212,49 @@ Deno.serve(async (req) => {
       const osStatus = osRes.status;
       const osData = await osRes.json().catch(() => null);
 
-      console.log(`[ONESIGNAL PUSH]
-order_id: TEST_${Date.now()}
-outlet_id: ${targetOutletTag}
-target: ${subscriptionIds.length > 0 ? subscriptionIds.join(", ") : `tag:outlet_id=${targetOutletTag}`}
-HTTP status: ${osStatus}
-response: ${JSON.stringify(osData)}
-recipients: ${osData?.recipients ?? 0}
-errors: ${JSON.stringify(osData?.errors || null)}`);
+      // Detect invalid player IDs returned by OneSignal
+      const invalidPlayerIds: string[] = Array.isArray(osData?.errors?.invalid_player_ids)
+        ? osData.errors.invalid_player_ids
+        : [];
 
-      if (!osRes.ok || osData?.errors) {
+      if (invalidPlayerIds.length > 0) {
+        console.log(`[send-order-push:TEST] Auto-deactivating ${invalidPlayerIds.length} invalid subscription(s) in DB:`, invalidPlayerIds);
+        try {
+          await supabase
+            .from("admin_onesignal_subscriptions")
+            .update({
+              is_active: false,
+              last_push_status: "invalid",
+              last_error: "OneSignal returned invalid_player_ids",
+              updated_at: new Date().toISOString()
+            })
+            .in("subscription_id", invalidPlayerIds);
+        } catch (deactErr) {
+          console.warn("[send-order-push:TEST] Deactivation update error:", deactErr);
+        }
+      }
+
+      // Track successful sends on remaining valid subscriptions
+      const validSentIds = subscriptionIds.filter((id: string) => !invalidPlayerIds.includes(id));
+      if (validSentIds.length > 0 && osRes.ok) {
+        try {
+          await supabase
+            .from("admin_onesignal_subscriptions")
+            .update({
+              last_push_at: new Date().toISOString(),
+              last_push_status: invalidPlayerIds.length > 0 ? "partial" : "sent",
+              last_error: null,
+              updated_at: new Date().toISOString()
+            })
+            .in("subscription_id", validSentIds);
+        } catch (updErr) {
+          console.warn("[send-order-push:TEST] Status update error:", updErr);
+        }
+      }
+
+      console.log(`[OneSignal] outlet=${targetOutletTag} targeted=${subscriptionIds.length} sent=${validSentIds.length} invalid=${invalidPlayerIds.length}`);
+
+      if (!osRes.ok) {
         return new Response(
           JSON.stringify({
             success: false,
@@ -239,7 +272,8 @@ errors: ${JSON.stringify(osData?.errors || null)}`);
           success: true,
           message: "Test notification dispatched successfully",
           id: osData?.id,
-          recipients: osData?.recipients ?? 0,
+          recipients: osData?.recipients ?? validSentIds.length,
+          invalid_count: invalidPlayerIds.length,
           target: subscriptionIds.length > 0 ? subscriptionIds : `tag:outlet_id=${targetOutletTag}`,
           http_status: osStatus
         }),
@@ -288,11 +322,12 @@ errors: ${JSON.stringify(osData?.errors || null)}`);
 
     console.log(`[send-order-push] Identified target outlet: "${targetOutletTag}" for Order #${orderNum} (${customerName}, ${totalFormatted})`);
 
-    // Fetch registered active subscriptions for this outlet from database
+    // Fetch registered active subscriptions for this outlet from database (is_active = true)
     const { data: subRows, error: subDbErr } = await supabase
       .from("admin_onesignal_subscriptions")
-      .select("subscription_id, username, outlet_id")
-      .or(`outlet_id.eq.${targetOutletTag},outlet_id.eq.central,outlet_id.eq.all`);
+      .select("subscription_id, username, outlet_id, is_active")
+      .or(`outlet_id.eq.${targetOutletTag},outlet_id.eq.central,outlet_id.eq.all`)
+      .or("is_active.eq.true,is_active.is.null");
 
     if (subDbErr) {
       console.warn("[send-order-push] Error querying admin_onesignal_subscriptions:", subDbErr);
@@ -302,7 +337,7 @@ errors: ${JSON.stringify(osData?.errors || null)}`);
       .map((r: any) => String(r.subscription_id || "").trim())
       .filter((id: string) => id.length > 5);
 
-    console.log(`[send-order-push] Found ${subscriptionIds.length} target subscription(s) for outlet "${targetOutletTag}":`, subscriptionIds);
+    console.log(`[send-order-push] Found ${subscriptionIds.length} active target subscription(s) for outlet "${targetOutletTag}":`, subscriptionIds);
 
     // Build notification payload
     const notificationTitle = "🔔 Leton Coffee";
@@ -313,7 +348,6 @@ errors: ${JSON.stringify(osData?.errors || null)}`);
       app_id: oneSignalAppId,
       headings: { en: notificationTitle },
       contents: { en: notificationBody },
-      url: targetUrl,
       web_url: targetUrl,
       chrome_web_icon: "https://leton-coffee-web.pages.dev/logo_icon_small.png",
       chrome_web_badge: "https://leton-coffee-web.pages.dev/logo_icon_small.png",
@@ -352,16 +386,50 @@ errors: ${JSON.stringify(osData?.errors || null)}`);
     const osStatus = osRes.status;
     const osData = await osRes.json().catch(() => null);
 
-    console.log(`[ONESIGNAL PUSH]
-order_id: ${orderId}
-outlet_id: ${targetOutletTag}
-target: ${subscriptionIds.length > 0 ? subscriptionIds.join(", ") : `tag:outlet_id=${targetOutletTag}`}
-HTTP status: ${osStatus}
-response: ${JSON.stringify(osData)}
-recipients: ${osData?.recipients ?? 0}
-errors: ${JSON.stringify(osData?.errors || null)}`);
+    // Parse invalid player IDs
+    const invalidPlayerIds: string[] = Array.isArray(osData?.errors?.invalid_player_ids)
+      ? osData.errors.invalid_player_ids
+      : [];
 
-    if (!osRes.ok || osData?.errors) {
+    // Automatically deactivate invalid subscriptions in DB so they won't be queried next time
+    if (invalidPlayerIds.length > 0) {
+      console.log(`[send-order-push] Auto-deactivating ${invalidPlayerIds.length} invalid subscription(s) in DB:`, invalidPlayerIds);
+      try {
+        await supabase
+          .from("admin_onesignal_subscriptions")
+          .update({
+            is_active: false,
+            last_push_status: "invalid",
+            last_error: "OneSignal returned invalid_player_ids",
+            updated_at: new Date().toISOString()
+          })
+          .in("subscription_id", invalidPlayerIds);
+      } catch (deactErr) {
+        console.warn("[send-order-push] Error deactivating invalid subscriptions in DB:", deactErr);
+      }
+    }
+
+    // Update status for valid sent subscriptions
+    const validSentIds = subscriptionIds.filter((id: string) => !invalidPlayerIds.includes(id));
+    if (validSentIds.length > 0 && osRes.ok) {
+      try {
+        await supabase
+          .from("admin_onesignal_subscriptions")
+          .update({
+            last_push_at: new Date().toISOString(),
+            last_push_status: invalidPlayerIds.length > 0 ? "partial" : "sent",
+            last_error: null,
+            updated_at: new Date().toISOString()
+          })
+          .in("subscription_id", validSentIds);
+      } catch (updErr) {
+        console.warn("[send-order-push] Error updating push status in DB:", updErr);
+      }
+    }
+
+    console.log(`[OneSignal] outlet=${targetOutletTag} targeted=${subscriptionIds.length} sent=${validSentIds.length} invalid=${invalidPlayerIds.length}`);
+
+    if (!osRes.ok) {
       const errStr = JSON.stringify(osData?.errors || "");
       if (errStr.includes("not subscribed") || errStr.includes("no players") || errStr.includes("All included players")) {
         console.warn(`[send-order-push] Notice: No active device subscriptions found on OneSignal for outlet "${targetOutletTag}".`);
@@ -377,6 +445,21 @@ errors: ${JSON.stringify(osData?.errors || null)}`);
       }
 
       console.error("[send-order-push] OneSignal API returned errors:", osData);
+      if (subscriptionIds.length > 0) {
+        try {
+          await supabase
+            .from("admin_onesignal_subscriptions")
+            .update({
+              last_push_status: "failed",
+              last_error: JSON.stringify(osData?.errors || `HTTP status ${osStatus}`),
+              updated_at: new Date().toISOString()
+            })
+            .in("subscription_id", subscriptionIds);
+        } catch (failErr) {
+          console.warn("[send-order-push] Error updating failed status in DB:", failErr);
+        }
+      }
+
       return new Response(
         JSON.stringify({
           success: false,
@@ -399,7 +482,8 @@ errors: ${JSON.stringify(osData?.errors || null)}`);
         success: true,
         message: "Notification successfully dispatched via OneSignal",
         onesignal_id: osData?.id,
-        recipients: osData?.recipients ?? 0,
+        recipients: osData?.recipients ?? validSentIds.length,
+        invalid_count: invalidPlayerIds.length,
         target_outlet: targetOutletTag,
         target: subscriptionIds.length > 0 ? subscriptionIds : `tag:outlet_id=${targetOutletTag}`
       }),

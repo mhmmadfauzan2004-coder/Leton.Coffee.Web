@@ -30,16 +30,28 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { subscription_id, subscriptionId, username, outlet_id, outletId, role, device_info, deviceInfo } = body;
+    const {
+      subscription_id,
+      subscriptionId,
+      old_subscription_id,
+      oldSubscriptionId,
+      username,
+      outlet_id,
+      outletId,
+      role,
+      device_info,
+      deviceInfo
+    } = body;
     
     // Normalize parameters
     const finalSubId = String(subscription_id || subscriptionId || "").trim();
+    const finalOldSubId = String(old_subscription_id || oldSubscriptionId || "").trim();
     let finalOutlet = String(outlet_id || outletId || "").trim().toLowerCase();
     const finalUsername = String(username || "admin").trim();
     const finalRole = String(role || "outlet_admin").trim();
     const finalDeviceInfo = String(device_info || deviceInfo || "web").trim();
 
-    console.log(`[register-onesignal-subscription] Received payload: subId=${finalSubId}, outlet=${finalOutlet}, user=${finalUsername}`);
+    console.log(`[register-onesignal-subscription] Received payload: subId=${finalSubId}, oldSubId=${finalOldSubId || 'none'}, outlet=${finalOutlet}, user=${finalUsername}`);
 
     // 1. Validation: subscription_id cannot be empty
     if (!finalSubId) {
@@ -94,13 +106,33 @@ Deno.serve(async (req) => {
       }
     });
 
-    // 4. UPSERT into public.admin_onesignal_subscriptions
+    // 4. If old subscription ID was provided and changed, deactivate old subscription
+    if (finalOldSubId && finalOldSubId !== finalSubId) {
+      console.log(`[register-onesignal-subscription] Deactivating old subscription on device: ${finalOldSubId}`);
+      try {
+        await supabase
+          .from("admin_onesignal_subscriptions")
+          .update({
+            is_active: false,
+            last_push_status: "replaced",
+            last_error: `Replaced by ${finalSubId}`,
+            updated_at: new Date().toISOString()
+          })
+          .eq("subscription_id", finalOldSubId);
+      } catch (deactErr) {
+        console.warn("[register-onesignal-subscription] Old subscription deactivation notice:", deactErr);
+      }
+    }
+
+    // 5. UPSERT current active subscription into public.admin_onesignal_subscriptions
     const recordToUpsert = {
       subscription_id: finalSubId,
       username: finalUsername,
       outlet_id: finalOutlet,
       role: finalRole,
       device_info: finalDeviceInfo,
+      is_active: true,
+      last_seen_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
 
@@ -122,7 +154,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 5. Direct SELECT verification to guarantee row actually exists in database
+    // 6. Direct SELECT verification to guarantee row actually exists in database
     console.log(`[register-onesignal-subscription] Verifying row existence for subscription_id: ${finalSubId}`);
     const { data: verifiedRow, error: selectErr } = await supabase
       .from("admin_onesignal_subscriptions")
@@ -152,9 +184,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[register-onesignal-subscription] SUCCESS! Row confirmed in database:`, verifiedRow);
+    console.log(`[register-onesignal-subscription] SUCCESS! Row confirmed active in database:`, verifiedRow);
 
-    // 6. Return verified success
+    // 7. Return verified success
     return new Response(
       JSON.stringify({
         success: true,

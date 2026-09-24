@@ -316,7 +316,8 @@ export async function syncSubscriptionIdToBackend(
   subscriptionId: string,
   username: string,
   outletId: string,
-  role?: string
+  role?: string,
+  oldSubscriptionId?: string | null
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const normalizedOutlet = normalizeOutletTag(outletId);
@@ -334,17 +335,22 @@ export async function syncSubscriptionIdToBackend(
     const targetOutlet = isCentral ? 'central' : normalizedOutlet;
     const targetRole = isCentral ? 'central_admin' : (role || 'outlet_admin');
 
+    const prevStoredSubId = oldSubscriptionId || (typeof localStorage !== 'undefined' ? localStorage.getItem('leton_last_synced_onesignal_sub') : null);
+    const effectiveOldSubId = prevStoredSubId && prevStoredSubId !== subscriptionId ? prevStoredSubId : undefined;
+
     const deviceInfo = typeof navigator !== 'undefined' ? navigator.userAgent : 'web';
     const registerPayload = {
       subscription_id: subscriptionId,
+      old_subscription_id: effectiveOldSubId,
       username: username || 'admin',
       outlet_id: targetOutlet,
       role: targetRole,
-      device_info: deviceInfo
+      device_info: deviceInfo,
+      is_active: true
     };
 
     const edgeFunctionEndpoint = 'https://galwyavdonfzuibrmswt.supabase.co/functions/v1/register-onesignal-subscription';
-    console.log('[ONESIGNAL SYNC] Syncing subscription ID to backend:', subscriptionId, 'for outlet:', targetOutlet);
+    console.log('[ONESIGNAL SYNC] Syncing subscription ID to backend:', subscriptionId, 'oldSubId:', effectiveOldSubId || 'none', 'for outlet:', targetOutlet);
 
     const edgeRes = await fetch(edgeFunctionEndpoint, {
       method: 'POST',
@@ -364,6 +370,11 @@ export async function syncSubscriptionIdToBackend(
 
     if (edgeRes.ok && edgeJson && edgeJson.success === true) {
       console.log('[ONESIGNAL SYNC] Successfully synced subscription ID to DB:', edgeJson.data);
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('leton_last_synced_onesignal_sub', subscriptionId);
+        }
+      } catch (e) {}
       return { success: true, data: edgeJson.data };
     }
     return { success: false, error: edgeJson?.error || rawText };

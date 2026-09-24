@@ -958,7 +958,6 @@ export async function createNewOrder(
       rejection_reason: orderData.rejectionReason || null,
       order_status: originalOrderStatus,
       customer_note: orderData.customerNote || null,
-      pickup_time: orderData.pickupTime || orderData.pickup_time || null,
       created_at: orderData.createdAt || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

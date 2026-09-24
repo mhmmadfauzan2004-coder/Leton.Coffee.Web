@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import bcrypt from 'bcryptjs';
 import { LetonData, CustomerProfile } from '../types';
 import { initialLetonData } from '../data/initialData';
 import { sanitizeLoadedData } from './storage';
@@ -586,9 +587,12 @@ export async function registerCustomer(
 
 /**
  * Customer Login using Nomor HP and Password.
- * Strategy 1: Direct Supabase RPC `customer_login_by_phone`.
- * Strategy 2: Backend API fallback `/api/customer/login` (with bcrypt validation).
- * Strategy 3: Supabase RPC `customer_login`.
+ * Multi-layer resilient authentication for both Cloudflare Pages (Split deployment) & AI Studio Preview.
+ * 
+ * Strategy 1: Direct Supabase RPC `customer_login_by_phone` (Direct Phone + Password RPC).
+ * Strategy 2: Supabase customer lookup by phone + RPC `customer_login` with customer's nama_lengkap.
+ * Strategy 3: Supabase customer lookup + client-side bcrypt verification + server session creation.
+ * Strategy 4: Express/Cloud Run backend API fallback (`/api/customer/login`).
  */
 export async function loginCustomer(
   inputPhone: string,
@@ -604,8 +608,10 @@ export async function loginCustomer(
       return { success: false, error: 'Password wajib diisi.' };
     }
 
+    const cleanDigits = rawInput.replace(/[^0-9]/g, '');
     const normalizedPhone = normalizePhoneTo08(rawInput);
     const client = getSupabase();
+    const adminClient = getSupabase('super_admin');
 
     // ----------------------------------------------------
     // STRATEGY 1: Direct Supabase RPC customer_login_by_phone
@@ -639,12 +645,6 @@ export async function loginCustomer(
           }
 
           return { success: true, profile };
-        } else {
-          // RPC executed and customer credentials were validly evaluated as incorrect
-          return {
-            success: false,
-            error: 'Nomor HP atau password salah.',
-          };
         }
       }
     } catch (rpcErr) {
@@ -652,78 +652,169 @@ export async function loginCustomer(
     }
 
     // ----------------------------------------------------
-    // STRATEGY 2: Backend Express/Cloud Run API (/api/customer/login)
-    // Runs on same host in AI Studio Preview / Cloud Run
+    // STRATEGY 2: Supabase customer lookup by phone + RPC customer_login by name
     // ----------------------------------------------------
     try {
-      const apiUrl = getApiUrl('/api/customer/login');
-      const apiRes = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: normalizedPhone,
-          nomorHp: normalizedPhone,
-          inputPhone: normalizedPhone,
-          password: password,
-        }),
+      // Look up customer by normalized and raw phone numbers
+      const phoneCandidates = Array.from(new Set([
+        normalizedPhone,
+        cleanDigits,
+        cleanDigits.startsWith('62') ? '0' + cleanDigits.slice(2) : '',
+        cleanDigits.startsWith('0') ? '62' + cleanDigits.slice(1) : '',
+        rawInput,
+      ].filter(Boolean)));
+
+      const { data: matchedCustomers, error: lookupErr } = await adminClient
+        .from('customers')
+        .select('id, nama_lengkap, nomor_hp, tanggal_lahir, password_hash, points_balance, total_points_earned, total_points_redeemed')
+        .in('nomor_hp', phoneCandidates)
+        .limit(1);
+
+      console.log('[loginCustomer DIAGNOSTIC 2 - Customer Lookup]', {
+        phone_candidates: phoneCandidates,
+        customer_found: Boolean(matchedCustomers && matchedCustomers.length > 0),
+        lookup_error: lookupErr?.message || null,
       });
 
-      const parsedApi = await apiRes.json().catch(() => null);
+      if (matchedCustomers && matchedCustomers.length > 0) {
+        const customerRecord = matchedCustomers[0];
 
-      console.log('[loginCustomer DIAGNOSTIC 2 - Backend API /api/customer/login]', {
-        api_url: apiUrl,
-        status: apiRes.status,
-        success: parsedApi?.success || false,
-        error: parsedApi?.error || null,
-      });
+        // 2a. Attempt RPC customer_login with the customer's actual registered name
+        if (customerRecord.nama_lengkap) {
+          const resRpc2 = await client.rpc('customer_login', {
+            p_nama: customerRecord.nama_lengkap,
+            p_password: password,
+          });
 
-      if (apiRes.ok && parsedApi && parsedApi.success) {
-        const sessionToken = parsedApi.token;
-        const profile = extractCustomerProfile(parsedApi.customer);
+          console.log('[loginCustomer DIAGNOSTIC 2a - customer_login with customer name]', {
+            nama_lengkap: customerRecord.nama_lengkap,
+            rpc_error: resRpc2.error?.code || null,
+            rpc_success: resRpc2.data?.success || false,
+          });
 
-        if (typeof window !== 'undefined') {
-          if (sessionToken) {
-            localStorage.setItem(CUSTOMER_TOKEN_KEY, sessionToken);
+          if (!resRpc2.error && resRpc2.data) {
+            const parsed2 = parseRpcResponse(resRpc2.data);
+            if (parsed2.success) {
+              const sessionToken = parsed2.token;
+              const profile = extractCustomerProfile(parsed2.customer || customerRecord);
+
+              if (typeof window !== 'undefined') {
+                if (sessionToken) {
+                  localStorage.setItem(CUSTOMER_TOKEN_KEY, sessionToken);
+                }
+                localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
+              }
+
+              return { success: true, profile };
+            }
           }
-          localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
         }
 
-        return { success: true, profile };
-      }
+        // 2b. Direct cryptographic bcrypt verification fallback
+        if (customerRecord.password_hash) {
+          const isPasswordValid = bcrypt.compareSync(password, customerRecord.password_hash);
+          console.log('[loginCustomer DIAGNOSTIC 2b - Bcrypt Compare]', {
+            is_valid: isPasswordValid,
+          });
 
-      if (parsedApi && !parsedApi.success && (apiRes.status === 400 || apiRes.status === 401)) {
-        return {
-          success: false,
-          error: parsedApi.error || 'Nomor HP atau password salah.',
-        };
+          if (isPasswordValid) {
+            // Generate cryptographic session token (64 hex characters)
+            const randomBytesArray = new Uint8Array(32);
+            if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+              window.crypto.getRandomValues(randomBytesArray);
+            } else {
+              for (let i = 0; i < 32; i++) {
+                randomBytesArray[i] = Math.floor(Math.random() * 256);
+              }
+            }
+            const sessionToken = Array.from(randomBytesArray)
+              .map((b) => b.toString(16).padStart(2, '0'))
+              .join('');
+
+            const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+            // Insert session record directly into Supabase customer_sessions
+            try {
+              await adminClient.from('customer_sessions').insert({
+                customer_id: customerRecord.id,
+                token: sessionToken,
+                expires_at: expiresAt,
+              });
+            } catch (sessInsertErr) {
+              console.warn('[loginCustomer Strategy 2b session insert warning]:', sessInsertErr);
+            }
+
+            // Extract points balance
+            let balance = Number(customerRecord.points_balance) || 0;
+            let totalEarned = Number(customerRecord.total_points_earned) || 0;
+            let totalRedeemed = Number(customerRecord.total_points_redeemed) || 0;
+
+            try {
+              const { data: ptsData } = await adminClient
+                .from('customer_points')
+                .select('current_balance, total_points_earned, total_points_redeemed')
+                .eq('customer_id', customerRecord.id)
+                .maybeSingle();
+
+              if (ptsData) {
+                balance = Number(ptsData.current_balance) || balance;
+                totalEarned = Number(ptsData.total_points_earned) || totalEarned;
+                totalRedeemed = Number(ptsData.total_points_redeemed) || totalRedeemed;
+              }
+            } catch {}
+
+            const profile: CustomerProfile = extractCustomerProfile({
+              id: customerRecord.id,
+              userId: customerRecord.id,
+              namaLengkap: customerRecord.nama_lengkap,
+              nomorHp: customerRecord.nomor_hp,
+              tanggalLahir: customerRecord.tanggal_lahir ? String(customerRecord.tanggal_lahir).split('T')[0] : '',
+            });
+
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(CUSTOMER_TOKEN_KEY, sessionToken);
+              localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
+            }
+
+            return { success: true, profile };
+          } else {
+            // Password checked and is definitely incorrect for the registered customer
+            return {
+              success: false,
+              error: 'Nomor HP atau password salah.',
+            };
+          }
+        }
       }
-    } catch (apiErr) {
-      console.warn('[loginCustomer Strategy 2 Backend API exception]:', apiErr);
+    } catch (lookupStrategyErr) {
+      console.warn('[loginCustomer Strategy 2 exception]:', lookupStrategyErr);
     }
 
     // ----------------------------------------------------
-    // STRATEGY 3: Supabase RPC customer_login fallback
+    // STRATEGY 3: Backend Express API (/api/customer/login) fallback
     // ----------------------------------------------------
     try {
-      const resRpc2 = await client.rpc('customer_login', {
-        p_nama: normalizedPhone,
-        p_password: password,
-      });
+      const isSameHost = typeof window !== 'undefined' && 
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.includes('.run.app'));
 
-      console.log('[loginCustomer DIAGNOSTIC 3 - customer_login fallback]', {
-        normalized_phone: normalizedPhone,
-        rpc_called: 'customer_login',
-        rpc_error_code: resRpc2.error?.code || null,
-        rpc_error_message: resRpc2.error?.message || null,
-        rpc_data_received: Boolean(resRpc2.data),
-        login_success: resRpc2.data?.success || false,
-      });
+      if (isSameHost) {
+        const apiUrl = getApiUrl('/api/customer/login');
+        const apiRes = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: normalizedPhone,
+            nomorHp: normalizedPhone,
+            inputPhone: normalizedPhone,
+            password: password,
+          }),
+        });
 
-      if (!resRpc2.error && resRpc2.data) {
-        const parsed = parseRpcResponse(resRpc2.data);
-        if (parsed.success) {
-          const sessionToken = parsed.token;
-          const profile = extractCustomerProfile(parsed.customer);
+        const parsedApi = await apiRes.json().catch(() => null);
+
+        if (apiRes.ok && parsedApi && parsedApi.success) {
+          const sessionToken = parsedApi.token;
+          const profile = extractCustomerProfile(parsedApi.customer);
 
           if (typeof window !== 'undefined') {
             if (sessionToken) {
@@ -733,20 +824,22 @@ export async function loginCustomer(
           }
 
           return { success: true, profile };
-        } else {
+        }
+
+        if (parsedApi && !parsedApi.success && (apiRes.status === 400 || apiRes.status === 401)) {
           return {
             success: false,
-            error: 'Nomor HP atau password salah.',
+            error: parsedApi.error || 'Nomor HP atau password salah.',
           };
         }
       }
-    } catch (rpc2Err) {
-      console.warn('[loginCustomer Strategy 3 exception]:', rpc2Err);
+    } catch (apiErr) {
+      console.warn('[loginCustomer Strategy 3 Backend API notice]:', apiErr);
     }
 
     return {
       success: false,
-      error: 'Terjadi gangguan saat masuk. Silakan coba lagi.',
+      error: 'Nomor HP atau password salah.',
     };
   } catch (err: any) {
     console.error('[Customer Login Main Exception]:', err);

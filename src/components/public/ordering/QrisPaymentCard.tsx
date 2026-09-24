@@ -49,6 +49,7 @@ export const QrisPaymentCard: React.FC<QrisPaymentCardProps> = ({
   const [selectedFileSize, setSelectedFileSize] = useState<string | null>(null);
   const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState<boolean>(false);
+  const [isQrisVisible, setIsQrisVisible] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const allowedFormats = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
@@ -235,7 +236,7 @@ export const QrisPaymentCard: React.FC<QrisPaymentCardProps> = ({
         </div>
 
         <p className="text-xs text-slate-300 font-medium">
-          “Scan QRIS di bawah untuk melakukan pembayaran”
+          “Silakan lakukan pembayaran menggunakan QRIS”
         </p>
       </div>
 
@@ -244,31 +245,71 @@ export const QrisPaymentCard: React.FC<QrisPaymentCardProps> = ({
         {/* Ambient subtle glow */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-[#00E5FF]/5 rounded-full blur-3xl pointer-events-none" />
 
-        {/* The QRIS Visual */}
+        {/* The QRIS Visual Toggle */}
         <div className="w-full relative z-10">
-          {activeQrisUrl ? (
-            <div className="max-w-[260px] mx-auto bg-white p-3 rounded-2xl shadow-xl border border-slate-200">
-              <img
-                src={resolveMediaUrl(activeQrisUrl)}
-                alt="QRIS Leton Coffee"
-                className="w-full h-auto rounded-xl object-contain max-h-80"
-              />
+          {!isQrisVisible ? (
+            <div className="py-4 px-2 flex flex-col items-center justify-center text-center max-w-sm mx-auto space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center text-[#00E5FF]">
+                <QrCode className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-sm text-white">
+                  Pembayaran QRIS
+                </h4>
+                <p className="text-xs text-slate-400 mt-1">
+                  Silakan lakukan pembayaran menggunakan QRIS.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQrisVisible(true)}
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-[#00E5FF] hover:bg-[#00cce6] text-slate-950 font-black text-xs shadow-lg shadow-[#00E5FF]/20 flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all"
+              >
+                <QrCode className="w-4 h-4" />
+                <span>TAMPILKAN QRIS</span>
+              </button>
             </div>
           ) : (
-            qrisSvgVisual
-          )}
+            <div className="w-full flex flex-col items-center">
+              {/* Notice & Hide Button */}
+              <div className="w-full mb-3 pb-2.5 border-b border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2">
+                <p className="text-xs font-bold text-[#00E5FF] text-center sm:text-left">
+                  Silahkan screenshot dan melakukan pembayaran dengan QRIS ini
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsQrisVisible(false)}
+                  className="px-3 py-1 rounded-lg bg-slate-900 border border-slate-700 hover:bg-slate-800 text-[11px] font-bold text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                >
+                  SEMBUNYIKAN QRIS
+                </button>
+              </div>
 
-          {/* Quick Action under QR */}
-          <div className="mt-3 flex items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsQrModalOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Maximize2 className="w-3.5 h-3.5 text-[#00E5FF]" />
-              <span>Perbesar QRIS</span>
-            </button>
-          </div>
+              {activeQrisUrl ? (
+                <div className="max-w-[260px] mx-auto bg-white p-3 rounded-2xl shadow-xl border border-slate-200">
+                  <img
+                    src={resolveMediaUrl(activeQrisUrl)}
+                    alt="QRIS Leton Coffee"
+                    className="w-full h-auto rounded-xl object-contain max-h-80"
+                  />
+                </div>
+              ) : (
+                qrisSvgVisual
+              )}
+
+              {/* Quick Action under QR */}
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsQrModalOpen(true)}
+                  className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Maximize2 className="w-3.5 h-3.5 text-[#00E5FF]" />
+                  <span>Perbesar QRIS</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Total Price Prominent Display */}

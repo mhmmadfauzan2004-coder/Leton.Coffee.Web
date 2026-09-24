@@ -34,6 +34,9 @@ import {
   ChevronDown,
   ChevronUp,
   Plus,
+  QrCode,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 interface OrderCheckoutProps {
@@ -78,6 +81,7 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   const [formError, setFormError] = useState<string>('');
   const [copiedAmount, setCopiedAmount] = useState<boolean>(false);
   const [showQrisInstructions, setShowQrisInstructions] = useState<boolean>(false);
+  const [isQrisVisible, setIsQrisVisible] = useState<boolean>(false);
 
   // QRIS Receipt Upload State
   const [uploadedReceiptUrl, setUploadedReceiptUrl] = useState<string | null>(null);
@@ -669,87 +673,128 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
             </button>
           </div>
 
-          {/* QR Code Container */}
-          <div className="bg-[#f8f9ff] rounded-xl p-4 border border-[#e4efff] flex flex-col items-center justify-center text-center">
-            <div className="text-[11px] font-extrabold text-[#041d32] uppercase tracking-wide mb-0.5">
-              LETON COFFEE {outlet.shortName?.toUpperCase() || 'DUMAI'}
-            </div>
-            <div className="text-[10px] text-[#3e484f] mb-3 font-mono">
-              NMID: ID102003921829 • Standar Pembayaran Nasional
-            </div>
-
-            {/* QR Box with corner styling */}
-            <div className="p-3.5 bg-white rounded-xl border border-[#e4efff] shadow-sm relative w-56 max-w-full flex items-center justify-center">
-              {activeQrisUrl ? (
-                <img
-                  src={resolveMediaUrl(activeQrisUrl)}
-                  alt={`QRIS ${outlet.name}`}
-                  className="w-full h-auto rounded-lg object-contain max-h-56"
-                />
-              ) : (
-                <div className="relative w-44 h-44 flex items-center justify-center">
-                  <svg className="w-full h-full text-[#041d32]" fill="none" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg">
-                    <rect fill="currentColor" height="35" rx="4" width="35" x="10" y="10" />
-                    <rect fill="#ffffff" height="25" rx="2" width="25" x="15" y="15" />
-                    <rect fill="currentColor" height="15" rx="1" width="15" x="20" y="20" />
-                    <rect fill="currentColor" height="35" rx="4" width="35" x="95" y="10" />
-                    <rect fill="#ffffff" height="25" rx="2" width="25" x="100" y="15" />
-                    <rect fill="currentColor" height="15" rx="1" width="15" x="105" y="20" />
-                    <rect fill="currentColor" height="35" rx="4" width="35" x="10" y="95" />
-                    <rect fill="#ffffff" height="25" rx="2" width="25" x="15" y="100" />
-                    <rect fill="currentColor" height="15" rx="1" width="15" x="20" y="105" />
-                    <rect fill="currentColor" height="6" width="6" x="52" y="12" />
-                    <rect fill="currentColor" height="6" width="6" x="62" y="12" />
-                    <rect fill="currentColor" height="6" width="6" x="72" y="12" />
-                    <rect fill="currentColor" height="6" width="6" x="82" y="12" />
-                    <rect fill="currentColor" height="6" width="6" x="52" y="24" />
-                    <rect fill="currentColor" height="6" width="6" x="72" y="24" />
-                    <rect fill="currentColor" height="6" width="6" x="52" y="36" />
-                    <rect fill="currentColor" height="6" width="6" x="62" y="36" />
-                    <rect fill="currentColor" height="6" width="6" x="82" y="36" />
-                    <rect fill="currentColor" height="6" width="6" x="12" y="52" />
-                    <rect fill="currentColor" height="6" width="6" x="24" y="52" />
-                    <rect fill="currentColor" height="6" width="6" x="36" y="52" />
-                    <rect fill="currentColor" height="6" width="6" x="48" y="52" />
-                    <rect fill="currentColor" height="6" width="6" x="86" y="52" />
-                    <rect fill="currentColor" height="6" width="6" x="98" y="52" />
-                    <rect fill="currentColor" height="6" width="6" x="110" y="52" />
-                    <rect fill="currentColor" height="6" width="6" x="12" y="64" />
-                    <rect fill="currentColor" height="6" width="6" x="36" y="64" />
-                    <rect fill="currentColor" height="6" width="6" x="98" y="64" />
-                    <rect fill="currentColor" height="6" width="6" x="12" y="76" />
-                    <rect fill="currentColor" height="6" width="6" x="48" y="76" />
-                    <rect fill="currentColor" height="6" width="6" x="86" y="76" />
-                    <rect fill="currentColor" height="6" width="6" x="52" y="98" />
-                    <rect fill="currentColor" height="6" width="6" x="64" y="98" />
-                    <rect fill="currentColor" height="6" width="6" x="76" y="98" />
-                    <rect fill="currentColor" height="6" width="6" x="88" y="98" />
-                    <rect fill="currentColor" height="6" width="6" x="100" y="98" />
-                    <rect fill="currentColor" height="6" width="6" x="52" y="110" />
-                    <rect fill="currentColor" height="6" width="6" x="76" y="110" />
-                    <rect fill="currentColor" height="6" width="6" x="100" y="110" />
-                    <rect fill="currentColor" height="6" width="6" x="52" y="122" />
-                    <rect fill="currentColor" height="6" width="6" x="64" y="122" />
-                    <rect fill="currentColor" height="6" width="6" x="88" y="122" />
-                  </svg>
-                  <div className="absolute inset-0 m-auto w-10 h-10 rounded-lg bg-white border border-[#e4efff] shadow-md flex items-center justify-center font-black text-xs text-[#006389]">
-                    LTC
-                  </div>
+          {/* QR Code Container with Toggle Flow */}
+          <div className="bg-[#f8f9ff] rounded-xl p-4 sm:p-5 border border-[#e4efff] flex flex-col items-center justify-center text-center transition-all duration-300">
+            {!isQrisVisible ? (
+              <div className="py-4 px-2 flex flex-col items-center justify-center text-center max-w-sm w-full space-y-3.5">
+                <div className="w-12 h-12 rounded-xl bg-white border border-[#c6e7ff] flex items-center justify-center text-[#006389] shadow-xs">
+                  <QrCode className="w-6 h-6 text-[#006389]" />
                 </div>
-              )}
-            </div>
-
-            {/* Bank/Wallet Logos Chips */}
-            <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3 max-w-sm">
-              {['BCA', 'Mandiri', 'BRI', 'BNI', 'GoPay', 'OVO', 'DANA', 'ShopeePay'].map((b) => (
-                <span
-                  key={b}
-                  className="px-2 py-0.5 rounded bg-white text-[#006389] font-mono text-[10px] font-bold border border-[#e4efff]"
+                <div className="space-y-1">
+                  <h4 className="font-extrabold text-sm text-[#041d32]">
+                    Pembayaran QRIS
+                  </h4>
+                  <p className="text-xs text-[#3e484f]">
+                    Silakan lakukan pembayaran menggunakan QRIS.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsQrisVisible(true)}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-[#006389] hover:bg-[#004c6b] text-white font-extrabold text-xs shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                 >
-                  {b}
-                </span>
-              ))}
-            </div>
+                  <QrCode className="w-4 h-4" />
+                  <span>TAMPILKAN QRIS</span>
+                </button>
+              </div>
+            ) : (
+              <div className="w-full flex flex-col items-center">
+                {/* Notice and Hide Button above QRIS */}
+                <div className="w-full mb-3 pb-2.5 border-b border-[#e4efff] flex flex-col sm:flex-row items-center justify-between gap-2">
+                  <p className="text-xs font-bold text-[#006389] text-center sm:text-left">
+                    Silahkan screenshot dan melakukan pembayaran dengan QRIS ini
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsQrisVisible(false)}
+                    className="px-3 py-1 rounded-lg bg-white border border-[#e4efff] hover:bg-[#eef4ff] text-[11px] font-bold text-[#3e484f] hover:text-[#006389] transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <EyeOff className="w-3.5 h-3.5" />
+                    <span>SEMBUNYIKAN QRIS</span>
+                  </button>
+                </div>
+
+                <div className="text-[11px] font-extrabold text-[#041d32] uppercase tracking-wide mb-0.5">
+                  LETON COFFEE {outlet.shortName?.toUpperCase() || 'DUMAI'}
+                </div>
+                <div className="text-[10px] text-[#3e484f] mb-3 font-mono">
+                  NMID: ID102003921829 • Standar Pembayaran Nasional
+                </div>
+
+                {/* QR Box with corner styling */}
+                <div className="p-3.5 bg-white rounded-xl border border-[#e4efff] shadow-sm relative w-56 max-w-full flex items-center justify-center">
+                  {activeQrisUrl ? (
+                    <img
+                      src={resolveMediaUrl(activeQrisUrl)}
+                      alt={`QRIS ${outlet.name}`}
+                      className="w-full h-auto rounded-lg object-contain max-h-56"
+                    />
+                  ) : (
+                    <div className="relative w-44 h-44 flex items-center justify-center">
+                      <svg className="w-full h-full text-[#041d32]" fill="none" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg">
+                        <rect fill="currentColor" height="35" rx="4" width="35" x="10" y="10" />
+                        <rect fill="#ffffff" height="25" rx="2" width="25" x="15" y="15" />
+                        <rect fill="currentColor" height="15" rx="1" width="15" x="20" y="20" />
+                        <rect fill="currentColor" height="35" rx="4" width="35" x="95" y="10" />
+                        <rect fill="#ffffff" height="25" rx="2" width="25" x="100" y="15" />
+                        <rect fill="currentColor" height="15" rx="1" width="15" x="105" y="20" />
+                        <rect fill="currentColor" height="35" rx="4" width="35" x="10" y="95" />
+                        <rect fill="#ffffff" height="25" rx="2" width="25" x="15" y="100" />
+                        <rect fill="currentColor" height="15" rx="1" width="15" x="20" y="105" />
+                        <rect fill="currentColor" height="6" width="6" x="52" y="12" />
+                        <rect fill="currentColor" height="6" width="6" x="62" y="12" />
+                        <rect fill="currentColor" height="6" width="6" x="72" y="12" />
+                        <rect fill="currentColor" height="6" width="6" x="82" y="12" />
+                        <rect fill="currentColor" height="6" width="6" x="52" y="24" />
+                        <rect fill="currentColor" height="6" width="6" x="72" y="24" />
+                        <rect fill="currentColor" height="6" width="6" x="52" y="36" />
+                        <rect fill="currentColor" height="6" width="6" x="62" y="36" />
+                        <rect fill="currentColor" height="6" width="6" x="82" y="36" />
+                        <rect fill="currentColor" height="6" width="6" x="12" y="52" />
+                        <rect fill="currentColor" height="6" width="6" x="24" y="52" />
+                        <rect fill="currentColor" height="6" width="6" x="36" y="52" />
+                        <rect fill="currentColor" height="6" width="6" x="48" y="52" />
+                        <rect fill="currentColor" height="6" width="6" x="86" y="52" />
+                        <rect fill="currentColor" height="6" width="6" x="98" y="52" />
+                        <rect fill="currentColor" height="110" width="6" x="52" y="52" />
+                        <rect fill="currentColor" height="6" width="6" x="12" y="64" />
+                        <rect fill="currentColor" height="6" width="6" x="36" y="64" />
+                        <rect fill="currentColor" height="6" width="6" x="98" y="64" />
+                        <rect fill="currentColor" height="6" width="6" x="12" y="76" />
+                        <rect fill="currentColor" height="6" width="6" x="48" y="76" />
+                        <rect fill="currentColor" height="6" width="6" x="86" y="76" />
+                        <rect fill="currentColor" height="6" width="6" x="52" y="98" />
+                        <rect fill="currentColor" height="6" width="6" x="64" y="98" />
+                        <rect fill="currentColor" height="6" width="6" x="76" y="98" />
+                        <rect fill="currentColor" height="6" width="6" x="88" y="98" />
+                        <rect fill="currentColor" height="6" width="6" x="100" y="98" />
+                        <rect fill="currentColor" height="6" width="6" x="52" y="110" />
+                        <rect fill="currentColor" height="6" width="6" x="76" y="110" />
+                        <rect fill="currentColor" height="6" width="6" x="100" y="110" />
+                        <rect fill="currentColor" height="6" width="6" x="52" y="122" />
+                        <rect fill="currentColor" height="6" width="6" x="64" y="122" />
+                        <rect fill="currentColor" height="6" width="6" x="88" y="122" />
+                      </svg>
+                      <div className="absolute inset-0 m-auto w-10 h-10 rounded-lg bg-white border border-[#e4efff] shadow-md flex items-center justify-center font-black text-xs text-[#006389]">
+                        LTC
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bank/Wallet Logos Chips */}
+                <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3 max-w-sm">
+                  {['BCA', 'Mandiri', 'BRI', 'BNI', 'GoPay', 'OVO', 'DANA', 'ShopeePay'].map((b) => (
+                    <span
+                      key={b}
+                      className="px-2 py-0.5 rounded bg-white text-[#006389] font-mono text-[10px] font-bold border border-[#e4efff]"
+                    >
+                      {b}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Upload Bukti Transfer (Mandatory for QRIS) */}

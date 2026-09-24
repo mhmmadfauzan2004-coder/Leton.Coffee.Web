@@ -141,6 +141,154 @@ export interface OneSignalSubscriptionResult {
   permission?: NotificationPermission;
 }
 
+let lastSyncedSubId: string | null = null;
+let isAutoSyncRegistered = false;
+
+// Setup persistent auto-sync listeners for OneSignal v16
+export async function setupOneSignalAutoSync(
+  username: string,
+  outletId: string,
+  role?: string
+): Promise<void> {
+  if (typeof window === 'undefined' || !isPushCapable()) return;
+
+  const normalizedOutlet = normalizeOutletTag(outletId);
+  const normalizedRole = role || 'outlet_admin';
+  const effectiveUser = username || 'admin';
+
+  console.log('[OneSignal Auto-Sync] Initializing background auto-sync for:', {
+    username: effectiveUser,
+    outlet: normalizedOutlet,
+    role: normalizedRole
+  });
+
+  try {
+    const oneSignal = await initOneSignal();
+    if (!oneSignal) return;
+
+    const performSync = async (reason = 'auto-check') => {
+      try {
+        const isOptedIn = Boolean(oneSignal?.User?.PushSubscription?.optedIn);
+        const perm = typeof Notification !== 'undefined' ? Notification.permission : 'default';
+        const currentSubId = oneSignal?.User?.PushSubscription?.id;
+
+        console.log(`[OneSignal Auto-Sync] Checking status (${reason}):`, {
+          currentSubId: currentSubId || 'none',
+          optedIn: isOptedIn,
+          permission: perm,
+          lastSynced: lastSyncedSubId
+        });
+
+        if (perm === 'granted' && currentSubId && typeof currentSubId === 'string' && currentSubId.length > 5) {
+          if (currentSubId !== lastSyncedSubId) {
+            console.log(`[OneSignal Auto-Sync] Detected new/changed subscription ID (${reason}):`, currentSubId);
+            
+            // Attach OneSignal Tags
+            const isCentral = (
+              normalizedOutlet === 'all' ||
+              effectiveUser === 'admin' ||
+              effectiveUser === 'superadmin' ||
+              effectiveUser === 'pusat' ||
+              effectiveUser === 'admin_pusat'
+            ) && normalizedOutlet !== 'sudirman' && normalizedOutlet !== 'kelakap_7' && normalizedOutlet !== 'letgo';
+
+            const targetOutlet = isCentral ? 'central' : normalizedOutlet;
+            const targetRole = isCentral ? 'central_admin' : normalizedRole;
+
+            try {
+              await oneSignal.User.addTags({
+                role: targetRole,
+                outlet_id: targetOutlet,
+                username: effectiveUser
+              });
+              if (effectiveUser) {
+                await oneSignal.login(effectiveUser);
+              }
+            } catch (tagErr) {
+              console.warn('[OneSignal Auto-Sync] Tag attachment notice:', tagErr);
+            }
+
+            // Sync to Supabase Database
+            const syncRes = await syncSubscriptionIdToBackend(currentSubId, effectiveUser, targetOutlet, targetRole);
+            if (syncRes.success) {
+              lastSyncedSubId = currentSubId;
+              try {
+                localStorage.setItem('leton_last_synced_onesignal_sub', currentSubId);
+              } catch (e) {}
+              console.log('[OneSignal Auto-Sync] Auto-sync to database successful for ID:', currentSubId);
+            }
+          }
+        }
+      } catch (syncErr) {
+        console.warn('[OneSignal Auto-Sync] Sync check error:', syncErr);
+      }
+    };
+
+    // 1. Run initial sync check
+    performSync('initial-load');
+
+    // 2. Poll for the first 10 seconds in case OneSignal ID resolves asynchronously
+    let pollCount = 0;
+    const pollInterval = setInterval(() => {
+      pollCount++;
+      const currentSubId = oneSignal?.User?.PushSubscription?.id;
+      if (currentSubId && currentSubId !== lastSyncedSubId) {
+        performSync(`poll-${pollCount}`);
+      }
+      if (pollCount >= 10 || (currentSubId && currentSubId === lastSyncedSubId)) {
+        clearInterval(pollInterval);
+      }
+    }, 1000);
+
+    // 3. Register persistent event listeners once
+    if (!isAutoSyncRegistered) {
+      isAutoSyncRegistered = true;
+
+      // Event: PushSubscription change in OneSignal v16
+      try {
+        if (oneSignal.User?.PushSubscription?.addEventListener) {
+          oneSignal.User.PushSubscription.addEventListener('change', (event: any) => {
+            console.log('[OneSignal Auto-Sync] PushSubscription "change" event fired:', event);
+            performSync('subscription-change-event');
+          });
+        }
+      } catch (evtErr) {
+        console.warn('[OneSignal Auto-Sync] Could not add change listener:', evtErr);
+      }
+
+      // Event: Permission change
+      try {
+        if (oneSignal.Notifications?.addEventListener) {
+          oneSignal.Notifications.addEventListener('permissionChange', (permission: any) => {
+            console.log('[OneSignal Auto-Sync] Notifications "permissionChange" event fired:', permission);
+            performSync('permission-change-event');
+          });
+        }
+      } catch (evtErr) {
+        console.warn('[OneSignal Auto-Sync] Could not add permissionChange listener:', evtErr);
+      }
+
+      // Event: Document visibility / focus (User returns to PWA or unlocks phone)
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            console.log('[OneSignal Auto-Sync] PWA became visible, verifying subscription ID...');
+            performSync('visibility-change');
+          }
+        });
+      }
+
+      if (typeof window !== 'undefined') {
+        window.addEventListener('focus', () => {
+          performSync('window-focus');
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[OneSignal Auto-Sync] Error setting up auto-sync:', err);
+  }
+}
+
 // Helper to wait until OneSignal PushSubscription ID is populated
 export async function waitForOneSignalSubscriptionId(oneSignal: any, maxWaitMs = 12000): Promise<string | null> {
   const startTime = Date.now();

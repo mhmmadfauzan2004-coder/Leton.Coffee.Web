@@ -36,7 +36,8 @@ import {
   isOneSignalSubscribed,
   testOneSignalPush,
   getPushDiagnostics,
-  syncSubscriptionIdToBackend
+  syncSubscriptionIdToBackend,
+  setupOneSignalAutoSync
 } from '../../utils/oneSignal';
 import {
   LayoutDashboard,
@@ -190,31 +191,21 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
       setIsPushCapable(capable);
       if (capable) {
         // Initialize OneSignal
-        const osInstance = await initOneSignal().catch(() => null);
+        await initOneSignal().catch(() => null);
         const isOsActive = await isOneSignalSubscribed();
         const sub = await getPushSubscription();
         const isActive = isOsActive || (!!sub && Notification.permission === 'granted');
         setIsPushActive(isActive);
-        
-        // Auto-refresh/register if already active to ensure backend subscription is up to date
-        if (isActive && Notification.permission === 'granted' && auth.username) {
-          try {
-            const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
-            const currentSubId = osInstance?.User?.PushSubscription?.id;
-            if (currentSubId) {
-              await syncSubscriptionIdToBackend(currentSubId, auth.username, outletContext, auth.role);
-            } else {
-              await subscribeOneSignalAdmin(auth.username, outletContext, auth.role);
-            }
-            await subscribeAdminPush(auth.username, outletContext, auth.role);
-          } catch (e) {
-            console.warn('[Push] Auto-refresh subscription failed:', e);
-          }
+
+        // Run full background auto-sync whenever admin is authenticated
+        if (auth.username) {
+          const outletContext = isOutletAdmin ? (auth.outletId || 'all') : 'all';
+          setupOneSignalAutoSync(auth.username, outletContext, auth.role);
         }
       }
     };
     checkPushSupport();
-  }, [auth.username, isOutletAdmin, auth.outletId]);
+  }, [auth.username, isOutletAdmin, auth.outletId, auth.role]);
 
   const handleTogglePushNotifications = async (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();

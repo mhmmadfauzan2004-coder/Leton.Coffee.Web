@@ -397,125 +397,344 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* 1. KARTU PROFIL, MEMBER CARD & EDIT DATA */}
       <div className="lg:col-span-1 space-y-4">
-        {/* DYNAMIC 3-LEVEL MEMBERSHIP CARD */}
-        <div className={`bg-gradient-to-br ${tierData?.theme?.cardGradient || 'from-[#1E293B] via-[#0F172A] to-[#1E293B]'} rounded-2xl p-5 text-white shadow-md relative overflow-hidden border ${tierData?.theme?.borderAccent || 'border-slate-800'} transition-all duration-300`}>
-          {/* Accent design circles */}
-          <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-[#C39A6B]/10 rounded-full blur-xl pointer-events-none" />
-          <div className="absolute -left-6 -top-6 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none" />
+        {/* DYNAMIC 3-LEVEL MEMBERSHIP CARD (Stitch Final Design System) */}
+        {(() => {
+          const currentTier = tierData?.tier || 'SILVER';
+          const customerCode = profile?.nomorHp
+            ? profile.nomorHp.replace(/\D/g, '').slice(-7).padStart(7, '0')
+            : (profile?.id || '8821904').slice(0, 7);
+          const expiryYear = (new Date().getFullYear() % 100) + 2;
 
-          <div className="flex justify-between items-start border-b border-white/10 pb-3 mb-4">
-            <div>
-              <span className="block text-[9px] font-mono tracking-widest text-[#C39A6B] uppercase font-bold">
-                Leton Coffee
-              </span>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-sm font-bold tracking-wide text-white">
-                  {tierData?.tierBadge || '🥈 SILVER'}
-                </span>
+          if (currentTier === 'PLATINUM') {
+            return (
+              <div className="group relative rounded-2xl p-[1px] bg-gradient-to-b from-[#0F2C59]/30 via-slate-300/60 to-[#0F2C59]/20 shadow-[0_16px_36px_-8px_rgba(15,44,89,0.16)] transition-all duration-300 hover:-translate-y-0.5">
+                <div
+                  className="relative w-full rounded-[15px] p-5 sm:p-6 flex flex-col justify-between overflow-hidden border border-slate-200/90"
+                  style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 50%, #EDF2F7 100%)' }}
+                >
+                  {/* Iridescent Sapphire Glow */}
+                  <div className="absolute -top-14 -right-14 w-52 h-52 bg-blue-100/60 blur-3xl rounded-full pointer-events-none" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/90 via-transparent to-slate-100/60 pointer-events-none" />
+
+                  {/* Top Header: Monogram & Tier Badge */}
+                  <div className="relative z-10 flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-[#0F2C59]/10 border border-[#0F2C59]/20 flex items-center justify-center text-[#0F2C59] shadow-inner shrink-0">
+                        <Coffee className="w-5 h-5 text-[#0F2C59]" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm sm:text-base text-[#0F2C59] font-bold tracking-wider leading-none">LETON COFFEE</span>
+                        <span className="text-[9px] tracking-[0.22em] text-[#0F2C59]/75 uppercase mt-1 font-semibold">Elite Atelier</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTierModal(true)}
+                      className="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-[#0F2C59]/10 border border-[#0F2C59]/20 backdrop-blur-md shadow-xs text-[#0F2C59] hover:bg-[#0F2C59]/15 transition-all cursor-pointer"
+                      title="Lihat info tingkatan tier membership"
+                    >
+                      <Award className="w-3.5 h-3.5 text-[#0F2C59]" />
+                      <span className="text-[10px] font-bold tracking-wider uppercase">PLATINUM TIER</span>
+                    </button>
+                  </div>
+
+                  {/* Middle: Saldo Poin Aktif */}
+                  <div className="relative z-10 my-2">
+                    <span className="text-[11px] uppercase text-[#0F2C59]/80 tracking-wider font-semibold block">Saldo Poin Aktif</span>
+                    <div className="flex items-baseline gap-2 mt-0.5">
+                      <span className="text-3xl sm:text-4xl leading-tight text-[#0F172A] font-extrabold tracking-tight">
+                        {loyaltyData ? loyaltyData.pointsBalance.toLocaleString('id-ID') : 0}
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded-md bg-[#0F2C59]/10 border border-[#0F2C59]/20 text-[#0F2C59] font-bold">PTS</span>
+                    </div>
+                  </div>
+
+                  {/* Transaction Count & Progress Bar */}
+                  <div className="relative z-10 p-3 rounded-xl bg-slate-100/90 border border-slate-200 backdrop-blur-md mb-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="font-semibold text-slate-600">
+                        Transaksi: <span className="font-bold text-[#0F172A]">{tierData?.transactionCount || 0} order</span>
+                      </span>
+                      <span className="font-bold text-[#0F2C59]">{tierData?.progressPercent || 0}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-[#0F2C59] to-blue-500 transition-all duration-500"
+                        style={{ width: `${tierData?.progressPercent || 0}%` }}
+                      />
+                    </div>
+                    <div className="text-[9px] text-slate-500 truncate">
+                      {tierData?.statusMessage || 'Level Tertinggi Platinum VIP'}
+                    </div>
+                  </div>
+
+                  {/* Stats Dual-Column Grid */}
+                  <div className="relative z-10 grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-100/90 border border-slate-200 backdrop-blur-md mb-4">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] uppercase text-slate-500 font-medium">Total Diperoleh</span>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-xs sm:text-sm text-[#0F172A] font-bold">
+                          +{loyaltyData ? loyaltyData.totalPointsEarned.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-slate-500">Pts</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col pl-3 border-l border-slate-300">
+                      <span className="text-[10px] uppercase text-slate-500 font-medium">Telah Ditukar</span>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-xs sm:text-sm text-[#0F172A] font-bold">
+                          -{loyaltyData ? loyaltyData.totalPointsRedeemed.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-slate-500">Pts</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card CTA Action Button */}
+                  <div className="relative z-10">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveSection('loyalty');
+                        const element = document.getElementById('customer-tab-content-card');
+                        if (element) element.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="w-full py-2.5 px-4 rounded-xl bg-[#0F2C59] hover:bg-[#163a75] text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-md shadow-blue-900/20 active:scale-[0.98] cursor-pointer"
+                    >
+                      <Gift className="w-3.5 h-3.5" />
+                      <span>Tukar Point Reward</span>
+                      <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+                    </button>
+                  </div>
+
+                  {/* Card Meta Footer */}
+                  <div className="relative z-10 flex items-center justify-between mt-3 pt-2 border-t border-slate-200 text-[#0F2C59]/80 text-[9px] font-mono">
+                    <span>ID: #LC-{customerCode}</span>
+                    <span>VALID THRU: 12/{expiryYear}</span>
+                  </div>
+                </div>
               </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowTierModal(true)}
-              className="py-1 px-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition-all flex items-center gap-1 text-[10px] font-bold text-slate-200 border border-white/10 cursor-pointer shadow-xs"
-              title="Lihat info tingkatan tier membership"
-            >
-              <Award className="w-3.5 h-3.5 text-[#C39A6B]" />
-              <span>Info Tier</span>
-            </button>
-          </div>
+            );
+          }
 
-          <div className="space-y-3.5">
-            {/* JUMLAH TRANSAKSI & PROGRESS BAR */}
-            <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="block text-[9px] text-slate-400 font-mono uppercase tracking-wider">
-                    Jumlah Transaksi
-                  </span>
-                  <div className="flex items-baseline gap-1 mt-0.5">
-                    <span className="text-2xl font-display font-black text-white">
-                      {tierData?.transactionCount || 0}
+          if (currentTier === 'GOLD') {
+            return (
+              <div className="group relative rounded-2xl p-[1px] bg-gradient-to-b from-[#D4AF37] via-[#91751D]/60 to-[#D4AF37]/30 shadow-[0_16px_36px_-8px_rgba(212,175,55,0.3)] transition-all duration-300 hover:-translate-y-0.5">
+                <div
+                  className="relative w-full rounded-[15px] p-5 sm:p-6 flex flex-col justify-between overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg, #0B132B 0%, #152449 60%, #070D1E 100%)' }}
+                >
+                  {/* Warm Amber & Champagne Specular Glow */}
+                  <div className="absolute -top-16 -right-16 w-56 h-56 bg-amber-400/20 blur-3xl rounded-full pointer-events-none" />
+                  <div className="absolute bottom-0 left-0 w-44 h-44 bg-amber-400/10 blur-2xl rounded-full pointer-events-none" />
+                  <div className="absolute inset-0 bg-[radial-gradient(#D4AF37_1px,transparent_1px)] [background-size:18px_18px] opacity-15 pointer-events-none" />
+
+                  {/* Top Header: Monogram & Tier Badge */}
+                  <div className="relative z-10 flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-amber-400/20 border border-amber-400/40 backdrop-blur-md flex items-center justify-center text-[#F5E6BE] shadow-inner shrink-0">
+                        <Coffee className="w-5 h-5 text-[#F5E6BE]" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm sm:text-base text-[#F5E6BE] font-bold tracking-wider leading-none">LETON COFFEE</span>
+                        <span className="text-[9px] tracking-[0.22em] text-[#D4AF37] uppercase mt-1 font-semibold">Signature Reserve</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowTierModal(true)}
+                      className="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-amber-400/15 border border-[#D4AF37]/50 backdrop-blur-md shadow-xs text-[#F5E6BE] hover:bg-amber-400/25 transition-all cursor-pointer"
+                      title="Lihat info tingkatan tier membership"
+                    >
+                      <Award className="w-3.5 h-3.5 text-[#F5E6BE]" />
+                      <span className="text-[10px] font-bold tracking-wider uppercase">GOLD TIER</span>
+                    </button>
+                  </div>
+
+                  {/* Middle: Saldo Poin Aktif */}
+                  <div className="relative z-10 my-2">
+                    <span className="text-[11px] uppercase text-[#D4AF37] tracking-wider font-semibold block">Saldo Poin Aktif</span>
+                    <div className="flex items-baseline gap-2 mt-0.5">
+                      <span className="text-3xl sm:text-4xl leading-tight text-white font-extrabold tracking-tight">
+                        {loyaltyData ? loyaltyData.pointsBalance.toLocaleString('id-ID') : 0}
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded-md bg-amber-400/20 border border-amber-400/30 text-[#F5E6BE] font-bold">PTS</span>
+                    </div>
+                  </div>
+
+                  {/* Transaction Count & Progress Bar */}
+                  <div className="relative z-10 p-3 rounded-xl bg-black/40 border border-[#D4AF37]/25 backdrop-blur-md mb-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="font-semibold text-slate-300">
+                        Transaksi: <span className="font-bold text-white">{tierData?.transactionCount || 0} order</span>
+                      </span>
+                      <span className="font-bold text-[#D4AF37]">{tierData?.progressPercent || 0}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-[#D4AF37] to-[#F5E6BE] transition-all duration-500"
+                        style={{ width: `${tierData?.progressPercent || 0}%` }}
+                      />
+                    </div>
+                    <div className="text-[9px] text-slate-400 truncate">
+                      {tierData?.statusMessage || 'Menuju Platinum VIP'}
+                    </div>
+                  </div>
+
+                  {/* Stats Dual-Column Grid */}
+                  <div className="relative z-10 grid grid-cols-2 gap-3 p-3 rounded-xl bg-black/40 border border-[#D4AF37]/25 backdrop-blur-md mb-4">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] uppercase text-slate-300/80 font-medium">Total Diperoleh</span>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-xs sm:text-sm text-white font-bold">
+                          +{loyaltyData ? loyaltyData.totalPointsEarned.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-slate-400">Pts</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col pl-3 border-l border-[#D4AF37]/25">
+                      <span className="text-[10px] uppercase text-slate-300/80 font-medium">Telah Ditukar</span>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-xs sm:text-sm text-white font-bold">
+                          -{loyaltyData ? loyaltyData.totalPointsRedeemed.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-slate-400">Pts</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card CTA Action Button */}
+                  <div className="relative z-10">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveSection('loyalty');
+                        const element = document.getElementById('customer-tab-content-card');
+                        if (element) element.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#E5B842] via-[#D4AF37] to-[#E5B842] hover:brightness-105 text-[#241A00] text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-amber-500/20 active:scale-[0.98] cursor-pointer"
+                    >
+                      <Gift className="w-3.5 h-3.5" />
+                      <span>Tukar Point Reward</span>
+                      <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+                    </button>
+                  </div>
+
+                  {/* Card Meta Footer */}
+                  <div className="relative z-10 flex items-center justify-between mt-3 pt-2 border-t border-[#D4AF37]/25 text-[#D4AF37]/90 text-[9px] font-mono">
+                    <span>ID: #LC-{customerCode}</span>
+                    <span>VALID THRU: 12/{expiryYear}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Default: SILVER TIER (Frosted Silver-Blue / Palladium)
+          return (
+            <div className="group relative rounded-2xl p-[1px] bg-gradient-to-b from-slate-200 via-slate-300 to-slate-200 shadow-[0_14px_30px_-8px_rgba(71,85,105,0.18)] transition-all duration-300 hover:-translate-y-0.5">
+              <div
+                className="relative w-full rounded-[15px] p-5 sm:p-6 flex flex-col justify-between overflow-hidden"
+                style={{ background: 'linear-gradient(135deg, #7E9BB8 0%, #A3BCD3 48%, #6B8BAE 100%)' }}
+              >
+                {/* Specular Sheen */}
+                <div className="absolute -top-12 -right-12 w-48 h-48 bg-white/30 blur-2xl rounded-full pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/15 to-transparent opacity-70 pointer-events-none" />
+
+                {/* Top Header: Monogram & Tier Badge */}
+                <div className="relative z-10 flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-white/25 backdrop-blur-md border border-white/40 flex items-center justify-center text-white shadow-inner shrink-0">
+                      <Coffee className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm sm:text-base text-white font-bold tracking-wider leading-none">LETON COFFEE</span>
+                      <span className="text-[9px] tracking-[0.22em] text-white/85 uppercase mt-1 font-medium">Private Club</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowTierModal(true)}
+                    className="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-white/25 border border-white/40 backdrop-blur-md shadow-xs text-white hover:bg-white/30 transition-all cursor-pointer"
+                    title="Lihat info tingkatan tier membership"
+                  >
+                    <Award className="w-3.5 h-3.5 text-white" />
+                    <span className="text-[10px] font-bold tracking-wider uppercase">SILVER TIER</span>
+                  </button>
+                </div>
+
+                {/* Middle: Saldo Poin Aktif */}
+                <div className="relative z-10 my-2">
+                  <span className="text-[11px] uppercase text-white/90 tracking-wider font-semibold block">Saldo Poin Aktif</span>
+                  <div className="flex items-baseline gap-2 mt-0.5">
+                    <span className="text-3xl sm:text-4xl leading-tight text-white font-extrabold tracking-tight drop-shadow-sm">
+                      {loyaltyData ? loyaltyData.pointsBalance.toLocaleString('id-ID') : 0}
                     </span>
-                    <span className="text-xs font-semibold text-slate-400">transaksi</span>
+                    <span className="text-xs px-2 py-0.5 rounded-md bg-white/25 border border-white/30 backdrop-blur-sm text-white font-bold">PTS</span>
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tierData?.theme?.badgeBg || 'bg-slate-700'} ${tierData?.theme?.badgeText || 'text-slate-300'}`}>
-                    {tierData?.tier === 'PLATINUM' ? '💎 VIP' : tierData?.tier === 'GOLD' ? '🥇 LEVEL 2' : '🥈 LEVEL 1'}
-                  </span>
+                {/* Transaction Count & Progress Bar */}
+                <div className="relative z-10 p-3 rounded-xl bg-black/15 backdrop-blur-md border border-white/20 mb-3 space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-semibold text-white/90">
+                      Transaksi: <span className="font-bold text-white">{tierData?.transactionCount || 0} order</span>
+                    </span>
+                    <span className="font-bold text-white">{tierData?.progressPercent || 0}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-black/25 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-white/70 to-white transition-all duration-500"
+                      style={{ width: `${tierData?.progressPercent || 0}%` }}
+                    />
+                  </div>
+                  <div className="text-[9px] text-white/80 truncate">
+                    {tierData?.statusMessage || 'Menuju Gold Tier'}
+                  </div>
                 </div>
-              </div>
 
-              {/* Progress Bar & Subtext */}
-              <div className="space-y-1 pt-1">
-                <div className="flex justify-between items-center text-[10px] font-mono">
-                  <span className="text-slate-300 font-medium">
-                    {tierData?.statusMessage || 'Memuat status tier...'}
-                  </span>
-                  <span className="text-amber-400 font-bold">{tierData?.progressPercent || 0}%</span>
+                {/* Stats Dual-Column Grid */}
+                <div className="relative z-10 grid grid-cols-2 gap-3 p-3 rounded-xl bg-black/15 backdrop-blur-md border border-white/20 mb-4">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] uppercase text-white/80 font-medium">Total Diperoleh</span>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="text-xs sm:text-sm text-white font-bold">
+                        +{loyaltyData ? loyaltyData.totalPointsEarned.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-white/80">Pts</span>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col pl-3 border-l border-white/20">
+                    <span className="text-[10px] uppercase text-white/80 font-medium">Telah Ditukar</span>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="text-xs sm:text-sm text-white font-bold">
+                        -{loyaltyData ? loyaltyData.totalPointsRedeemed.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-white/80">Pts</span>
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden p-0.5 border border-white/10">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      tierData?.tier === 'PLATINUM'
-                        ? 'bg-gradient-to-r from-cyan-400 to-purple-400'
-                        : tierData?.tier === 'GOLD'
-                        ? 'bg-gradient-to-r from-amber-400 to-yellow-400'
-                        : 'bg-gradient-to-r from-slate-400 to-amber-400'
-                    }`}
-                    style={{ width: `${tierData?.progressPercent || 0}%` }}
-                  />
+
+                {/* Card CTA Action Button */}
+                <div className="relative z-10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveSection('loyalty');
+                      const element = document.getElementById('customer-tab-content-card');
+                      if (element) element.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="w-full py-2.5 px-4 rounded-xl bg-white/90 hover:bg-white text-slate-800 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-[0.98] cursor-pointer"
+                  >
+                    <Gift className="w-3.5 h-3.5" />
+                    <span>Tukar Point Reward</span>
+                    <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+                  </button>
+                </div>
+
+                {/* Card Meta Footer */}
+                <div className="relative z-10 flex items-center justify-between mt-3 pt-2 border-t border-white/20 text-white/80 text-[9px] font-mono">
+                  <span>ID: #LC-{customerCode}</span>
+                  <span>VALID THRU: 12/{expiryYear}</span>
                 </div>
               </div>
             </div>
-
-            {/* Saldo Poin */}
-            <div>
-              <span className="block text-[10px] text-slate-400 font-mono uppercase tracking-wider">
-                Saldo Poin Aktif
-              </span>
-              <div className="flex items-baseline gap-1.5 mt-0.5">
-                <span className="text-2xl font-display font-black text-amber-500">
-                  {loyaltyData ? loyaltyData.pointsBalance : 0}
-                </span>
-                <span className="text-xs font-bold text-slate-400 font-mono uppercase">Poin</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 border-t border-slate-800/80 pt-2.5 text-xs">
-              <div>
-                <span className="block text-[9px] text-slate-400 font-mono uppercase">
-                  Total Diperoleh
-                </span>
-                <span className="font-bold text-emerald-400 font-mono">
-                  +{loyaltyData ? loyaltyData.totalPointsEarned : 0} Pts
-                </span>
-              </div>
-              <div>
-                <span className="block text-[9px] text-slate-400 font-mono uppercase">
-                  Telah Ditukar
-                </span>
-                <span className="font-bold text-rose-400 font-mono">
-                  -{loyaltyData ? loyaltyData.totalPointsRedeemed : 0} Pts
-                </span>
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                setActiveSection('loyalty');
-                const element = document.getElementById('customer-tab-content-card');
-                if (element) element.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="w-full mt-1 py-2 px-3 bg-[#C39A6B] hover:bg-[#B38A5B] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-            >
-              <Gift className="w-3.5 h-3.5" />
-              <span>TUKAR POINT REWARD</span>
-            </button>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* PROFILE EDIT FORM */}
         <div className="bg-white rounded-2xl border border-[#E4E7EC] p-5 shadow-sm">

@@ -449,25 +449,6 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
                     </div>
                   </div>
 
-                  {/* Transaction Count & Progress Bar */}
-                  <div className="relative z-10 p-3 rounded-xl bg-slate-100/90 border border-slate-200 backdrop-blur-md mb-3 space-y-1.5">
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="font-semibold text-slate-600">
-                        Transaksi: <span className="font-bold text-[#0F172A]">{tierData?.transactionCount || 0} order</span>
-                      </span>
-                      <span className="font-bold text-[#0F2C59]">{tierData?.progressPercent || 0}%</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-[#0F2C59] to-blue-500 transition-all duration-500"
-                        style={{ width: `${tierData?.progressPercent || 0}%` }}
-                      />
-                    </div>
-                    <div className="text-[9px] text-slate-500 truncate">
-                      {tierData?.statusMessage || 'Level Tertinggi Platinum VIP'}
-                    </div>
-                  </div>
-
                   {/* Stats Dual-Column Grid */}
                   <div className="relative z-10 grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-100/90 border border-slate-200 backdrop-blur-md mb-4">
                     <div className="flex flex-col">
@@ -557,25 +538,6 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
                         {loyaltyData ? loyaltyData.pointsBalance.toLocaleString('id-ID') : 0}
                       </span>
                       <span className="text-xs px-2 py-0.5 rounded-md bg-amber-400/20 border border-amber-400/30 text-[#F5E6BE] font-bold">PTS</span>
-                    </div>
-                  </div>
-
-                  {/* Transaction Count & Progress Bar */}
-                  <div className="relative z-10 p-3 rounded-xl bg-black/40 border border-[#D4AF37]/25 backdrop-blur-md mb-3 space-y-1.5">
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="font-semibold text-slate-300">
-                        Transaksi: <span className="font-bold text-white">{tierData?.transactionCount || 0} order</span>
-                      </span>
-                      <span className="font-bold text-[#D4AF37]">{tierData?.progressPercent || 0}%</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-[#D4AF37] to-[#F5E6BE] transition-all duration-500"
-                        style={{ width: `${tierData?.progressPercent || 0}%` }}
-                      />
-                    </div>
-                    <div className="text-[9px] text-slate-400 truncate">
-                      {tierData?.statusMessage || 'Menuju Platinum VIP'}
                     </div>
                   </div>
 
@@ -670,25 +632,6 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
                   </div>
                 </div>
 
-                {/* Transaction Count & Progress Bar */}
-                <div className="relative z-10 p-3 rounded-xl bg-black/15 backdrop-blur-md border border-white/20 mb-3 space-y-1.5">
-                  <div className="flex items-center justify-between text-[10px]">
-                    <span className="font-semibold text-white/90">
-                      Transaksi: <span className="font-bold text-white">{tierData?.transactionCount || 0} order</span>
-                    </span>
-                    <span className="font-bold text-white">{tierData?.progressPercent || 0}%</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-black/25 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-white/70 to-white transition-all duration-500"
-                      style={{ width: `${tierData?.progressPercent || 0}%` }}
-                    />
-                  </div>
-                  <div className="text-[9px] text-white/80 truncate">
-                    {tierData?.statusMessage || 'Menuju Gold Tier'}
-                  </div>
-                </div>
-
                 {/* Stats Dual-Column Grid */}
                 <div className="relative z-10 grid grid-cols-2 gap-3 p-3 rounded-xl bg-black/15 backdrop-blur-md border border-white/20 mb-4">
                   <div className="flex flex-col">
@@ -735,6 +678,40 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
             </div>
           );
         })()}
+
+        {/* MEMBERSHIP PROGRESS (OUTSIDE CARD — CLEAN LIGHT SECTION) */}
+        <div className="bg-white rounded-2xl border border-[#E4E7EC] p-4 shadow-sm space-y-2.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-semibold text-slate-700">
+              Transaksi: <span className="font-bold text-[#172033]">{tierData?.transactionCount || 0} order</span>
+            </span>
+            <span className="font-bold text-amber-600 font-mono">{tierData?.progressPercent || 0}%</span>
+          </div>
+          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/80">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                tierData?.tier === 'PLATINUM'
+                  ? 'bg-gradient-to-r from-blue-600 to-cyan-500'
+                  : tierData?.tier === 'GOLD'
+                  ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                  : 'bg-gradient-to-r from-slate-500 to-amber-500'
+              }`}
+              style={{ width: `${tierData?.progressPercent || 0}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5">
+            <span className="font-medium text-slate-600 truncate pr-2">
+              {tierData?.statusMessage || 'Memuat status tier...'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowTierModal(true)}
+              className="text-amber-700 hover:text-amber-800 font-semibold cursor-pointer text-[11px] hover:underline shrink-0"
+            >
+              Info Tier
+            </button>
+          </div>
+        </div>
 
         {/* PROFILE EDIT FORM */}
         <div className="bg-white rounded-2xl border border-[#E4E7EC] p-5 shadow-sm">

@@ -129,20 +129,34 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
 
   // Scroll reset helper for modal and window
   const scrollToTop = () => {
-    if (modalContainerRef.current) {
-      modalContainerRef.current.scrollTop = 0;
-      if (typeof modalContainerRef.current.scrollTo === 'function') {
-        modalContainerRef.current.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    try {
+      if (modalContainerRef.current) {
+        modalContainerRef.current.scrollTop = 0;
+        if (typeof modalContainerRef.current.scrollTo === 'function') {
+          modalContainerRef.current.scrollTo({ top: 0, left: 0 });
+        }
       }
+    } catch (e) {
+      console.warn('Scroll modalContainerRef failed:', e);
     }
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+
+    try {
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, left: 0 });
+      }
+    } catch (e) {
+      console.warn('Scroll window failed:', e);
     }
-    if (document.documentElement) {
-      document.documentElement.scrollTop = 0;
-    }
-    if (document.body) {
-      document.body.scrollTop = 0;
+
+    try {
+      if (document.documentElement) {
+        document.documentElement.scrollTop = 0;
+      }
+      if (document.body) {
+        document.body.scrollTop = 0;
+      }
+    } catch (e) {
+      console.warn('Scroll document bodies failed:', e);
     }
   };
 

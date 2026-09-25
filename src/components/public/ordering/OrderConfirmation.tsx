@@ -51,27 +51,45 @@ export const OrderConfirmation: React.FC<OrderConfirmationProps> = ({
   // Instantly scroll to the absolute top upon rendering the Confirmation / Bill page
   useEffect(() => {
     const scrollToTop = () => {
-      // Reset window scroll
-      if (typeof window !== 'undefined') {
-        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-      }
-      // Reset document root
-      if (document.documentElement) {
-        document.documentElement.scrollTop = 0;
-      }
-      if (document.body) {
-        document.body.scrollTop = 0;
-      }
-      // Reset all scrollable modal containers and wrappers
-      const scrollableElements = document.querySelectorAll(
-        '.overflow-y-auto, .overflow-auto, [data-scroll-container="true"]'
-      );
-      scrollableElements.forEach((el) => {
-        el.scrollTop = 0;
-        if (typeof el.scrollTo === 'function') {
-          el.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      try {
+        // Reset window scroll
+        if (typeof window !== 'undefined') {
+          window.scrollTo({ top: 0, left: 0 });
         }
-      });
+      } catch (e) {
+        console.warn('Confirmation scrollTo window failed:', e);
+      }
+      
+      try {
+        // Reset document root
+        if (document.documentElement) {
+          document.documentElement.scrollTop = 0;
+        }
+        if (document.body) {
+          document.body.scrollTop = 0;
+        }
+      } catch (e) {
+        console.warn('Confirmation scrollTop bodies failed:', e);
+      }
+
+      try {
+        // Reset all scrollable modal containers and wrappers
+        const scrollableElements = document.querySelectorAll(
+          '.overflow-y-auto, .overflow-auto, [data-scroll-container="true"]'
+        );
+        scrollableElements.forEach((el) => {
+          try {
+            el.scrollTop = 0;
+            if (typeof el.scrollTo === 'function') {
+              el.scrollTo({ top: 0, left: 0 });
+            }
+          } catch (innerErr) {
+            console.warn('Scroll el failed:', innerErr);
+          }
+        });
+      } catch (e) {
+        console.warn('Confirmation scrollableElements failed:', e);
+      }
     };
 
     // Immediate execution
@@ -114,7 +132,36 @@ export const OrderConfirmation: React.FC<OrderConfirmationProps> = ({
           filter: `id=eq.${initialOrder.id}`,
         },
         (payload: any) => {
-          const updatedOrder = payload.new;
+          const row = payload.new;
+          if (!row) return;
+
+          // Map snake_case database columns back to camelCase CustomerOrder structure
+          const updatedOrder: CustomerOrder = {
+            id: row.id,
+            orderNumber: row.order_number || row.orderNumber || 'LTN-????',
+            outletId: row.outlet_id || row.outletId || '',
+            outletName: row.outlet_name || row.outletName || '',
+            customerName: row.customer_name || row.customerName || '',
+            customerPhone: row.customer_phone || row.customerPhone || '',
+            customerId: row.customer_id || row.customerId || undefined,
+            userId: row.user_id || row.userId || undefined,
+            orderType: row.order_type || row.orderType || 'DINE IN',
+            tableNumber: row.table_number || row.tableNumber || '',
+            items: Array.isArray(row.items) ? row.items : [],
+            totalAmount: Number(row.total_amount || row.totalAmount || 0),
+            paymentMethod: row.payment_method || row.paymentMethod || 'QRIS',
+            paymentStatus: row.payment_status || row.paymentStatus || 'WAITING PAYMENT',
+            paymentProofPath: row.payment_proof_path || row.payment_receipt_path || row.paymentReceiptPath,
+            paymentReceiptUrl: row.payment_receipt_url || row.paymentReceiptUrl,
+            paymentReceiptPath: row.payment_receipt_path || row.payment_proof_path || row.paymentReceiptPath,
+            rejectionReason: row.rejection_reason || row.rejectionReason,
+            orderStatus: row.order_status || row.orderStatus || 'NEW',
+            customerNote: row.customer_note || row.customerNote || '',
+            pickupTime: row.pickup_time || row.pickupTime || undefined,
+            pickup_time: row.pickup_time || row.pickupTime || undefined,
+            createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+          };
+
           setCurrentOrder(updatedOrder);
 
           // Trigger in-app notification when status changes

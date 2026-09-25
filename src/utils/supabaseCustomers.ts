@@ -296,9 +296,8 @@ export async function findOrCreateCustomerMember(
 
 /**
  * Delete a registered customer by ID (Super Admin only).
- * Uses secure Supabase SECURITY DEFINER RPC function (delete_registered_customer_rpc)
+ * Uses new secure Supabase SECURITY DEFINER RPC function (admin_delete_registered_customer)
  * directly accessible from Cloudflare Pages production environment.
- * MANDATORY: Always passes both p_customer_id and p_admin_token to enforce server-side database session authorization.
  */
 export async function deleteRegisteredCustomer(customerId: string, adminRole?: string): Promise<{ success: boolean; error?: string }> {
   // 1. Authorization Check: Ensure caller holds admin role or valid session token
@@ -341,13 +340,12 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
     }
   }
 
-  // 3. Primary Production Architecture: Direct Supabase SECURITY DEFINER RPC call
-  // Strict signature with mandatory p_admin_token for database authorization
+  // 3. Primary Production Architecture: Direct Supabase SECURITY DEFINER RPC call (admin_delete_registered_customer)
   if (!deletionSuccess) {
     const client = getSupabase(activeRole);
 
     try {
-      const { data: rpcRes, error: rpcErr } = await client.rpc('delete_registered_customer_rpc', {
+      const { data: rpcRes, error: rpcErr } = await client.rpc('admin_delete_registered_customer', {
         p_customer_id: customerId,
         p_admin_token: token,
       });

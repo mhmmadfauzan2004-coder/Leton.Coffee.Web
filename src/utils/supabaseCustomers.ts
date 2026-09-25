@@ -298,6 +298,7 @@ export async function findOrCreateCustomerMember(
  * Delete a registered customer by ID (Super Admin only).
  * Uses secure Supabase SECURITY DEFINER RPC function (delete_registered_customer_rpc)
  * directly accessible from Cloudflare Pages production environment.
+ * MANDATORY: Always passes both p_customer_id and p_admin_token to enforce server-side database session authorization.
  */
 export async function deleteRegisteredCustomer(customerId: string, adminRole?: string): Promise<{ success: boolean; error?: string }> {
   // 1. Authorization Check: Ensure caller holds admin role or valid session token
@@ -316,11 +317,11 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
   }
 
   let deletionSuccess = false;
+  let lastErrorMsg = '';
 
-  // 2. Same-Domain Express API Proxy (If running on same host, e.g., localhost or direct server container)
+  // 2. Same-Domain Express API Proxy (If running on localhost / same-origin container)
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
-    // Only attempt Express API if running on local server / same-origin container
     if (host === 'localhost' || host === '127.0.0.1') {
       try {
         const res = await fetch(`/api/admin/customers/${encodeURIComponent(customerId)}/delete`, {
@@ -341,12 +342,11 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
   }
 
   // 3. Primary Production Architecture: Direct Supabase SECURITY DEFINER RPC call
-  // Works 100% reliably from Cloudflare Pages (https://leton-coffee-web.pages.dev) and all mobile browsers
+  // Strict signature with mandatory p_admin_token for database authorization
   if (!deletionSuccess) {
+    const client = getSupabase(activeRole);
+
     try {
-      const client = getSupabase(activeRole);
-      
-      // Execute SECURITY DEFINER RPC function in Supabase PostgreSQL with admin session token
       const { data: rpcRes, error: rpcErr } = await client.rpc('delete_registered_customer_rpc', {
         p_customer_id: customerId,
         p_admin_token: token,
@@ -354,22 +354,25 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
 
       if (!rpcErr && rpcRes) {
         let isOk = false;
-        if (typeof rpcRes === 'object' && rpcRes.success === true) {
-          isOk = true;
-        } else if (typeof rpcRes === 'string') {
+        if (typeof rpcRes === 'object' && rpcRes.success === true) isOk = true;
+        else if (typeof rpcRes === 'string') {
           try {
-            const parsed = JSON.parse(rpcRes);
-            if (parsed.success === true) isOk = true;
+            if (JSON.parse(rpcRes).success === true) isOk = true;
           } catch {}
         }
-        if (isOk) {
-          deletionSuccess = true;
-        }
+        if (isOk) deletionSuccess = true;
       } else if (rpcErr) {
-        console.warn('[deleteRegisteredCustomer] Supabase RPC error:', rpcErr.message);
+        console.error('[DELETE MEMBER RPC ERROR]', {
+          code: rpcErr.code,
+          message: rpcErr.message,
+          details: rpcErr.details,
+          hint: rpcErr.hint,
+        });
+        lastErrorMsg = rpcErr.message || rpcErr.details || '';
       }
-    } catch (rpcEx: any) {
-      console.warn('[deleteRegisteredCustomer] Supabase RPC exception:', rpcEx);
+    } catch (ex: any) {
+      console.warn('[DELETE MEMBER RPC EXCEPTION]', ex);
+      lastErrorMsg = ex?.message || 'Gagal mengeksekusi perintah database.';
     }
   }
 
@@ -386,7 +389,7 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
       if (checkRow && checkRow.password_hash && String(checkRow.password_hash).trim() !== '') {
         return {
           success: false,
-          error: 'Gagal menghubungi server. Member masih tersimpan di database. Silakan coba lagi.'
+          error: 'Hapus member gagal: Member masih tersimpan di database. Silakan coba lagi.'
         };
       }
     } catch {}
@@ -396,7 +399,9 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
 
   return {
     success: false,
-    error: 'Gagal menghubungi server. Silakan coba lagi.'
+    error: lastErrorMsg
+      ? `Hapus member gagal: ${lastErrorMsg}`
+      : 'Hapus member gagal: Tidak dapat terhubung ke database server Supabase. Silakan coba lagi.'
   };
 }
 

@@ -651,61 +651,76 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     if (isValid) {
-      const token = `leton_local_token_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      try {
+        // Synchronously authenticate with the server to register session and generate official secure token
+        const response = await fetch(getApiUrl('/api/auth/login'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: activeUsername,
+            password: inputPass,
+            role: matchedRole,
+            outletId: matchedOutletId,
+          }),
+        });
 
-      // Store in localStorage for persistent session
-      localStorage.setItem(TOKEN_STORAGE_KEY, token);
-      localStorage.setItem(USERNAME_STORAGE_KEY, activeUsername);
-      localStorage.setItem(ROLE_STORAGE_KEY, matchedRole);
-      if (matchedOutletId) {
-        localStorage.setItem(OUTLET_STORAGE_KEY, matchedOutletId);
-      } else {
-        localStorage.removeItem(OUTLET_STORAGE_KEY);
-      }
-      if (matchedOutletName) {
-        localStorage.setItem(OUTLET_NAME_STORAGE_KEY, matchedOutletName);
-      } else {
-        localStorage.removeItem(OUTLET_NAME_STORAGE_KEY);
-      }
+        if (!response.ok) {
+          return {
+            success: false,
+            error: 'Gagal menghubungkan ke server otentikasi. Silakan coba lagi.'
+          };
+        }
 
-      // Re-initialize Supabase client so headers include x-admin-role and x-outlet-id
-      resetSupabaseClient();
+        const resData = await response.json();
+        const serverToken = resData?.token;
 
-      // Instantly update Auth state to render Admin Dashboard
-      setAuth({
-        isAuthenticated: true,
-        token,
-        username: activeUsername,
-        role: matchedRole,
-        outletId: matchedOutletId,
-        outletName: matchedOutletName,
-      });
+        if (!serverToken) {
+          return {
+            success: false,
+            error: 'Server otentikasi tidak mengembalikan token sesi yang sah.'
+          };
+        }
 
-      // Synchronize with server in background if available
-      fetch(getApiUrl('/api/auth/login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        // Store official secure session token from server in localStorage
+        localStorage.setItem(TOKEN_STORAGE_KEY, serverToken);
+        localStorage.setItem(USERNAME_STORAGE_KEY, activeUsername);
+        localStorage.setItem(ROLE_STORAGE_KEY, matchedRole);
+        if (matchedOutletId) {
+          localStorage.setItem(OUTLET_STORAGE_KEY, matchedOutletId);
+        } else {
+          localStorage.removeItem(OUTLET_STORAGE_KEY);
+        }
+        if (matchedOutletName) {
+          localStorage.setItem(OUTLET_NAME_STORAGE_KEY, matchedOutletName);
+        } else {
+          localStorage.removeItem(OUTLET_NAME_STORAGE_KEY);
+        }
+
+        // Re-initialize Supabase client headers with the verified role and token
+        resetSupabaseClient();
+
+        // Update react auth state with verified credentials
+        setAuth({
+          isAuthenticated: true,
+          token: serverToken,
           username: activeUsername,
-          password: inputPass,
           role: matchedRole,
           outletId: matchedOutletId,
-        }),
-      })
-        .then((r) => r.json())
-        .then((d) => {
-          if (d && d.token) {
-            localStorage.setItem(TOKEN_STORAGE_KEY, d.token);
-            setAuth((prev) => ({ ...prev, token: d.token }));
-          }
-        })
-        .catch(() => {});
+          outletName: matchedOutletName,
+        });
 
-      const welcomeMsg = matchedRole === 'super_admin'
-        ? `Selamat datang, Super Admin Leton Coffee!`
-        : `Selamat datang di Admin Outlet ${matchedOutletName || ''}!`;
-      showToast(welcomeMsg, 'success');
-      return { success: true };
+        const welcomeMsg = matchedRole === 'super_admin'
+          ? `Selamat datang, Super Admin Leton Coffee!`
+          : `Selamat datang di Admin Outlet ${matchedOutletName || ''}!`;
+        showToast(welcomeMsg, 'success');
+        return { success: true };
+      } catch (authErr: any) {
+        console.error('[Admin Login Server Sync Error]:', authErr);
+        return {
+          success: false,
+          error: 'Terjadi kesalahan jaringan saat otentikasi dengan server.'
+        };
+      }
     }
 
     return {

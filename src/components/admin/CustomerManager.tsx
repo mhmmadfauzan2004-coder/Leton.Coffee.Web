@@ -1057,8 +1057,8 @@ export const CustomerManager: React.FC = () => {
               <p className="text-xs text-[#64748B] mt-2 leading-relaxed">
                 Anda yakin ingin menghapus member <strong>{confirmingCustomer.namaLengkap}</strong> ({confirmingCustomer.nomorHp})?
               </p>
-              <p className="text-[11px] text-[#64748B] mt-2 italic bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                Catatan: Akun member akan dihapus dari sistem, tetapi histori transaksi/order akan tetap tersimpan utuh di database.
+              <p className="text-[11px] text-rose-700 bg-rose-50/50 p-2.5 rounded-xl border border-rose-100 font-medium mt-2 leading-relaxed">
+                Catatan: Member, seluruh riwayat pesanan (orders &amp; order_items), serta data terkait member akan dihapus permanen dari sistem.
               </p>
             </div>
 

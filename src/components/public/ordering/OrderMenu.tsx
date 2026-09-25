@@ -10,6 +10,10 @@ import {
   subscribeToOutletStockRealtime,
 } from '../../../utils/supabaseStock';
 import {
+  subscribeToOutletAvailabilityRealtime,
+  normalizeOutletKey,
+} from '../../../utils/supabaseOutletStatus';
+import {
   ShoppingBag,
   Search,
   Plus,
@@ -19,6 +23,8 @@ import {
   Sparkles,
   Coffee,
   Check,
+  AlertCircle,
+  Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -57,6 +63,16 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [customizingProduct, setCustomizingProduct] = useState<MenuItem | null>(null);
+  const [isOutletOpen, setIsOutletOpen] = useState<boolean>(true);
+
+  // Subscribe to live outlet availability updates
+  React.useEffect(() => {
+    const unsub = subscribeToOutletAvailabilityRealtime((statusMap) => {
+      const normKey = normalizeOutletKey(outlet?.id);
+      setIsOutletOpen(statusMap[normKey] !== false);
+    });
+    return () => unsub();
+  }, [outlet?.id]);
 
   // Subscribe to live stock broadcast updates
   React.useEffect(() => {
@@ -139,21 +155,25 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
       <div className="bg-white/95 border-b border-[#e4efff] sticky top-0 z-20 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-[#eef4ff] text-[#006389] flex items-center justify-center shrink-0">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+              isOutletOpen ? 'bg-[#eef4ff] text-[#006389]' : 'bg-rose-100 text-rose-600'
+            }`}>
               <Store className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className={`w-2 h-2 rounded-full ${isOutletOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
                 <h3 className="font-display font-black text-xs sm:text-sm text-[#041d32] truncate">
                   Outlet {outlet.name}
                 </h3>
-                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full bg-[#eef4ff] text-[#006389] text-[10px] font-bold">
-                  Fast Pick-up
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  isOutletOpen ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                }`}>
+                  {isOutletOpen ? 'Menerima Order' : 'Order Tutup'}
                 </span>
               </div>
               <span className="text-[11px] text-[#3e484f] truncate block">
-                Buka s/d 23.00 • {outlet.address || 'Dumai'}
+                {outlet.hours || '08:00 – 23:00 WIB'} • {outlet.address || 'Dumai'}
               </span>
             </div>
           </div>
@@ -177,6 +197,25 @@ export const OrderMenu: React.FC<OrderMenuProps> = ({
             )}
           </div>
         </div>
+
+        {/* Warning Banner if outlet is closed */}
+        {!isOutletOpen && (
+          <div className="bg-rose-50 border-t border-b border-rose-200 px-4 py-2 text-rose-800 text-xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>
+                <strong>Pemberitahuan:</strong> Cabang <strong>{outlet.name}</strong> sedang <strong>TIDAK MENERIMA PESANAN</strong> saat ini.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onChangeOutlet}
+              className="text-xs font-bold text-rose-700 hover:text-rose-900 underline shrink-0 cursor-pointer"
+            >
+              Pilih Cabang Lain
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="max-w-7xl mx-auto px-4 pt-4 sm:pt-6">

@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { OrderOutlet } from '../../../types';
 import { DEFAULT_OUTLETS } from '../../../data/outletsData';
 import { useContent } from '../../../context/ContentContext';
 import { resolveMediaUrl } from '../../../utils/api';
-import { MapPin, Clock, ArrowRight, Coffee } from 'lucide-react';
+import { subscribeToOutletAvailabilityRealtime, normalizeOutletKey } from '../../../utils/supabaseOutletStatus';
+import { MapPin, Clock, ArrowRight, Coffee, Lock } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface OutletSelectorProps {
@@ -13,6 +14,19 @@ interface OutletSelectorProps {
 
 export const OutletSelector: React.FC<OutletSelectorProps> = ({ onSelectOutlet }) => {
   const { data } = useContent();
+  const [availabilityMap, setAvailabilityMap] = useState<Record<string, boolean>>({
+    sudirman: true,
+    kelakap_7: true,
+    'letgo-mpp': true,
+  });
+
+  // Subscribe to realtime outlet order availability changes
+  useEffect(() => {
+    const unsubscribe = subscribeToOutletAvailabilityRealtime((statusMap) => {
+      setAvailabilityMap(statusMap);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Only Sudirman and Kelakap 7 are available for Online Order
   const availableOutlets = DEFAULT_OUTLETS.filter(
@@ -40,12 +54,16 @@ export const OutletSelector: React.FC<OutletSelectorProps> = ({ onSelectOutlet }
       }
     }
 
+    const normKey = normalizeOutletKey(outlet.id);
+    const isAccepting = availabilityMap[normKey] !== false;
+
     return {
       ...outlet,
       image: dynamicImage,
       address: dynamicAddress,
       hours: dynamicHours,
       whatsapp: data?.contactSettings?.whatsapp || outlet.whatsapp,
+      accepting_orders: isAccepting,
     };
   });
 
@@ -67,70 +85,113 @@ export const OutletSelector: React.FC<OutletSelectorProps> = ({ onSelectOutlet }
 
       {/* Outlet Cards Grid (2 Outlets) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-8 max-w-3xl mx-auto">
-        {outlets.map((outlet, idx) => (
-          <motion.div
-            key={outlet.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: idx * 0.1 }}
-            onClick={() => onSelectOutlet(outlet)}
-            className="group relative rounded-2xl sm:rounded-3xl overflow-hidden bg-slate-900/90 border border-slate-800 hover:border-[#00E5FF]/80 transition-all duration-300 flex flex-col justify-between cursor-pointer hover:shadow-2xl hover:shadow-[#00E5FF]/15 hover:-translate-y-1.5"
-          >
-            {/* Image Header */}
-            <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-950">
-              <img
-                src={resolveMediaUrl(outlet.image)}
-                alt={outlet.name}
-                className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 brightness-85 group-hover:brightness-100"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
+        {outlets.map((outlet, idx) => {
+          const isAccepting = outlet.accepting_orders !== false;
 
-              {/* Status Badge */}
-              <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/90 border border-emerald-500/50 text-emerald-400 text-[10px] font-mono font-bold tracking-wider uppercase backdrop-blur-md">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                <span>Menerima Order</span>
-              </div>
+          return (
+            <motion.div
+              key={outlet.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: idx * 0.1 }}
+              onClick={() => {
+                if (isAccepting) {
+                  onSelectOutlet(outlet);
+                }
+              }}
+              className={`group relative rounded-2xl sm:rounded-3xl overflow-hidden bg-slate-900/90 border transition-all duration-300 flex flex-col justify-between ${
+                isAccepting
+                  ? 'border-slate-800 hover:border-[#00E5FF]/80 cursor-pointer hover:shadow-2xl hover:shadow-[#00E5FF]/15 hover:-translate-y-1.5'
+                  : 'border-slate-800/60 opacity-85 cursor-not-allowed'
+              }`}
+            >
+              {/* Image Header */}
+              <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-950">
+                <img
+                  src={resolveMediaUrl(outlet.image)}
+                  alt={outlet.name}
+                  className={`w-full h-full object-cover object-center transition-transform duration-700 ${
+                    isAccepting
+                      ? 'group-hover:scale-105 brightness-85 group-hover:brightness-100'
+                      : 'grayscale-50 brightness-60'
+                  }`}
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
 
-              {outlet.badge && (
-                <div className="absolute top-3 right-3 px-2 py-0.5 rounded-md bg-[#2563EB]/90 text-white text-[9px] font-mono font-bold uppercase tracking-wider backdrop-blur-xs">
-                  {outlet.badge}
-                </div>
-              )}
-            </div>
-
-            {/* Content Details */}
-            <div className="p-5 flex-1 flex flex-col justify-between">
-              <div>
-                <h3 className="font-display font-black text-base sm:text-lg text-white group-hover:text-[#00E5FF] transition-colors leading-snug">
-                  {outlet.name}
-                </h3>
-
-                <div className="mt-3 space-y-2 text-xs text-slate-300">
-                  <div className="flex items-start gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-[#00E5FF] shrink-0 mt-0.5" />
-                    <span className="line-clamp-2 leading-relaxed">{outlet.address}</span>
+                {/* Status Badge */}
+                {isAccepting ? (
+                  <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/90 border border-emerald-500/50 text-emerald-400 text-[10px] font-mono font-bold tracking-wider uppercase backdrop-blur-md">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    <span>Menerima Order</span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="font-mono text-[11px]">{outlet.hours}</span>
+                ) : (
+                  <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-950/90 border border-rose-500/50 text-rose-300 text-[10px] font-mono font-bold tracking-wider uppercase backdrop-blur-md">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                    <span>Tidak Menerima Order</span>
                   </div>
-                </div>
+                )}
+
+                {outlet.badge && (
+                  <div className="absolute top-3 right-3 px-2 py-0.5 rounded-md bg-[#2563EB]/90 text-white text-[9px] font-mono font-bold uppercase tracking-wider backdrop-blur-xs">
+                    {outlet.badge}
+                  </div>
+                )}
               </div>
 
-              {/* Action Button */}
-              <div className="mt-5 pt-4 border-t border-slate-800/80">
-                <button
-                  type="button"
-                  className="w-full py-2.5 px-4 rounded-xl font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 bg-[#2563EB] group-hover:bg-[#00E5FF] text-white group-hover:text-slate-950 transition-all duration-200 shadow-md shadow-[#2563EB]/25 group-hover:shadow-[#00E5FF]/30"
-                >
-                  <span>PILIH OUTLET INI</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                </button>
+              {/* Content Details */}
+              <div className="p-5 flex-1 flex flex-col justify-between">
+                <div>
+                  <h3
+                    className={`font-display font-black text-base sm:text-lg transition-colors leading-snug ${
+                      isAccepting ? 'text-white group-hover:text-[#00E5FF]' : 'text-slate-300'
+                    }`}
+                  >
+                    {outlet.name}
+                  </h3>
+
+                  <div className="mt-3 space-y-2 text-xs text-slate-300">
+                    <div className="flex items-start gap-2">
+                      <MapPin
+                        className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${
+                          isAccepting ? 'text-[#00E5FF]' : 'text-slate-500'
+                        }`}
+                      />
+                      <span className="line-clamp-2 leading-relaxed">{outlet.address}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="font-mono text-[11px]">{outlet.hours}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Button */}
+                <div className="mt-5 pt-4 border-t border-slate-800/80">
+                  {isAccepting ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelectOutlet(outlet)}
+                      className="w-full py-2.5 px-4 rounded-xl font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 bg-[#2563EB] group-hover:bg-[#00E5FF] text-white group-hover:text-slate-950 transition-all duration-200 shadow-md shadow-[#2563EB]/25 group-hover:shadow-[#00E5FF]/30 cursor-pointer"
+                    >
+                      <span>PILIH OUTLET INI</span>
+                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full py-2.5 px-4 rounded-xl font-display font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 bg-slate-800/90 text-slate-400 border border-slate-700/80 cursor-not-allowed opacity-90"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>ORDER TUTUP</span>
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          </motion.div>
-        ))}
+            </motion.div>
+          );
+        })}
       </div>
     </div>
   );

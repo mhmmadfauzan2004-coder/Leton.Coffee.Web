@@ -109,6 +109,35 @@ const AUTH_FILE = path.join(DATA_DIR, 'admin_auth.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'leton_orders.json');
 const DELETED_CUSTOMERS_FILE = path.join(DATA_DIR, 'deleted_customers.json');
 const MEMBERSHIP_TIER_SETTINGS_FILE = path.join(DATA_DIR, 'membership_tier_settings.json');
+const OUTLET_STATUS_FILE = path.join(DATA_DIR, 'outlet_status.json');
+
+function getOutletAvailabilityMap(): Record<string, boolean> {
+  const defaults: Record<string, boolean> = {
+    sudirman: true,
+    kelakap_7: true,
+    'letgo-mpp': true,
+  };
+  try {
+    if (fs.existsSync(OUTLET_STATUS_FILE)) {
+      const raw = fs.readFileSync(OUTLET_STATUS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return { ...defaults, ...parsed };
+      }
+    }
+  } catch (err) {
+    console.error('Error reading outlet status file:', err);
+  }
+  return defaults;
+}
+
+function saveOutletAvailabilityMap(map: Record<string, boolean>): void {
+  try {
+    fs.writeFileSync(OUTLET_STATUS_FILE, JSON.stringify(map, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error saving outlet status file:', err);
+  }
+}
 
 function getServerMembershipTierSettings() {
   try {
@@ -958,6 +987,138 @@ app.post('/api/admin/membership-tier-settings', async (req, res) => {
 
   console.log(`[Server Tier Settings API] Tier threshold successfully updated by ${adminUsername}: Silver=${silver}, Gold=${gold}, Platinum=${platinum}`);
   return res.json({ success: true, settings: payloadToSave });
+});
+
+// ==========================================
+// 8a. OUTLET AVAILABILITY / ORDER ACCEPTANCE
+// Allows Admin Outlet to open/close orders for their assigned outlet
+// Super Admin can toggle any outlet. Customer gets realtime status.
+// ==========================================
+
+function normalizeTargetOutlet(id: string): string {
+  const clean = String(id || '').toLowerCase().trim();
+  if (clean === 'sudirman' || clean.includes('sudirman') || clean === 'chapter-5') return 'sudirman';
+  if (clean === 'kelakap_7' || clean === 'kelakap' || clean === 'ratusima' || clean.includes('kelakap') || clean.includes('ratusima') || clean === 'chapter-6') return 'kelakap_7';
+  if (clean.includes('letgo') || clean.includes('mpp')) return 'letgo-mpp';
+  return clean;
+}
+
+function checkAdminOutletAuthorization(targetId: string, assignedId?: string): boolean {
+  if (!assignedId || assignedId === 'ALL') return true;
+  return normalizeTargetOutlet(targetId) === normalizeTargetOutlet(assignedId);
+}
+
+// Public: Get current availability status of all outlets
+app.get('/api/outlets/status', async (_req, res) => {
+  const statusMap = getOutletAvailabilityMap();
+  return res.json({
+    success: true,
+    data: statusMap,
+    updatedAt: new Date().toISOString(),
+  });
+});
+
+// Admin: Toggle outlet order acceptance (Token-based Session Enforced)
+app.post('/api/admin/outlets/:outletId/availability', async (req, res) => {
+  const authSession = await getAuthenticatedAdminSession(req);
+  if (!authSession) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Sesi admin tidak valid atau kedaluwarsa. Silakan login kembali.',
+    });
+  }
+
+  const { outletId } = req.params;
+  const normalizedTarget = normalizeTargetOutlet(outletId);
+  const accepting_orders =
+    typeof req.body.accepting_orders === 'boolean'
+      ? req.body.accepting_orders
+      : typeof req.body.isAcceptingOrders === 'boolean'
+      ? req.body.isAcceptingOrders
+      : null;
+
+  if (accepting_orders === null) {
+    return res.status(400).json({
+      success: false,
+      error: 'Parameter accepting_orders (boolean) wajib disertakan.',
+    });
+  }
+
+  // Strict RBAC Enforcement
+  if (authSession.role === 'outlet_admin') {
+    if (!authSession.outletId || !checkAdminOutletAuthorization(normalizedTarget, authSession.outletId)) {
+      console.warn(`[Security Alert] Outlet Admin "${authSession.username}" (outlet: ${authSession.outletId}) attempted to modify unauthorized outlet "${normalizedTarget}"`);
+      return res.status(403).json({
+        success: false,
+        error: 'Akses Ditolak: Anda hanya memiliki wewenang untuk mengubah status outlet yang menjadi tanggung jawab Anda.',
+      });
+    }
+  }
+
+  // 1. Update server persistent storage
+  const currentMap = getOutletAvailabilityMap();
+  currentMap[normalizedTarget] = accepting_orders;
+  saveOutletAvailabilityMap(currentMap);
+
+  // 2. Sync to Supabase table public.leton_content (row 'default')
+  const nowIso = new Date().toISOString();
+  try {
+    const { data: existingRow } = await supabase
+      .from('leton_content')
+      .select('content')
+      .eq('id', 'default')
+      .maybeSingle();
+
+    if (existingRow && existingRow.content) {
+      const updatedContent = { ...existingRow.content };
+
+      // Update outletAvailability mapping
+      updatedContent.outletAvailability = {
+        ...(updatedContent.outletAvailability || {}),
+        [normalizedTarget]: accepting_orders,
+      };
+
+      // Update in branches array if matching
+      if (Array.isArray(updatedContent.branches)) {
+        updatedContent.branches = updatedContent.branches.map((b: any) => {
+          if (normalizeTargetOutlet(b.id) === normalizedTarget) {
+            return { ...b, accepting_orders };
+          }
+          return b;
+        });
+      }
+
+      // Update in mobileService if matching letgo-mpp
+      if (normalizedTarget === 'letgo-mpp' && updatedContent.mobileService) {
+        updatedContent.mobileService = {
+          ...updatedContent.mobileService,
+          accepting_orders,
+        };
+      }
+
+      const { error: sbErr } = await supabase
+        .from('leton_content')
+        .update({
+          content: updatedContent,
+          updated_at: nowIso,
+        })
+        .eq('id', 'default');
+
+      if (sbErr) {
+        console.warn(`[Outlet Status API] Supabase leton_content update note for ${normalizedTarget}:`, sbErr.message);
+      }
+    }
+  } catch (sbEx) {
+    console.warn(`[Outlet Status API] Supabase leton_content exception for ${normalizedTarget}:`, sbEx);
+  }
+
+  console.log(`[Outlet Status API] Outlet "${normalizedTarget}" order acceptance updated to ${accepting_orders ? 'OPEN (🟢)' : 'CLOSED (🔴)'} by ${authSession.username} (${authSession.role})`);
+  return res.json({
+    success: true,
+    outletId: normalizedTarget,
+    accepting_orders,
+    updatedAt: nowIso,
+  });
 });
 
 // ==========================================

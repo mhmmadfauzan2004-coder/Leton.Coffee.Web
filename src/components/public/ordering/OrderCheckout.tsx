@@ -13,6 +13,10 @@ import { formatRupiah, formatOrderDate, formatOrderTime } from '../../../utils/f
 import { uploadPaymentReceipt } from '../../../utils/supabaseOrders';
 import { isMenuItemAvailableForOutlet } from '../../../utils/supabaseStock';
 import {
+  subscribeToOutletAvailabilityRealtime,
+  normalizeOutletKey,
+} from '../../../utils/supabaseOutletStatus';
+import {
   Utensils,
   Package,
   ArrowLeft,
@@ -37,6 +41,7 @@ import {
   QrCode,
   Eye,
   EyeOff,
+  Lock,
 } from 'lucide-react';
 
 interface OrderCheckoutProps {
@@ -81,6 +86,16 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('QRIS');
   const [pickupTime, setPickupTime] = useState<string>('');
   const [formError, setFormError] = useState<string>('');
+  const [isOutletOpen, setIsOutletOpen] = useState<boolean>(true);
+
+  // Subscribe to live outlet availability updates
+  useEffect(() => {
+    const unsub = subscribeToOutletAvailabilityRealtime((statusMap) => {
+      const normKey = normalizeOutletKey(outlet?.id);
+      setIsOutletOpen(statusMap[normKey] !== false);
+    });
+    return () => unsub();
+  }, [outlet?.id]);
 
   // Generate pickup time options based on outlet operating hours
   const pickupTimeOptions = useMemo(() => {
@@ -230,6 +245,11 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
       return;
     }
 
+    if (!isOutletOpen) {
+      setFormError('Cabang ini sedang tidak menerima pesanan online saat ini. Silakan pilih cabang lain.');
+      return;
+    }
+
     if (!customerName.trim()) {
       setFormError('Nama pemesan wajib diisi.');
       return;
@@ -264,12 +284,27 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   };
 
   const isPlaceOrderDisabled =
+    !isOutletOpen ||
     isSubmitting ||
     isUploadingReceipt ||
     (paymentMethod === 'QRIS' && !uploadedReceiptUrl);
 
   return (
     <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 bg-[#f8f9ff] text-[#041d32] min-h-screen">
+      {/* Closed Outlet Banner Alert */}
+      {!isOutletOpen && (
+        <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 shadow-sm flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs">
+            <h4 className="font-extrabold text-rose-900 text-sm">Penerimaan Pesanan Tutup</h4>
+            <p className="mt-0.5 text-rose-700">
+              Cabang <strong>{outlet.name}</strong> saat ini sedang <strong>TIDAK MENERIMA PESANAN ONLINE</strong>.
+              Silakan kembali ke keranjang atau pilih cabang lain yang sedang buka.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Top Header & Stitch Stepper */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -1025,8 +1060,19 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
                 : 'bg-[#006389] hover:bg-[#004c6b] text-white shadow-[0_4px_16px_rgba(0,99,137,0.25)] active:scale-[0.99] cursor-pointer'
             }`}
           >
-            <span>{isSubmitting ? 'MEMPROSES PESANAN...' : 'BUAT PESANAN SEKARANG'}</span>
-            <Bolt className="w-4.5 h-4.5" />
+            {!isOutletOpen ? (
+              <>
+                <Lock className="w-4.5 h-4.5 text-slate-400" />
+                <span>CABANG TIDAK MENERIMA ORDER</span>
+              </>
+            ) : isSubmitting ? (
+              <span>MEMPROSES PESANAN...</span>
+            ) : (
+              <>
+                <span>BUAT PESANAN SEKARANG</span>
+                <Bolt className="w-4.5 h-4.5" />
+              </>
+            )}
           </button>
 
           <div className="flex items-center justify-center gap-2 text-xs text-[#3e484f]">

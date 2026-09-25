@@ -48,7 +48,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { KitchenSlipModal } from './KitchenSlipModal';
 import { OrderDetailModal } from './OrderDetailModal';
 import { processOrderPointsEarning } from '../../utils/supabaseLoyalty';
-import { Sparkles } from 'lucide-react';
+import {
+  subscribeToOutletAvailabilityRealtime,
+  updateOutletAvailability,
+  normalizeOutletKey,
+} from '../../utils/supabaseOutletStatus';
+import { Sparkles, Power, CheckCircle, ToggleLeft, ToggleRight } from 'lucide-react';
 
 // Compact item customization summary helper (Stitch Design)
 const getItemCustomizationSummary = (it: any): string => {
@@ -130,6 +135,51 @@ export const OrderManager: React.FC = () => {
   // Order Detail modal states
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<CustomerOrder | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
+
+  // Outlet Order Availability states
+  const [outletsAvailability, setOutletsAvailability] = useState<Record<string, boolean>>({
+    sudirman: true,
+    kelakap_7: true,
+    'letgo-mpp': true,
+  });
+  const [updatingOutletKey, setUpdatingOutletKey] = useState<string | null>(null);
+
+  // Realtime subscription for outlet availability
+  useEffect(() => {
+    const unsub = subscribeToOutletAvailabilityRealtime((statusMap) => {
+      setOutletsAvailability(statusMap);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleToggleOutletStatus = async (outletId: string, currentStatus: boolean) => {
+    const normKey = normalizeOutletKey(outletId);
+    
+    // RBAC validation check for Outlet Admin
+    if (isOutletAdmin && !matchesOutlet(normKey, assignedOutletId)) {
+      showToast('Akses Ditolak: Anda hanya dapat mengubah status outlet yang menjadi tanggung jawab Anda.', 'error');
+      return;
+    }
+
+    const nextStatus = !currentStatus;
+    setUpdatingOutletKey(normKey);
+
+    try {
+      const res = await updateOutletAvailability(normKey, nextStatus, auth.role, auth.outletId);
+      if (res.success) {
+        showToast(
+          `Status ${normKey.toUpperCase()}: ${nextStatus ? '🟢 MENERIMA ORDER (Buka)' : '🔴 TIDAK MENERIMA ORDER (Tutup)'}`,
+          nextStatus ? 'success' : 'info'
+        );
+      } else {
+        showToast(res.error || 'Gagal mengubah status penerimaan order.', 'error');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Terjadi kesalahan sistem saat mengubah status.', 'error');
+    } finally {
+      setUpdatingOutletKey(null);
+    }
+  };
 
   // New order notification state
   const [notificationState, setNotificationState] = useState<{
@@ -706,6 +756,135 @@ export const OrderManager: React.FC = () => {
                 {btn.label}
               </button>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* OUTLET ORDER AVAILABILITY TOGGLE CONTROL PANEL */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/95 border border-slate-800 shadow-md">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <Store className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-display font-black text-sm sm:text-base text-white uppercase tracking-wide">
+                STATUS PENERIMAAN ORDER OUTLET
+              </h3>
+              <p className="text-slate-400 text-xs">
+                {isOutletAdmin
+                  ? `Kelola ketersediaan pemesanan online untuk cabang ${assignedOutletName}.`
+                  : 'Kelola ketersediaan pemesanan online untuk seluruh cabang Leton Coffee secara realtime.'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Outlet Admin: Single Assigned Outlet Control */}
+        {isOutletAdmin ? (
+          (() => {
+            const normKey = normalizeOutletKey(assignedOutletId);
+            const isOpen = outletsAvailability[normKey] !== false;
+            const isUpdating = updatingOutletKey === normKey;
+
+            return (
+              <div className="p-3.5 sm:p-4 rounded-xl bg-slate-950/80 border border-slate-800/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className={`w-3.5 h-3.5 rounded-full shrink-0 ${isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-display font-bold text-sm text-white uppercase">{assignedOutletName}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider ${
+                          isOpen
+                            ? 'bg-emerald-950 border border-emerald-500/40 text-emerald-400'
+                            : 'bg-rose-950 border border-rose-500/40 text-rose-300'
+                        }`}
+                      >
+                        {isOpen ? '🟢 MENERIMA ORDER' : '🔴 TIDAK MENERIMA ORDER'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {isOpen
+                        ? 'Outlet sedang BUKA untuk pesanan online. Customer dapat memilih cabang ini dan membuat order.'
+                        : 'Outlet sedang TUTUP untuk pesanan online. Tombol order customer dinonaktifkan (ORDER TUTUP).'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isUpdating}
+                  onClick={() => handleToggleOutletStatus(normKey, isOpen)}
+                  className={`px-4 py-2.5 rounded-xl font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm ${
+                    isOpen
+                      ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                  } ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <Power className="w-3.5 h-3.5" />
+                  <span>
+                    {isUpdating
+                      ? 'Memproses...'
+                      : isOpen
+                      ? 'Tutup Penerimaan Order'
+                      : 'Buka Penerimaan Order'}
+                  </span>
+                </button>
+              </div>
+            );
+          })()
+        ) : (
+          /* Super Admin: Multi-Outlet Control Grid */
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { id: 'sudirman', name: 'Outlet Sudirman', chapter: 'Chapter 5' },
+              { id: 'kelakap_7', name: 'Outlet Kelakap 7', chapter: 'Chapter 6' },
+              { id: 'letgo-mpp', name: 'LetGo MPP', chapter: 'Mobile Booth' },
+            ].map((outlet) => {
+              const isOpen = outletsAvailability[outlet.id] !== false;
+              const isUpdating = updatingOutletKey === outlet.id;
+
+              return (
+                <div
+                  key={outlet.id}
+                  className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-3"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-display font-bold text-xs sm:text-sm text-white uppercase">{outlet.name}</span>
+                      <span className="text-[10px] font-mono text-slate-500">{outlet.chapter}</span>
+                    </div>
+                    <div className="mt-2">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider ${
+                          isOpen
+                            ? 'bg-emerald-950/90 border border-emerald-500/40 text-emerald-400'
+                            : 'bg-rose-950/90 border border-rose-500/40 text-rose-300'
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${isOpen ? 'bg-emerald-400' : 'bg-rose-500'}`} />
+                        <span>{isOpen ? 'Menerima Order' : 'Tutup'}</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isUpdating}
+                    onClick={() => handleToggleOutletStatus(outlet.id, isOpen)}
+                    className={`w-full py-2 px-3 rounded-lg font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      isOpen
+                        ? 'bg-slate-800 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
+                    } ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <Power className="w-3 h-3" />
+                    <span>{isUpdating ? 'Menyimpan...' : isOpen ? 'Tutup Order' : 'Buka Order'}</span>
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

@@ -868,6 +868,23 @@ export async function createNewOrder(
   try {
     const client = getSupabase();
 
+    // Verify outlet order acceptance availability before placing order
+    try {
+      const { fetchOutletsAvailability, normalizeOutletKey } = await import('./supabaseOutletStatus');
+      const availabilityMap = await fetchOutletsAvailability();
+      const normOutlet = normalizeOutletKey(orderData.outletId);
+      if (availabilityMap && availabilityMap[normOutlet] === false) {
+        console.error(`[Order Rejected]: Outlet "${orderData.outletId}" is currently NOT ACCEPTING ORDERS.`);
+        return {
+          success: false,
+          order: orderData,
+          error: `Cabang ${orderData.outletName || orderData.outletId} sedang TIDAK MENERIMA PESANAN saat ini. Silakan coba lagi nanti atau pilih cabang lain.`,
+        };
+      }
+    } catch (availErr) {
+      console.warn('[Outlet Availability Check Notice]:', availErr);
+    }
+
     // Verify outlet stock before placing order
     try {
       const liveContent = await fetchContentFromSupabase();

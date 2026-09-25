@@ -26,6 +26,7 @@ export interface BranchItem {
   badge: string;
   bgOverlay?: number; // 0 - 100% overlay opacity, default 45%
   galleryImages?: string[]; // Horizontal swipe gallery photos
+  accepting_orders?: boolean;
 }
 
 export interface MobileService {
@@ -49,6 +50,7 @@ export interface MobileService {
   features: string[];
   galleryImages?: string[]; // Horizontal swipe card photos for Leton Open Booth
   letGoGalleryImages?: string[]; // Horizontal image carousel/slider for LET'GO
+  accepting_orders?: boolean;
 }
 
 export interface MenuCategory {
@@ -227,6 +229,7 @@ export interface OrderOutlet {
   badge?: string;
   whatsapp?: string;
   qrisImage?: string;
+  accepting_orders?: boolean;
 }
 
 export type OrderType = 'DINE IN' | 'TAKE AWAY';

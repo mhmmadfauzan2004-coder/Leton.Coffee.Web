@@ -397,7 +397,10 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
       console.log('[ORDER UI] createNewOrder started');
       const result = await createNewOrder(newOrder);
       if (result.success) {
-        console.log('[ORDER UI] createNewOrder success');
+        console.log('[ORDER FLOW] createNewOrder SUCCESS');
+        console.log('[ORDER FLOW] confirmation transition START');
+        console.log('[ORDER FLOW] confirmation order:', result.order?.orderNumber);
+
         // Retrieve and log the updated loyalty balance from Supabase (non-blocking)
         if (newOrder.customerId) {
           getCustomerLoyalty(newOrder.customerId)
@@ -411,19 +414,21 @@ export const OrderingSystemModal: React.FC<OrderingSystemModalProps> = ({
           console.warn('[Loyalty Earning Note]: Order tidak terhubung to customer.');
         }
 
-        console.log('[ORDER UI] confirmation transition started');
+        setIsSubmitting(false);
         setCompletedOrder(newOrder);
         setCart([]); // Clear cart
         localStorage.removeItem('leton_ordering_cart');
         scrollToTop();
         setCurrentStep('confirmation');
         console.log('[ORDER UI] confirmation transition completed');
+        return;
       } else {
+        setIsSubmitting(false);
         alert(result.error || 'Gagal menyimpan pesanan. Silakan coba beberapa saat lagi.');
+        return;
       }
     } catch (err) {
       console.error('Submit order error:', err);
-    } finally {
       setIsSubmitting(false);
     }
   };

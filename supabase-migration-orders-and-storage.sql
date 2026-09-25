@@ -176,7 +176,12 @@ USING (true);
 
 CREATE POLICY "Order Items Public Insert" ON public.order_items
 FOR INSERT TO anon, authenticated
-WITH CHECK (true);
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.orders
+    WHERE public.orders.id = order_items.order_id
+  )
+);
 
 -- 7. Kebijakan Keamanan RLS Outlets
 DROP POLICY IF EXISTS "Outlets Public Select" ON public.outlets;

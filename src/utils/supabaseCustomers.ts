@@ -296,14 +296,9 @@ export async function findOrCreateCustomerMember(
 
 /**
  * Delete a registered customer by ID (Super Admin only).
- * Performs DELETE via Server API Proxy and executes a VERIFICATION SELECT from Supabase database before declaring success.
- * Includes direct Supabase fallback if server API endpoint is unreachable or returns a load error.
+ * Sends DELETE request directly to Server API Proxy which executes delete_registered_customer_rpc via backend service_role.
  */
 export async function deleteRegisteredCustomer(customerId: string, adminRole?: string): Promise<{ success: boolean; error?: string }> {
-  let apiSuccess = false;
-  let realError = '';
-
-  // 1. Send DELETE request to Server API Proxy
   const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
   const endpoint = getApiUrl(`/api/admin/customers/${encodeURIComponent(customerId)}`);
 
@@ -321,84 +316,24 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
     try { resJson = JSON.parse(errText); } catch {}
 
     if (res.ok && resJson?.success !== false) {
-      apiSuccess = true;
-    } else {
-      const serverMsg = resJson?.error || resJson?.message || errText;
-      realError = serverMsg
-        ? `HTTP ${res.status}: ${serverMsg}`
-        : `HTTP ${res.status} (${res.statusText}): Gagal menghapus member dari database.`;
-      console.warn('[deleteRegisteredCustomer] Server API response error:', realError);
+      return { success: true };
     }
+
+    const serverMsg = resJson?.error || resJson?.message || errText;
+    const realError = serverMsg
+      ? `HTTP ${res.status}: ${serverMsg}`
+      : `HTTP ${res.status} (${res.statusText}): Gagal menghapus member dari database backend.`;
+
+    console.warn('[deleteRegisteredCustomer] Backend API returned error:', realError);
+    return { success: false, error: realError };
   } catch (netErr: any) {
     const rawMsg = netErr?.message || String(netErr);
+    let connError = `Gagal terhubung ke backend API (${endpoint}): ${rawMsg}`;
     if (rawMsg === 'Load failed' || rawMsg === 'Failed to fetch' || netErr?.name === 'TypeError') {
-      realError = `Gagal terhubung ke backend: Layanan API tidak dapat dijangkau (${endpoint}). Periksa koneksi internet atau CORS.`;
-    } else {
-      realError = `Gagal terhubung ke backend: ${rawMsg}`;
+      connError = `Gagal terhubung ke backend API Cloud Run (${endpoint}). Periksa koneksi internet atau pembatasan CORS.`;
     }
     console.warn('[deleteRegisteredCustomer] Network exception:', netErr);
-  }
-
-  // 2. Direct Supabase Fallback if Server API Proxy call was not successful
-  if (!apiSuccess) {
-    console.warn('[deleteRegisteredCustomer] API Proxy not successful. Attempting direct Supabase RPC deletion fallback...');
-    try {
-      const client = getSupabase(adminRole || 'super_admin');
-
-      // Attempt RPC function directly from client
-      const { data: rpcData, error: rpcErr } = await client.rpc('delete_registered_customer_rpc', {
-        p_customer_id: customerId,
-      });
-
-      if (!rpcErr && rpcData) {
-        if (typeof rpcData === 'object' && rpcData.success === true) {
-          apiSuccess = true;
-        } else if (typeof rpcData === 'object' && rpcData.error) {
-          realError = `RPC Error: ${rpcData.error}`;
-        } else if (typeof rpcData === 'string') {
-          try {
-            const parsed = JSON.parse(rpcData);
-            if (parsed.success === true) {
-              apiSuccess = true;
-            } else if (parsed.error) {
-              realError = `RPC Error: ${parsed.error}`;
-            }
-          } catch {}
-        }
-      } else if (rpcErr) {
-        console.warn('[deleteRegisteredCustomer] Direct RPC fallback error:', rpcErr.message);
-        if (!realError) realError = `RPC Error: ${rpcErr.message}`;
-      }
-    } catch (directErr: any) {
-      console.warn('[deleteRegisteredCustomer] Direct Supabase fallback exception:', directErr);
-    }
-  }
-
-  // 3. VERIFICATION SELECT: Re-query active registered customers directly from database
-  try {
-    const freshList = await fetchRegisteredCustomers(adminRole || 'super_admin');
-    const stillExists = freshList.some((c) => {
-      const cleanCustId = c.id.toLowerCase().trim();
-      const cleanTargetId = customerId.toLowerCase().trim();
-      const cleanPhone = c.nomorHp.replace(/[^0-9]/g, '');
-      const cleanTargetNum = customerId.replace(/[^0-9]/g, '');
-
-      if (cleanCustId === cleanTargetId) return true;
-      if (cleanTargetNum && cleanTargetNum.length >= 8 && cleanPhone === cleanTargetNum) return true;
-      return false;
-    });
-
-    if (stillExists) {
-      return {
-        success: false,
-        error: realError ? realError : 'Gagal menghapus member: Record masih tersimpan di database Supabase.'
-      };
-    }
-
-    return { success: true };
-  } catch (verifyErr: any) {
-    console.error('[deleteRegisteredCustomer] Verification re-query failed:', verifyErr);
-    return { success: false, error: realError || 'Gagal memverifikasi status hapus di database Supabase.' };
+    return { success: false, error: connError };
   }
 }
 

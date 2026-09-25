@@ -89,6 +89,10 @@ app.use((req, res, next) => {
 
   // Instantly handle OPTIONS preflight request
   if (req.method === 'OPTIONS') {
+    const reqUrl = req.originalUrl || req.url || '';
+    if (reqUrl.includes('/customers/')) {
+      console.log(`[DELETE PREFLIGHT] Handling OPTIONS preflight for: ${reqUrl} | Origin: ${origin}`);
+    }
     return res.status(200).send('OK');
   }
   next();
@@ -96,6 +100,16 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+// Health check endpoint
+app.get('/api/health', (_req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  return res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    service: 'Leton Coffee Express Backend Server',
+  });
+});
 
 // Directories
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -1463,7 +1477,7 @@ app.delete('/api/admin/customers/:id', async (req, res) => {
   const rawCustomerId = req.params.id;
   const originHeader = req.headers.origin || 'none';
   const roleHeader = (req.headers['x-admin-role'] as string) || 'none';
-  console.log(`[CLOUD RUN DELETE API] Incoming request for customerId: "${rawCustomerId}" | Origin: "${originHeader}" | RoleHeader: "${roleHeader}"`);
+  console.log(`[DELETE CUSTOMER] Incoming request for customerId: "${rawCustomerId}" | Origin: "${originHeader}" | RoleHeader: "${roleHeader}"`);
 
   const isAuthorizedAdmin = verifyAuthHeader(req);
   if (!isAuthorizedAdmin) {

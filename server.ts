@@ -79,20 +79,17 @@ app.use((req, res, next) => {
 
 // Explicit, robust and unified CORS engine supporting credentials and OPTIONS preflight instantly with no duplicate headers
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', 'https://leton-coffee-web.pages.dev');
-  }
+  const origin = req.headers.origin || 'https://leton-coffee-web.pages.dev';
+  res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With, X-Accel-Buffering, x-admin-role, x-outlet-id, X-Admin-Role, X-Outlet-Id');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, X-Requested-With, X-Accel-Buffering, x-admin-role, x-outlet-id, X-Admin-Role, X-Outlet-Id, Accept, Origin');
+  res.setHeader('Access-Control-Expose-Headers', '*');
   res.setHeader('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
 
   // Instantly handle OPTIONS preflight request
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    return res.status(200).send('OK');
   }
   next();
 });
@@ -1463,17 +1460,23 @@ app.get('/api/admin/customers', async (req, res) => {
 
 // Admin: Delete a registered customer member (Super Admin only)
 app.delete('/api/admin/customers/:id', async (req, res) => {
+  const rawCustomerId = req.params.id;
+  const originHeader = req.headers.origin || 'none';
+  const roleHeader = (req.headers['x-admin-role'] as string) || 'none';
+  console.log(`[CLOUD RUN DELETE API] Incoming request for customerId: "${rawCustomerId}" | Origin: "${originHeader}" | RoleHeader: "${roleHeader}"`);
+
   const isAuthorizedAdmin = verifyAuthHeader(req);
   if (!isAuthorizedAdmin) {
+    console.warn(`[CLOUD RUN DELETE API] Unauthorized request for customerId: "${rawCustomerId}"`);
     return res.status(401).json({ error: 'Unauthorized: Silakan login terlebih dahulu' });
   }
 
   const role = req.headers['x-admin-role'] as string | undefined;
   if (role !== 'super_admin') {
+    console.warn(`[CLOUD RUN DELETE API] Forbidden request from non-super_admin role: "${role}"`);
     return res.status(403).json({ error: 'Akses Ditolak: Hanya Super Admin / Admin Pusat yang dapat menghapus member.' });
   }
 
-  const rawCustomerId = req.params.id;
   if (!rawCustomerId) {
     return res.status(400).json({ error: 'ID Customer tidak valid.' });
   }

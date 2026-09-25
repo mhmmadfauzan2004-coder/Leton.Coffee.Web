@@ -296,18 +296,34 @@ export async function findOrCreateCustomerMember(
 
 /**
  * Delete a registered customer by ID (Super Admin only).
- * Uses new secure Supabase SECURITY DEFINER RPC function (admin_delete_registered_customer)
+ * Uses secure Supabase SECURITY DEFINER RPC function (admin_delete_registered_customer)
  * directly accessible from Cloudflare Pages production environment.
  */
 export async function deleteRegisteredCustomer(customerId: string, adminRole?: string): Promise<{ success: boolean; error?: string }> {
-  // 1. Authorization Check: Ensure caller holds admin role or valid session token
+  // 1. Authorization Check: Retrieve active admin role and token from official auth session
   const activeRole = adminRole || localStorage.getItem('leton_admin_role') || 'super_admin';
-  const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
+  const rawToken = localStorage.getItem('leton_admin_token') || localStorage.getItem('leton_token');
+  const token = rawToken && rawToken.trim() && rawToken !== 'leton_local_token' ? rawToken.trim() : '';
 
-  if (!token && activeRole !== 'super_admin') {
+  // Safe diagnostic logging without exposing sensitive token values
+  console.log('[deleteRegisteredCustomer] Session check:', {
+    tokenExists: Boolean(token),
+    tokenLength: token ? token.length : 0,
+    role: activeRole || 'unknown',
+  });
+
+  // Strict Frontend Session Validation
+  if (!token) {
     return {
       success: false,
-      error: 'Akses ditolak: Anda tidak memiliki otoritas sebagai Admin Pusat untuk menghapus member.'
+      error: 'Session admin tidak valid atau telah berakhir. Silakan login kembali sebagai Super Admin.'
+    };
+  }
+
+  if (activeRole !== 'super_admin') {
+    return {
+      success: false,
+      error: 'Akses ditolak: Hanya Super Admin / Admin Pusat yang memiliki izin untuk menghapus member.'
     };
   }
 
@@ -317,6 +333,7 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
 
   let deletionSuccess = false;
   let lastErrorMsg = '';
+  const client = getSupabase(activeRole);
 
   // 2. Same-Domain Express API Proxy (If running on localhost / same-origin container)
   if (typeof window !== 'undefined') {
@@ -342,8 +359,6 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
 
   // 3. Primary Production Architecture: Direct Supabase SECURITY DEFINER RPC call (admin_delete_registered_customer)
   if (!deletionSuccess) {
-    const client = getSupabase(activeRole);
-
     try {
       const { data: rpcRes, error: rpcErr } = await client.rpc('admin_delete_registered_customer', {
         p_customer_id: customerId,
@@ -374,10 +389,9 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
     }
   }
 
-  // 4. Verification Check: Verify if customer row is gone from database
+  // 5. Verification Check: Verify if customer row is gone from database
   if (deletionSuccess) {
     try {
-      const client = getSupabase(activeRole);
       const { data: checkRow } = await client
         .from('customers')
         .select('id, password_hash')

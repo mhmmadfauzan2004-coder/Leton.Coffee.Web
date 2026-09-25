@@ -1863,26 +1863,45 @@ async function runMemberInactivityAndCleanupWorker(forceManual: boolean = false)
         if (daysSinceInactive >= settings.gracePeriodDays) {
           summary.deletionCandidatesCount++;
 
-          console.log(`[Auto Inactivity Worker] Executing account cleanup for INACTIVE member "${member.nama_lengkap}" (${memberId}) after ${Math.floor(daysSinceInactive)} days inactive.`);
+          console.log(`[Auto Inactivity Worker] Executing account cleanup for INACTIVE member "${member.nama_lengkap}" (${memberId}) after ${Math.floor(daysSinceInactive)} days inactive via RPC...`);
 
-          await supabase.from('orders').update({ customer_id: null }).eq('customer_id', memberId);
-          await supabase.from('customer_sessions').delete().eq('customer_id', memberId);
-          await supabase.from('reward_redemptions').delete().eq('customer_id', memberId);
-          await supabase.from('loyalty_transactions').delete().eq('customer_id', memberId);
-          await supabase.from('customer_points').delete().eq('customer_id', memberId);
-
-          addDeletedCustomer(memberId);
-          if (member.nomor_hp) addDeletedCustomer(member.nomor_hp);
-
-          await supabase.from('customers').update({ password_hash: null, updated_at: new Date().toISOString() }).eq('id', memberId);
-          await supabase.from('customers').delete().eq('id', memberId);
-
-          summary.deletedMembersCount++;
-          summary.details.deletedMembers.push({
-            id: memberId,
-            namaLengkap: member.nama_lengkap || 'Pelanggan Leton',
-            nomorHp: member.nomor_hp || '-',
+          // Execute deletion via security-definer RPC (unlinks orders, clears auxiliary tables, and deletes customer row)
+          const { data: rpcRes, error: rpcErr } = await supabase.rpc('delete_registered_customer_rpc', {
+            p_customer_id: memberId,
           });
+
+          let rpcSuccess = false;
+          let rpcErrorMsg = '';
+
+          if (rpcErr) {
+            rpcErrorMsg = rpcErr.message || String(rpcErr);
+          } else if (rpcRes) {
+            if (typeof rpcRes === 'object') {
+              rpcSuccess = rpcRes.success === true;
+              if (rpcRes.error) rpcErrorMsg = String(rpcRes.error);
+            } else if (typeof rpcRes === 'string') {
+              try {
+                const parsed = JSON.parse(rpcRes);
+                rpcSuccess = parsed.success === true;
+                if (parsed.error) rpcErrorMsg = String(parsed.error);
+              } catch {}
+            }
+          }
+
+          if (!rpcSuccess) {
+            console.error(`[Auto Inactivity Worker] RPC delete_registered_customer_rpc failed for member "${member.nama_lengkap}" (${memberId}):`, rpcErrorMsg || rpcRes || rpcErr);
+          } else {
+            addDeletedCustomer(memberId);
+            if (member.nomor_hp) addDeletedCustomer(member.nomor_hp);
+
+            summary.deletedMembersCount++;
+            summary.details.deletedMembers.push({
+              id: memberId,
+              namaLengkap: member.nama_lengkap || 'Pelanggan Leton',
+              nomorHp: member.nomor_hp || '-',
+            });
+            console.log(`[Auto Inactivity Worker] Successfully deleted INACTIVE member "${member.nama_lengkap}" (${memberId}) via RPC.`);
+          }
         } else {
           summary.deletionCandidatesCount++;
         }

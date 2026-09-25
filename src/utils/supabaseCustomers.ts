@@ -417,7 +417,7 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
     if (stillExists) {
       return {
         success: false,
-        error: 'Gagal menghapus member: Record masih tersimpan di database Supabase.'
+        error: apiError || 'Gagal menghapus member: Record masih tersimpan di database Supabase.'
       };
     }
 

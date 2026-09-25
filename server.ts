@@ -1505,83 +1505,64 @@ app.delete('/api/admin/customers/:id', async (req, res) => {
       }
     }
 
-    const idsToMatch = Array.from(new Set([rawCustomerId, targetDbId].filter(Boolean) as string[]));
+    const idsToMatch = Array.from(new Set([rawCustomerId, targetDbId, targetPhone].filter(Boolean) as string[]));
 
-    // 2. Try RPC function variants
+    let rpcExecuted = false;
+    let rpcSuccess = false;
+    let rpcErrorDetails = '';
+
+    // 2. Execute deletion via security-definer RPC function
     for (const idToDelete of idsToMatch) {
+      if (!idToDelete) continue;
+      rpcExecuted = true;
       try {
-        await supabase.rpc('delete_registered_customer_rpc', { p_customer_id: idToDelete });
-      } catch (e) {}
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('delete_registered_customer_rpc', {
+          p_customer_id: idToDelete,
+        });
+
+        if (rpcErr) {
+          rpcErrorDetails = rpcErr.message || String(rpcErr);
+        } else if (rpcRes) {
+          if (typeof rpcRes === 'object') {
+            if (rpcRes.success === true) rpcSuccess = true;
+            if (rpcRes.error) rpcErrorDetails = String(rpcRes.error);
+          } else if (typeof rpcRes === 'string') {
+            try {
+              const parsed = JSON.parse(rpcRes);
+              if (parsed.success === true) rpcSuccess = true;
+              if (parsed.error) rpcErrorDetails = String(parsed.error);
+            } catch {}
+          }
+        }
+      } catch (ex: any) {
+        rpcErrorDetails = ex?.message || String(ex);
+      }
+    }
+
+    // Direct Supabase table fallback if RPC wasn't success or RPC function does not exist
+    if (!rpcSuccess) {
+      console.warn(`[API DELETE customer] RPC call returned non-success or error for ${rawCustomerId}: ${rpcErrorDetails}. Attempting direct fallback cleanup...`);
+      for (const idToUnlink of idsToMatch) {
+        try { await supabase.from('orders').update({ customer_id: null }).eq('customer_id', idToUnlink); } catch {}
+        try { await supabase.from('customer_sessions').delete().eq('customer_id', idToUnlink); } catch {}
+        try { await supabase.from('reward_redemptions').delete().eq('customer_id', idToUnlink); } catch {}
+        try { await supabase.from('loyalty_transactions').delete().eq('customer_id', idToUnlink); } catch {}
+        try { await supabase.from('customer_points').delete().eq('customer_id', idToUnlink); } catch {}
+        try {
+          await supabase.from('customers').update({ password_hash: null, updated_at: new Date().toISOString() }).eq('id', idToUnlink);
+          await supabase.from('customers').delete().eq('id', idToUnlink);
+        } catch (dirErr: any) {
+          if (!rpcErrorDetails) rpcErrorDetails = dirErr?.message || String(dirErr);
+        }
+      }
     }
 
     // 3. Register deleted customer in persistence store
     for (const idToDelete of idsToMatch) {
       addDeletedCustomer(idToDelete);
     }
-    if (targetPhone) {
-      addDeletedCustomer(targetPhone);
-    }
 
-    // Also persist into leton_content row 'default'
-    try {
-      const { data: contentRow } = await supabase
-        .from('leton_content')
-        .select('content')
-        .eq('id', 'default')
-        .maybeSingle();
-
-      if (contentRow && contentRow.content) {
-        const currentData = contentRow.content;
-        const currentDeleted = Array.isArray(currentData.deletedCustomerIds) ? currentData.deletedCustomerIds : [];
-        const newDeletedSet = new Set([...currentDeleted, ...idsToMatch, targetPhone].filter(Boolean));
-        currentData.deletedCustomerIds = Array.from(newDeletedSet);
-
-        await supabase
-          .from('leton_content')
-          .update({
-            content: currentData,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', 'default');
-      }
-    } catch (cErr) {
-      console.warn('[API DELETE customer] leton_content update warning:', cErr);
-    }
-
-    // 4. Unlink orders so order history is preserved as unlinked/guest orders
-    for (const idToUnlink of idsToMatch) {
-      await supabase
-        .from('orders')
-        .update({ customer_id: null })
-        .eq('customer_id', idToUnlink);
-    }
-
-    // 5. Delete related records across auxiliary tables
-    for (const idToClean of idsToMatch) {
-      await supabase.from('customer_sessions').delete().eq('customer_id', idToClean);
-      await supabase.from('reward_redemptions').delete().eq('customer_id', idToClean);
-      await supabase.from('loyalty_transactions').delete().eq('customer_id', idToClean);
-      await supabase.from('customer_points').delete().eq('customer_id', idToClean);
-    }
-
-    // 6. Execute hard DELETE and password_hash clear on public.customers table
-    for (const idToRevoke of idsToMatch) {
-      await supabase
-        .from('customers')
-        .update({ password_hash: null, updated_at: new Date().toISOString() })
-        .eq('id', idToRevoke);
-      await supabase.from('customers').delete().eq('id', idToRevoke);
-    }
-    if (targetPhone) {
-      await supabase
-        .from('customers')
-        .update({ password_hash: null, updated_at: new Date().toISOString() })
-        .eq('nomor_hp', targetPhone);
-      await supabase.from('customers').delete().eq('nomor_hp', targetPhone);
-    }
-
-    // 7. VERIFICATION SELECT: Query active registered customers directly from Supabase database
-    // Must verify from raw database query that customer row is 0 rows / absent
+    // 4. VERIFICATION SELECT: Query active registered customers directly from Supabase database
     let verifyList: any[] = [];
     const { data: verifyRpcData, error: verifyRpcErr } = await supabase.rpc('get_registered_customers');
 
@@ -1617,10 +1598,12 @@ app.delete('/api/admin/customers/:id', async (req, res) => {
     });
 
     if (isStillPresent) {
-      console.error(`[API DELETE customer] Verification failed for ${rawCustomerId}. Record still present in Supabase database!`);
+      console.error(`[API DELETE customer] Verification failed for ${rawCustomerId}. Record still present in Supabase database! Error: ${rpcErrorDetails}`);
       return res.status(500).json({
         success: false,
-        error: 'Gagal menghapus member: Record masih tersimpan di database Supabase.'
+        error: rpcErrorDetails
+          ? `Gagal menghapus member dari database Supabase: ${rpcErrorDetails}`
+          : 'Gagal menghapus member: Record masih tersimpan di database Supabase.'
       });
     }
 

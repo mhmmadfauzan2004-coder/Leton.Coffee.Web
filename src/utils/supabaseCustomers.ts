@@ -296,44 +296,44 @@ export async function findOrCreateCustomerMember(
 
 /**
  * Delete a registered customer by ID (Super Admin only).
- * Sends DELETE request directly to Server API Proxy which executes delete_registered_customer_rpc via backend service_role.
+ * Uses Simple CORS POST request (text/plain) to avoid CORS OPTIONS preflight in browser/mobile.
+ * Server validates session token and executes delete_registered_customer_rpc via backend service_role.
  */
-export async function deleteRegisteredCustomer(customerId: string, adminRole?: string): Promise<{ success: boolean; error?: string }> {
+export async function deleteRegisteredCustomer(customerId: string, _adminRole?: string): Promise<{ success: boolean; error?: string }> {
   const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
-  const endpoint = getApiUrl(`/api/admin/customers/${encodeURIComponent(customerId)}`);
+  const endpoint = getApiUrl(`/api/admin/customers/${encodeURIComponent(customerId)}/delete`);
 
   try {
+    // Simple POST request with text/plain content type to avoid CORS preflight OPTIONS in browser/mobile
     const res = await fetch(endpoint, {
-      method: 'DELETE',
+      method: 'POST',
       headers: {
-        'x-admin-role': adminRole || 'super_admin',
-        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'text/plain;charset=UTF-8',
       },
+      body: JSON.stringify({
+        token,
+      }),
     });
 
-    const errText = await res.text();
+    const resText = await res.text();
     let resJson: any = null;
-    try { resJson = JSON.parse(errText); } catch {}
+    try { resJson = JSON.parse(resText); } catch {}
 
     if (res.ok && resJson?.success !== false) {
       return { success: true };
     }
 
-    const serverMsg = resJson?.error || resJson?.message || errText;
+    const serverMsg = resJson?.error || resJson?.message || resText;
     const realError = serverMsg
       ? `HTTP ${res.status}: ${serverMsg}`
-      : `HTTP ${res.status} (${res.statusText}): Gagal menghapus member dari database backend.`;
+      : `HTTP ${res.status} (${res.statusText}): Gagal menghapus member dari database.`;
 
     console.warn('[deleteRegisteredCustomer] Backend API returned error:', realError);
     return { success: false, error: realError };
   } catch (netErr: any) {
     const rawMsg = netErr?.message || String(netErr);
-    let connError = `Gagal terhubung ke backend API (${endpoint}): ${rawMsg}`;
-    if (rawMsg === 'Load failed' || rawMsg === 'Failed to fetch' || netErr?.name === 'TypeError') {
-      connError = `Gagal terhubung ke backend API Cloud Run (${endpoint}). Periksa koneksi internet atau pembatasan CORS.`;
-    }
     console.warn('[deleteRegisteredCustomer] Network exception:', netErr);
-    return { success: false, error: connError };
+    return { success: false, error: `Gagal terhubung ke backend API (${endpoint}): ${rawMsg}` };
   }
 }
 

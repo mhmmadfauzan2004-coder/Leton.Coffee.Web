@@ -1624,6 +1624,7 @@ app.post('/api/admin/customers/:id/delete', async (req, res) => {
       try {
         const { data: rpcRes, error: rpcErr } = await supabase.rpc('delete_registered_customer_rpc', {
           p_customer_id: idToDelete,
+          p_admin_token: token,
         });
 
         if (rpcErr) {
@@ -1777,9 +1778,11 @@ app.delete('/api/admin/customers/:id', async (req, res) => {
     for (const idToDelete of idsToMatch) {
       if (!idToDelete) continue;
       rpcExecuted = true;
+      const bearerToken = req.headers.authorization ? req.headers.authorization.split(' ')[1] : '';
       try {
         const { data: rpcRes, error: rpcErr } = await supabase.rpc('delete_registered_customer_rpc', {
           p_customer_id: idToDelete,
+          p_admin_token: bearerToken,
         });
 
         if (rpcErr) {

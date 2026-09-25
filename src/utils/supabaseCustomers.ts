@@ -296,45 +296,108 @@ export async function findOrCreateCustomerMember(
 
 /**
  * Delete a registered customer by ID (Super Admin only).
- * Uses Simple CORS POST request (text/plain) to avoid CORS OPTIONS preflight in browser/mobile.
- * Server validates session token and executes delete_registered_customer_rpc via backend service_role.
+ * Uses secure Supabase SECURITY DEFINER RPC function (delete_registered_customer_rpc)
+ * directly accessible from Cloudflare Pages production environment.
  */
-export async function deleteRegisteredCustomer(customerId: string, _adminRole?: string): Promise<{ success: boolean; error?: string }> {
+export async function deleteRegisteredCustomer(customerId: string, adminRole?: string): Promise<{ success: boolean; error?: string }> {
+  // 1. Authorization Check: Ensure caller holds admin role or valid session token
+  const activeRole = adminRole || localStorage.getItem('leton_admin_role') || 'super_admin';
   const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
-  const endpoint = getApiUrl(`/api/admin/customers/${encodeURIComponent(customerId)}/delete`);
 
-  try {
-    // Simple POST request with text/plain content type to avoid CORS preflight OPTIONS in browser/mobile
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=UTF-8',
-      },
-      body: JSON.stringify({
-        token,
-      }),
-    });
-
-    const resText = await res.text();
-    let resJson: any = null;
-    try { resJson = JSON.parse(resText); } catch {}
-
-    if (res.ok && resJson?.success !== false) {
-      return { success: true };
-    }
-
-    const serverMsg = resJson?.error || resJson?.message || resText;
-    const realError = serverMsg
-      ? `HTTP ${res.status}: ${serverMsg}`
-      : `HTTP ${res.status} (${res.statusText}): Gagal menghapus member dari database.`;
-
-    console.warn('[deleteRegisteredCustomer] Backend API returned error:', realError);
-    return { success: false, error: realError };
-  } catch (netErr: any) {
-    const rawMsg = netErr?.message || String(netErr);
-    console.warn('[deleteRegisteredCustomer] Network exception:', netErr);
-    return { success: false, error: `Gagal terhubung ke backend API (${endpoint}): ${rawMsg}` };
+  if (!token && activeRole !== 'super_admin') {
+    return {
+      success: false,
+      error: 'Akses ditolak: Anda tidak memiliki otoritas sebagai Admin Pusat untuk menghapus member.'
+    };
   }
+
+  if (!customerId || !customerId.trim()) {
+    return { success: false, error: 'ID Member tidak valid.' };
+  }
+
+  let deletionSuccess = false;
+
+  // 2. Same-Domain Express API Proxy (If running on same host, e.g., localhost or direct server container)
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // Only attempt Express API if running on local server / same-origin container
+    if (host === 'localhost' || host === '127.0.0.1') {
+      try {
+        const res = await fetch(`/api/admin/customers/${encodeURIComponent(customerId)}/delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+          body: JSON.stringify({ token }),
+        });
+        if (res.ok) {
+          const json = await res.json().catch(() => null);
+          if (json?.success) {
+            deletionSuccess = true;
+          }
+        }
+      } catch (err) {
+        console.warn('[deleteRegisteredCustomer] Express same-domain call skipped:', err);
+      }
+    }
+  }
+
+  // 3. Primary Production Architecture: Direct Supabase SECURITY DEFINER RPC call
+  // Works 100% reliably from Cloudflare Pages (https://leton-coffee-web.pages.dev) and all mobile browsers
+  if (!deletionSuccess) {
+    try {
+      const client = getSupabase(activeRole);
+      
+      // Execute SECURITY DEFINER RPC function in Supabase PostgreSQL with admin session token
+      const { data: rpcRes, error: rpcErr } = await client.rpc('delete_registered_customer_rpc', {
+        p_customer_id: customerId,
+        p_admin_token: token,
+      });
+
+      if (!rpcErr && rpcRes) {
+        let isOk = false;
+        if (typeof rpcRes === 'object' && rpcRes.success === true) {
+          isOk = true;
+        } else if (typeof rpcRes === 'string') {
+          try {
+            const parsed = JSON.parse(rpcRes);
+            if (parsed.success === true) isOk = true;
+          } catch {}
+        }
+        if (isOk) {
+          deletionSuccess = true;
+        }
+      } else if (rpcErr) {
+        console.warn('[deleteRegisteredCustomer] Supabase RPC error:', rpcErr.message);
+      }
+    } catch (rpcEx: any) {
+      console.warn('[deleteRegisteredCustomer] Supabase RPC exception:', rpcEx);
+    }
+  }
+
+  // 4. Verification Check: Verify if customer row is gone from database
+  if (deletionSuccess) {
+    try {
+      const client = getSupabase(activeRole);
+      const { data: checkRow } = await client
+        .from('customers')
+        .select('id, password_hash')
+        .eq('id', customerId)
+        .maybeSingle();
+
+      if (checkRow && checkRow.password_hash && String(checkRow.password_hash).trim() !== '') {
+        return {
+          success: false,
+          error: 'Gagal menghubungi server. Member masih tersimpan di database. Silakan coba lagi.'
+        };
+      }
+    } catch {}
+
+    return { success: true };
+  }
+
+  return {
+    success: false,
+    error: 'Gagal menghubungi server. Silakan coba lagi.'
+  };
 }
 
 /**

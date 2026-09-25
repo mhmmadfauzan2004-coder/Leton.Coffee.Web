@@ -304,10 +304,10 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
   let realError = '';
 
   // 1. Send DELETE request to Server API Proxy
+  const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
+  const endpoint = getApiUrl(`/api/admin/customers/${encodeURIComponent(customerId)}`);
+
   try {
-    const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
-    const endpoint = getApiUrl(`/api/admin/customers/${encodeURIComponent(customerId)}`);
-    
     const res = await fetch(endpoint, {
       method: 'DELETE',
       headers: {
@@ -317,17 +317,25 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
     });
 
     const errText = await res.text();
-    let resJson;
+    let resJson: any = null;
     try { resJson = JSON.parse(errText); } catch {}
 
     if (res.ok && resJson?.success !== false) {
       apiSuccess = true;
     } else {
-      realError = resJson?.error || resJson?.message || `HTTP ${res.status}: Gagal menghapus member dari database.`;
+      const serverMsg = resJson?.error || resJson?.message || errText;
+      realError = serverMsg
+        ? `HTTP ${res.status}: ${serverMsg}`
+        : `HTTP ${res.status} (${res.statusText}): Gagal menghapus member dari database.`;
       console.warn('[deleteRegisteredCustomer] Server API response error:', realError);
     }
   } catch (netErr: any) {
-    realError = netErr?.message || 'Gagal terhubung ke server API.';
+    const rawMsg = netErr?.message || String(netErr);
+    if (rawMsg === 'Load failed' || rawMsg === 'Failed to fetch' || netErr?.name === 'TypeError') {
+      realError = `Gagal terhubung ke backend: Layanan API tidak dapat dijangkau (${endpoint}). Periksa koneksi internet atau CORS.`;
+    } else {
+      realError = `Gagal terhubung ke backend: ${rawMsg}`;
+    }
     console.warn('[deleteRegisteredCustomer] Network exception:', netErr);
   }
 
@@ -345,15 +353,21 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
       if (!rpcErr && rpcData) {
         if (typeof rpcData === 'object' && rpcData.success === true) {
           apiSuccess = true;
+        } else if (typeof rpcData === 'object' && rpcData.error) {
+          realError = `RPC Error: ${rpcData.error}`;
         } else if (typeof rpcData === 'string') {
           try {
             const parsed = JSON.parse(rpcData);
-            if (parsed.success === true) apiSuccess = true;
+            if (parsed.success === true) {
+              apiSuccess = true;
+            } else if (parsed.error) {
+              realError = `RPC Error: ${parsed.error}`;
+            }
           } catch {}
         }
       } else if (rpcErr) {
         console.warn('[deleteRegisteredCustomer] Direct RPC fallback error:', rpcErr.message);
-        if (!realError) realError = rpcErr.message;
+        if (!realError) realError = `RPC Error: ${rpcErr.message}`;
       }
     } catch (directErr: any) {
       console.warn('[deleteRegisteredCustomer] Direct Supabase fallback exception:', directErr);
@@ -377,7 +391,7 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
     if (stillExists) {
       return {
         success: false,
-        error: realError ? `Gagal menghapus member: ${realError}` : 'Gagal menghapus member: Record masih tersimpan di database Supabase.'
+        error: realError ? realError : 'Gagal menghapus member: Record masih tersimpan di database Supabase.'
       };
     }
 

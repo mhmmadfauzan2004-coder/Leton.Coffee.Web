@@ -1634,6 +1634,466 @@ app.delete('/api/admin/customers/:id', async (req, res) => {
   }
 });
 
+// =============================================
+// AUTO MEMBER INACTIVITY & CLEANUP BACKEND ENGINE
+// =============================================
+
+interface StoredInactivitySettings {
+  inactivityPeriodDays: number;
+  gracePeriodDays: number;
+  autoCleanupEnabled: boolean;
+  lastRunAt?: string | null;
+  lastRunSummary?: any | null;
+}
+
+let inactivitySettingsCache: StoredInactivitySettings = {
+  inactivityPeriodDays: 60,
+  gracePeriodDays: 7,
+  autoCleanupEnabled: true,
+  lastRunAt: null,
+  lastRunSummary: null,
+};
+
+async function getMemberInactivitySettings(): Promise<StoredInactivitySettings> {
+  try {
+    const { data, error } = await supabase
+      .from('leton_content')
+      .select('content')
+      .eq('id', 'member_inactivity_settings')
+      .maybeSingle();
+
+    if (!error && data?.content) {
+      inactivitySettingsCache = {
+        inactivityPeriodDays: Number(data.content.inactivityPeriodDays ?? 60),
+        gracePeriodDays: Number(data.content.gracePeriodDays ?? 7),
+        autoCleanupEnabled: Boolean(data.content.autoCleanupEnabled ?? true),
+        lastRunAt: data.content.lastRunAt || null,
+        lastRunSummary: data.content.lastRunSummary || null,
+      };
+    }
+  } catch (err) {
+    console.warn('[getMemberInactivitySettings] Exception:', err);
+  }
+  return inactivitySettingsCache;
+}
+
+async function saveMemberInactivitySettingsToDb(
+  newSettings: Partial<StoredInactivitySettings>
+): Promise<StoredInactivitySettings> {
+  const current = await getMemberInactivitySettings();
+  const updated = {
+    ...current,
+    ...newSettings,
+  };
+
+  try {
+    await supabase.from('leton_content').upsert(
+      {
+        id: 'member_inactivity_settings',
+        content: updated,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+    inactivitySettingsCache = updated;
+  } catch (err) {
+    console.error('[saveMemberInactivitySettingsToDb] Exception:', err);
+  }
+
+  return updated;
+}
+
+function isOrderValidForInactivity(order: any): boolean {
+  if (!order) return false;
+
+  let items: any[] = [];
+  if (Array.isArray(order.items)) {
+    items = order.items;
+  } else if (typeof order.items === 'string') {
+    try { items = JSON.parse(order.items || '[]'); } catch {}
+  }
+  if (!items || items.length === 0) {
+    return false;
+  }
+
+  const pStatus = String(order.payment_status || order.paymentStatus || '').toUpperCase().trim();
+  const oStatus = String(order.order_status || order.orderStatus || '').toUpperCase().trim();
+  const pMethod = String(order.payment_method || order.paymentMethod || '').toUpperCase().trim();
+
+  if (pStatus === 'REJECTED' || pStatus === 'PAYMENT REJECTED' || oStatus === 'CANCELLED') {
+    return false;
+  }
+
+  if (pStatus === 'PAID') {
+    return true;
+  }
+
+  if ((pMethod === 'TUNAI' || pMethod === 'CASH' || pMethod === 'PAY AT STORE') && oStatus === 'COMPLETED') {
+    return true;
+  }
+
+  return false;
+}
+
+async function runMemberInactivityAndCleanupWorker(forceManual: boolean = false): Promise<any> {
+  const settings = await getMemberInactivitySettings();
+
+  if (!settings.autoCleanupEnabled && !forceManual) {
+    console.log('[Auto Inactivity Worker] Skipping execution (autoCleanupEnabled is false).');
+    return {
+      success: true,
+      skipped: true,
+      reason: 'Auto cleanup is disabled in settings.',
+      settings,
+    };
+  }
+
+  const now = new Date();
+  const nowMs = now.getTime();
+
+  console.log(`[Auto Inactivity Worker] Starting worker run... (Inactivity period: ${settings.inactivityPeriodDays}d, Grace period: ${settings.gracePeriodDays}d)`);
+
+  const summary = {
+    timestamp: now.toISOString(),
+    totalActiveMembers: 0,
+    totalInactiveMembers: 0,
+    markedInactiveCount: 0,
+    deletedMembersCount: 0,
+    inactiveCandidatesCount: 0,
+    deletionCandidatesCount: 0,
+    details: {
+      markedInactive: [] as Array<{ id: string; namaLengkap: string; nomorHp: string }>,
+      deletedMembers: [] as Array<{ id: string; namaLengkap: string; nomorHp: string }>,
+    },
+  };
+
+  try {
+    const { data: rawCustomers, error: custErr } = await supabase
+      .from('customers')
+      .select('id, nama_lengkap, nomor_hp, password_hash, status, inactive_at, created_at');
+
+    if (custErr || !Array.isArray(rawCustomers)) {
+      console.error('[Auto Inactivity Worker] Error fetching customers:', custErr);
+      return { success: false, error: 'Gagal membaca data customer dari database.' };
+    }
+
+    const registeredMembers = rawCustomers.filter((row: any) => {
+      if (!row.password_hash || String(row.password_hash).trim() === '') return false;
+      const id = String(row.id || '');
+      const phone = String(row.nomor_hp || '').trim();
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      if (isCustomerDeleted(id, phone) || isCustomerDeleted(cleanPhone)) return false;
+      return true;
+    });
+
+    const { data: rawOrders } = await supabase
+      .from('orders')
+      .select('id, customer_id, customer_phone, payment_status, order_status, payment_method, items, created_at');
+
+    const ordersList = Array.isArray(rawOrders) ? rawOrders : [];
+    const validOrdersByCustomer = new Map<string, any[]>();
+
+    ordersList.forEach((order) => {
+      if (!isOrderValidForInactivity(order)) return;
+
+      const custId = order.customer_id ? String(order.customer_id) : '';
+      const phoneNum = order.customer_phone ? String(order.customer_phone).replace(/[^0-9]/g, '') : '';
+
+      if (custId) {
+        if (!validOrdersByCustomer.has(custId)) validOrdersByCustomer.set(custId, []);
+        validOrdersByCustomer.get(custId)!.push(order);
+      }
+      if (phoneNum && phoneNum.length >= 8) {
+        if (!validOrdersByCustomer.has(phoneNum)) validOrdersByCustomer.set(phoneNum, []);
+        validOrdersByCustomer.get(phoneNum)!.push(order);
+      }
+    });
+
+    for (const member of registeredMembers) {
+      const memberId = String(member.id);
+      const memberPhone = String(member.nomor_hp || '').replace(/[^0-9]/g, '');
+      const currentStatus = member.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      const createdAtMs = member.created_at ? new Date(member.created_at).getTime() : nowMs;
+
+      let memberOrders = validOrdersByCustomer.get(memberId) || [];
+      if (memberOrders.length === 0 && memberPhone) {
+        memberOrders = validOrdersByCustomer.get(memberPhone) || [];
+      }
+
+      let lastValidOrderMs = createdAtMs;
+      if (memberOrders.length > 0) {
+        memberOrders.forEach((ord) => {
+          const ordMs = ord.created_at ? new Date(ord.created_at).getTime() : 0;
+          if (ordMs > lastValidOrderMs) lastValidOrderMs = ordMs;
+        });
+      }
+
+      const daysWithoutValidOrder = (nowMs - lastValidOrderMs) / (1000 * 60 * 60 * 24);
+
+      if (currentStatus === 'ACTIVE') {
+        summary.totalActiveMembers++;
+
+        if (daysWithoutValidOrder >= settings.inactivityPeriodDays) {
+          const inactiveTimestamp = new Date().toISOString();
+          await supabase
+            .from('customers')
+            .update({
+              status: 'INACTIVE',
+              inactive_at: inactiveTimestamp,
+              updated_at: inactiveTimestamp,
+            })
+            .eq('id', memberId);
+
+          summary.markedInactiveCount++;
+          summary.details.markedInactive.push({
+            id: memberId,
+            namaLengkap: member.nama_lengkap || 'Pelanggan Leton',
+            nomorHp: member.nomor_hp || '-',
+          });
+          console.log(`[Auto Inactivity Worker] Member marked INACTIVE: "${member.nama_lengkap}" (${memberId}) after ${Math.floor(daysWithoutValidOrder)} days without valid transaction.`);
+        } else if (daysWithoutValidOrder >= settings.inactivityPeriodDays - 15) {
+          summary.inactiveCandidatesCount++;
+        }
+      } else if (currentStatus === 'INACTIVE') {
+        summary.totalInactiveMembers++;
+
+        const inactiveAtMs = member.inactive_at ? new Date(member.inactive_at).getTime() : lastValidOrderMs;
+        const daysSinceInactive = (nowMs - inactiveAtMs) / (1000 * 60 * 60 * 24);
+
+        if (daysSinceInactive >= settings.gracePeriodDays) {
+          summary.deletionCandidatesCount++;
+
+          console.log(`[Auto Inactivity Worker] Executing account cleanup for INACTIVE member "${member.nama_lengkap}" (${memberId}) after ${Math.floor(daysSinceInactive)} days inactive.`);
+
+          await supabase.from('orders').update({ customer_id: null }).eq('customer_id', memberId);
+          await supabase.from('customer_sessions').delete().eq('customer_id', memberId);
+          await supabase.from('reward_redemptions').delete().eq('customer_id', memberId);
+          await supabase.from('loyalty_transactions').delete().eq('customer_id', memberId);
+          await supabase.from('customer_points').delete().eq('customer_id', memberId);
+
+          addDeletedCustomer(memberId);
+          if (member.nomor_hp) addDeletedCustomer(member.nomor_hp);
+
+          await supabase.from('customers').update({ password_hash: null, updated_at: new Date().toISOString() }).eq('id', memberId);
+          await supabase.from('customers').delete().eq('id', memberId);
+
+          summary.deletedMembersCount++;
+          summary.details.deletedMembers.push({
+            id: memberId,
+            namaLengkap: member.nama_lengkap || 'Pelanggan Leton',
+            nomorHp: member.nomor_hp || '-',
+          });
+        } else {
+          summary.deletionCandidatesCount++;
+        }
+      }
+    }
+
+    await saveMemberInactivitySettingsToDb({
+      lastRunAt: summary.timestamp,
+      lastRunSummary: summary,
+    });
+
+    console.log(`[Auto Inactivity Worker] Execution completed successfully. Marked Inactive: ${summary.markedInactiveCount}, Deleted: ${summary.deletedMembersCount}`);
+
+    return {
+      success: true,
+      summary,
+    };
+  } catch (err: any) {
+    console.error('[Auto Inactivity Worker Exception]:', err);
+    return { success: false, error: err?.message || 'Terjadi kesalahan sistem saat menjalankan worker.' };
+  }
+}
+
+async function getMemberInactivityCandidates() {
+  const settings = await getMemberInactivitySettings();
+  const nowMs = Date.now();
+
+  const inactiveCandidates: any[] = [];
+  const deletionCandidates: any[] = [];
+
+  try {
+    const { data: rawCustomers } = await supabase
+      .from('customers')
+      .select('id, nama_lengkap, nomor_hp, password_hash, status, inactive_at, created_at');
+
+    if (!Array.isArray(rawCustomers)) return { inactiveCandidates, deletionCandidates };
+
+    const registeredMembers = rawCustomers.filter((row: any) => {
+      if (!row.password_hash || String(row.password_hash).trim() === '') return false;
+      const id = String(row.id || '');
+      const phone = String(row.nomor_hp || '').trim();
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      if (isCustomerDeleted(id, phone) || isCustomerDeleted(cleanPhone)) return false;
+      return true;
+    });
+
+    const { data: rawOrders } = await supabase
+      .from('orders')
+      .select('id, customer_id, customer_phone, payment_status, order_status, payment_method, total_amount, items, created_at');
+
+    const ordersList = Array.isArray(rawOrders) ? rawOrders : [];
+    const validOrdersByCustomer = new Map<string, any[]>();
+
+    ordersList.forEach((order) => {
+      if (!isOrderValidForInactivity(order)) return;
+      const custId = order.customer_id ? String(order.customer_id) : '';
+      const phoneNum = order.customer_phone ? String(order.customer_phone).replace(/[^0-9]/g, '') : '';
+
+      if (custId) {
+        if (!validOrdersByCustomer.has(custId)) validOrdersByCustomer.set(custId, []);
+        validOrdersByCustomer.get(custId)!.push(order);
+      }
+      if (phoneNum && phoneNum.length >= 8) {
+        if (!validOrdersByCustomer.has(phoneNum)) validOrdersByCustomer.set(phoneNum, []);
+        validOrdersByCustomer.get(phoneNum)!.push(order);
+      }
+    });
+
+    registeredMembers.forEach((member) => {
+      const memberId = String(member.id);
+      const memberPhone = String(member.nomor_hp || '').replace(/[^0-9]/g, '');
+      const currentStatus = member.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      const createdAtMs = member.created_at ? new Date(member.created_at).getTime() : nowMs;
+
+      let memberOrders = validOrdersByCustomer.get(memberId) || [];
+      if (memberOrders.length === 0 && memberPhone) {
+        memberOrders = validOrdersByCustomer.get(memberPhone) || [];
+      }
+
+      let lastValidOrderMs = createdAtMs;
+      let totalSpent = 0;
+      if (memberOrders.length > 0) {
+        memberOrders.forEach((ord) => {
+          const ordMs = ord.created_at ? new Date(ord.created_at).getTime() : 0;
+          if (ordMs > lastValidOrderMs) lastValidOrderMs = ordMs;
+          totalSpent += Number(ord.total_amount || ord.totalAmount || 0);
+        });
+      }
+
+      const daysSinceLastValid = Math.floor((nowMs - lastValidOrderMs) / (1000 * 60 * 60 * 24));
+
+      if (currentStatus === 'ACTIVE') {
+        if (daysSinceLastValid >= settings.inactivityPeriodDays - 15) {
+          inactiveCandidates.push({
+            id: memberId,
+            namaLengkap: member.nama_lengkap || 'Pelanggan Leton',
+            nomorHp: member.nomor_hp || '-',
+            createdAt: member.created_at,
+            status: 'ACTIVE',
+            lastValidOrderAt: memberOrders.length > 0 ? new Date(lastValidOrderMs).toISOString() : null,
+            daysSinceLastValidOrder: daysSinceLastValid,
+            validOrdersCount: memberOrders.length,
+            totalSpent,
+          });
+        }
+      } else if (currentStatus === 'INACTIVE') {
+        const inactiveAtMs = member.inactive_at ? new Date(member.inactive_at).getTime() : lastValidOrderMs;
+        const daysSinceInactive = Math.floor((nowMs - inactiveAtMs) / (1000 * 60 * 60 * 24));
+
+        deletionCandidates.push({
+          id: memberId,
+          namaLengkap: member.nama_lengkap || 'Pelanggan Leton',
+          nomorHp: member.nomor_hp || '-',
+          createdAt: member.created_at,
+          status: 'INACTIVE',
+          inactiveAt: member.inactive_at || new Date(inactiveAtMs).toISOString(),
+          daysSinceLastValidOrder: daysSinceLastValid,
+          daysSinceInactive,
+          validOrdersCount: memberOrders.length,
+          totalSpent,
+        });
+      }
+    });
+  } catch (err) {
+    console.error('[getMemberInactivityCandidates Exception]:', err);
+  }
+
+  return { inactiveCandidates, deletionCandidates };
+}
+
+// API: Get Member Inactivity Settings & Summary (Super Admin)
+app.get('/api/admin/member-inactivity/settings', async (req, res) => {
+  const isAuthorizedAdmin = verifyAuthHeader(req);
+  if (!isAuthorizedAdmin) {
+    return res.status(401).json({ error: 'Unauthorized: Silakan login terlebih dahulu' });
+  }
+
+  const role = req.headers['x-admin-role'] as string | undefined;
+  if (role !== 'super_admin') {
+    return res.status(403).json({ error: 'Akses Ditolak: Hanya Super Admin yang dapat mengakses Pengaturan Inactivity Member.' });
+  }
+
+  const settings = await getMemberInactivitySettings();
+  return res.json({ success: true, settings });
+});
+
+// API: Update Member Inactivity Settings (Super Admin)
+app.post('/api/admin/member-inactivity/settings', async (req, res) => {
+  const isAuthorizedAdmin = verifyAuthHeader(req);
+  if (!isAuthorizedAdmin) {
+    return res.status(401).json({ error: 'Unauthorized: Silakan login terlebih dahulu' });
+  }
+
+  const role = req.headers['x-admin-role'] as string | undefined;
+  if (role !== 'super_admin') {
+    return res.status(403).json({ error: 'Akses Ditolak: Hanya Super Admin yang dapat mengubah Pengaturan Inactivity Member.' });
+  }
+
+  const { inactivityPeriodDays, gracePeriodDays, autoCleanupEnabled } = req.body;
+
+  const newPeriod = Number(inactivityPeriodDays);
+  const newGrace = Number(gracePeriodDays);
+
+  if (isNaN(newPeriod) || newPeriod < 1) {
+    return res.status(400).json({ error: 'Inactivity period harus berupa angka minimal 1 hari.' });
+  }
+  if (isNaN(newGrace) || newGrace < 0) {
+    return res.status(400).json({ error: 'Grace period harus berupa angka non-negatif.' });
+  }
+
+  const updated = await saveMemberInactivitySettingsToDb({
+    inactivityPeriodDays: newPeriod,
+    gracePeriodDays: newGrace,
+    autoCleanupEnabled: Boolean(autoCleanupEnabled),
+  });
+
+  return res.json({ success: true, settings: updated });
+});
+
+// API: Trigger Member Inactivity & Cleanup Worker Manually (Super Admin)
+app.post('/api/admin/member-inactivity/cleanup', async (req, res) => {
+  const isAuthorizedAdmin = verifyAuthHeader(req);
+  if (!isAuthorizedAdmin) {
+    return res.status(401).json({ error: 'Unauthorized: Silakan login terlebih dahulu' });
+  }
+
+  const role = req.headers['x-admin-role'] as string | undefined;
+  if (role !== 'super_admin') {
+    return res.status(403).json({ error: 'Akses Ditolak: Hanya Super Admin yang dapat menjalankan Cleanup Member.' });
+  }
+
+  const result = await runMemberInactivityAndCleanupWorker(true);
+  return res.json(result);
+});
+
+// API: Get Candidates for Inactivity & Deletion Preview (Super Admin)
+app.get('/api/admin/member-inactivity/candidates', async (req, res) => {
+  const isAuthorizedAdmin = verifyAuthHeader(req);
+  if (!isAuthorizedAdmin) {
+    return res.status(401).json({ error: 'Unauthorized: Silakan login terlebih dahulu' });
+  }
+
+  const role = req.headers['x-admin-role'] as string | undefined;
+  if (role !== 'super_admin') {
+    return res.status(403).json({ error: 'Akses Ditolak: Hanya Super Admin yang dapat melihat Kandidat Member Inactivity.' });
+  }
+
+  const result = await getMemberInactivityCandidates();
+  return res.json({ success: true, ...result });
+});
+
 // 9. Upload image endpoint (Protected) - supports both /api/upload and /api/upload-image
 const handleImageUpload = (req: express.Request, res: express.Response) => {
   if (!verifyAuthHeader(req)) {
@@ -2495,6 +2955,10 @@ app.post('/api/admin/cleanup-receipts', async (req, res) => {
 // Run cleanup every 30 minutes in the background and once 10 seconds after startup
 setInterval(runPaymentProofCleanup, 30 * 60 * 1000);
 setTimeout(runPaymentProofCleanup, 10 * 1000);
+
+// Run member inactivity & cleanup worker every 12 hours and once 15 seconds after startup
+setInterval(runMemberInactivityAndCleanupWorker, 12 * 60 * 60 * 1000);
+setTimeout(runMemberInactivityAndCleanupWorker, 15 * 1000);
 
 // =============================================
 // WEB PUSH NOTIFICATION BACKEND IMPLEMENTATION

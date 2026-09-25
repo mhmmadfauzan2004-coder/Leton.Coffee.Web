@@ -9,6 +9,8 @@ export interface RegisteredCustomer {
   pointsBalance: number;
   totalPointsEarned: number;
   totalPointsRedeemed: number;
+  status: 'ACTIVE' | 'INACTIVE';
+  inactiveAt?: string | null;
   createdAt: string;
   updatedAt?: string;
 }
@@ -37,6 +39,8 @@ function normalizeCustomerRow(row: any): RegisteredCustomer {
     pointsBalance: Number(row.points_balance || row.pointsBalance || 0),
     totalPointsEarned: Number(row.total_points_earned || row.totalPointsEarned || 0),
     totalPointsRedeemed: Number(row.total_points_redeemed || row.totalPointsRedeemed || 0),
+    status: row.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
+    inactiveAt: row.inactive_at || row.inactiveAt || null,
     createdAt: row.created_at || row.createdAt || new Date().toISOString(),
     updatedAt: row.updated_at || row.updatedAt,
   };
@@ -281,6 +285,7 @@ export async function findOrCreateCustomerMember(
       pointsBalance: 0,
       totalPointsEarned: 0,
       totalPointsRedeemed: 0,
+      status: 'ACTIVE',
       createdAt: newRow.created_at,
     };
   } catch (err) {
@@ -421,5 +426,116 @@ export async function deleteRegisteredCustomer(customerId: string, adminRole?: s
     console.error('[deleteRegisteredCustomer] Verification re-query failed:', verifyErr);
     return { success: false, error: 'Gagal memverifikasi status hapus di database Supabase.' };
   }
+}
+
+/**
+ * Fetch Member Inactivity Settings & Statistics (Super Admin)
+ */
+export async function fetchMemberInactivitySettings(adminRole?: string): Promise<any> {
+  try {
+    const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
+    const res = await fetch(getApiUrl('/api/admin/member-inactivity/settings'), {
+      headers: {
+        'x-admin-role': adminRole || 'super_admin',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('[fetchMemberInactivitySettings] Exception:', err);
+  }
+  return {
+    success: false,
+    settings: {
+      inactivityPeriodDays: 60,
+      gracePeriodDays: 7,
+      autoCleanupEnabled: true,
+    },
+  };
+}
+
+/**
+ * Save Member Inactivity Settings (Super Admin)
+ */
+export async function saveMemberInactivitySettings(
+  settings: {
+    inactivityPeriodDays: number;
+    gracePeriodDays: number;
+    autoCleanupEnabled: boolean;
+  },
+  adminRole?: string
+): Promise<{ success: boolean; settings?: any; error?: string }> {
+  try {
+    const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
+    const res = await fetch(getApiUrl('/api/admin/member-inactivity/settings'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-role': adminRole || 'super_admin',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(settings),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      return json;
+    } else {
+      const json = await res.json().catch(() => ({}));
+      return { success: false, error: json.error || 'Gagal menyimpan pengaturan.' };
+    }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Gagal terhubung ke server.' };
+  }
+}
+
+/**
+ * Trigger Member Inactivity & Cleanup Worker Manually (Super Admin)
+ */
+export async function triggerMemberInactivityCleanup(adminRole?: string): Promise<any> {
+  try {
+    const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
+    const res = await fetch(getApiUrl('/api/admin/member-inactivity/cleanup'), {
+      method: 'POST',
+      headers: {
+        'x-admin-role': adminRole || 'super_admin',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    if (res.ok) {
+      return await res.json();
+    } else {
+      const json = await res.json().catch(() => ({}));
+      return { success: false, error: json.error || 'Gagal menjalankan cleanup member.' };
+    }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Terjadi kesalahan sistem.' };
+  }
+}
+
+/**
+ * Fetch Candidates for Inactivity & Deletion (Super Admin)
+ */
+export async function fetchMemberInactivityCandidates(adminRole?: string): Promise<any> {
+  try {
+    const token = localStorage.getItem('leton_admin_token') || 'leton_local_token';
+    const res = await fetch(getApiUrl('/api/admin/member-inactivity/candidates'), {
+      headers: {
+        'x-admin-role': adminRole || 'super_admin',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('[fetchMemberInactivityCandidates] Exception:', err);
+  }
+  return {
+    success: false,
+    inactiveCandidates: [],
+    deletionCandidates: [],
+  };
 }
 

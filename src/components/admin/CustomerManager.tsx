@@ -5,14 +5,16 @@ import {
   subscribeToCustomersRealtime,
   deleteRegisteredCustomer,
   RegisteredCustomer,
+  fetchMemberInactivitySettings,
+  saveMemberInactivitySettings,
+  triggerMemberInactivityCleanup,
+  fetchMemberInactivityCandidates,
 } from '../../utils/supabaseCustomers';
 import { fetchCustomerOrdersForAdmin } from '../../utils/supabaseOrders';
-import { CustomerOrder } from '../../types';
+import { CustomerOrder, MemberInactivitySettings, MemberInactivityCandidate } from '../../types';
 import { formatOrderDateTime } from '../../utils/formatters';
 import {
   getMembershipTierSettings,
-  calculateMembershipTier,
-  isOrderValidForTier,
   MembershipTierSettings,
   DEFAULT_MEMBERSHIP_TIER_SETTINGS,
 } from '../../utils/supabaseMembershipTier';
@@ -20,28 +22,34 @@ import {
   Users,
   Search,
   RefreshCw,
-  Phone,
-  Calendar,
   Copy,
   Check,
   ShieldCheck,
   Lock,
-  Radio,
   MessageCircle,
-  ShoppingBag,
-  Clock,
-  X,
-  ChevronRight,
   Receipt,
-  Store,
   Award,
   Trash2,
+  AlertTriangle,
+  Settings,
+  Play,
+  UserX,
+  UserCheck,
+  Clock,
+  Calendar,
+  CheckCircle2,
+  Sliders,
+  Filter,
 } from 'lucide-react';
 
 export const CustomerManager: React.FC = () => {
   const { auth, isRealtimeConnected } = useContent();
   const isSuperAdmin = auth.role === 'super_admin';
 
+  // Sub-tab state
+  const [activeTab, setActiveTab] = useState<'all' | 'candidates' | 'settings'>('all');
+
+  // Core customer state
   const [customers, setCustomers] = useState<RegisteredCustomer[]>([]);
   const [tierSettings, setTierSettings] = useState<MembershipTierSettings>(DEFAULT_MEMBERSHIP_TIER_SETTINGS);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -50,6 +58,21 @@ export const CustomerManager: React.FC = () => {
   const [copiedPhoneId, setCopiedPhoneId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Inactivity Settings & Candidates State
+  const [inactivitySettings, setInactivitySettings] = useState<MemberInactivitySettings>({
+    inactivityPeriodDays: 60,
+    gracePeriodDays: 7,
+    autoCleanupEnabled: true,
+  });
+  const [isSavingSettings, setIsSavingSettings] = useState<boolean>(false);
+  const [isExecutingCleanup, setIsExecutingCleanup] = useState<boolean>(false);
+  const [cleanupSuccessMessage, setCleanupSuccessMessage] = useState<string | null>(null);
+
+  // Inactivity candidates
+  const [inactiveCandidates, setInactiveCandidates] = useState<MemberInactivityCandidate[]>([]);
+  const [deletionCandidates, setDeletionCandidates] = useState<MemberInactivityCandidate[]>([]);
+  const [isLoadingCandidates, setIsLoadingCandidates] = useState<boolean>(false);
+
   // Customer Detail Modal State
   const [selectedCustomer, setSelectedCustomer] = useState<RegisteredCustomer | null>(null);
   const [customerOrders, setCustomerOrders] = useState<CustomerOrder[]>([]);
@@ -57,7 +80,86 @@ export const CustomerManager: React.FC = () => {
 
   // Confirm delete modal state & success toast
   const [confirmingCustomer, setConfirmingCustomer] = useState<RegisteredCustomer | null>(null);
+  const [confirmingManualCleanup, setConfirmingManualCleanup] = useState<boolean>(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  // Load member inactivity settings and candidate previews
+  const loadInactivityData = async () => {
+    setIsLoadingCandidates(true);
+    try {
+      const [settingsRes, candidatesRes] = await Promise.all([
+        fetchMemberInactivitySettings(auth.role),
+        fetchMemberInactivityCandidates(auth.role),
+      ]);
+
+      if (settingsRes?.settings) {
+        setInactivitySettings(settingsRes.settings);
+      }
+      if (candidatesRes?.inactiveCandidates) {
+        setInactiveCandidates(candidatesRes.inactiveCandidates);
+      }
+      if (candidatesRes?.deletionCandidates) {
+        setDeletionCandidates(candidatesRes.deletionCandidates);
+      }
+    } catch (err) {
+      console.warn('[loadInactivityData] Exception:', err);
+    } finally {
+      setIsLoadingCandidates(false);
+    }
+  };
+
+  // Save updated inactivity configuration
+  const handleSaveInactivitySettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingSettings(true);
+    try {
+      const res = await saveMemberInactivitySettings(
+        {
+          inactivityPeriodDays: Number(inactivitySettings.inactivityPeriodDays) || 60,
+          gracePeriodDays: Number(inactivitySettings.gracePeriodDays) || 7,
+          autoCleanupEnabled: Boolean(inactivitySettings.autoCleanupEnabled),
+        },
+        auth.role
+      );
+
+      if (res.success && res.settings) {
+        setInactivitySettings(res.settings);
+        setSuccessToast('Pengaturan Auto Inactivity berhasil disimpan');
+        setTimeout(() => setSuccessToast(null), 3500);
+        await loadInactivityData();
+      } else {
+        alert(res.error || 'Gagal menyimpan pengaturan.');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Terjadi kesalahan sistem.');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  // Run cleanup worker manually
+  const handleExecuteManualCleanup = async () => {
+    setIsExecutingCleanup(true);
+    setConfirmingManualCleanup(false);
+    try {
+      const res = await triggerMemberInactivityCleanup(auth.role);
+      if (res.success && res.summary) {
+        const sum = res.summary;
+        const msg = `Cleanup selesai: ${sum.markedInactiveCount} member diset INACTIVE, ${sum.deletedMembersCount} member terhapus.`;
+        setCleanupSuccessMessage(msg);
+        setSuccessToast('Proses Cleanup Member selesai dijalankan');
+        setTimeout(() => setSuccessToast(null), 4000);
+
+        await Promise.all([loadCustomers(), loadInactivityData()]);
+      } else {
+        alert(res.error || 'Gagal menjalankan cleanup.');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Terjadi kesalahan sistem saat cleanup.');
+    } finally {
+      setIsExecutingCleanup(false);
+    }
+  };
 
   // Delete customer handler (triggers confirmation dialog)
   const handleDeleteCustomer = (customer: RegisteredCustomer) => {
@@ -73,17 +175,13 @@ export const CustomerManager: React.FC = () => {
     try {
       const result = await deleteRegisteredCustomer(customerId, auth.role);
       if (result.success) {
-        // 1. Close detail modal if open for this customer
         if (selectedCustomer?.id === customerId) {
           setSelectedCustomer(null);
         }
-        // 2. Close confirmation modal
         setConfirmingCustomer(null);
 
-        // 3. Re-query customer data directly from Supabase database
-        await loadCustomers();
+        await Promise.all([loadCustomers(), loadInactivityData()]);
 
-        // 4. Show success toast only after database verification confirmed record is gone
         setSuccessToast('Member berhasil dihapus');
         setTimeout(() => setSuccessToast(null), 3500);
       } else {
@@ -116,13 +214,14 @@ export const CustomerManager: React.FC = () => {
     if (!isSuperAdmin) return;
 
     loadCustomers();
+    loadInactivityData();
 
-    // Load tier settings from database
-    getMembershipTierSettings().then((res) => {
-      setTierSettings(res.settings);
-    }).catch(() => {});
+    getMembershipTierSettings()
+      .then((res) => {
+        setTierSettings(res.settings);
+      })
+      .catch(() => {});
 
-    // Setup realtime subscription to public.customers table
     const unsubscribe = subscribeToCustomersRealtime((updatedList) => {
       setCustomers(updatedList);
     }, auth.role);
@@ -160,7 +259,6 @@ export const CustomerManager: React.FC = () => {
     }
   };
 
-  // Format date helper (Indonesian locale in Asia/Jakarta timezone)
   const formatDate = (isoString: string) => {
     return formatOrderDateTime(isoString);
   };
@@ -184,6 +282,10 @@ export const CustomerManager: React.FC = () => {
     });
   }, [customers, searchQuery]);
 
+  // Calculated statistics
+  const activeCount = useMemo(() => customers.filter((c) => c.status !== 'INACTIVE').length, [customers]);
+  const inactiveCount = useMemo(() => customers.filter((c) => c.status === 'INACTIVE').length, [customers]);
+
   // Restrict access if not Super Admin / Admin Pusat
   if (!isSuperAdmin) {
     return (
@@ -195,7 +297,7 @@ export const CustomerManager: React.FC = () => {
           Akses Terbatas
         </h2>
         <p className="text-xs text-[#64748B] mt-2 leading-relaxed">
-          Halaman <strong>DATA CUSTOMER</strong> hanya dapat diakses oleh Super Admin / Admin Pusat Leton HQ.
+          Halaman <strong>DATA CUSTOMER &amp; INACTIVITY CLEANUP</strong> hanya dapat diakses oleh Super Admin / Admin Pusat Leton HQ.
         </p>
       </div>
     );
@@ -203,6 +305,14 @@ export const CustomerManager: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Toast Notification */}
+      {successToast && (
+        <div className="fixed bottom-6 right-6 z-50 p-4 rounded-2xl bg-emerald-900 text-white shadow-2xl border border-emerald-500/50 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-5">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span className="text-xs font-bold">{successToast}</span>
+        </div>
+      )}
+
       {/* ---------------------------------------------------- */}
       {/* HEADER SECTION                                       */}
       {/* ---------------------------------------------------- */}
@@ -214,10 +324,10 @@ export const CustomerManager: React.FC = () => {
               <span>ADMIN PUSAT (SUPER ADMIN)</span>
             </div>
             <h1 className="font-display font-black text-2xl sm:text-3xl text-[#172033] tracking-tight uppercase">
-              DATA CUSTOMER
+              DATA MEMBER &amp; INACTIVITY CLEANUP
             </h1>
             <p className="text-[#64748B] text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed">
-              Daftar seluruh pelanggan yang telah mendaftar di sistem Leton Coffee. Data tersinkronisasi langsung secara realtime dari database Supabase.
+              Kelola seluruh pelanggan terdaftar, pantau status keaktifan, dan konfigurasikan sistem pembersihan otomatis member non-aktif secara terukur.
             </p>
           </div>
 
@@ -234,38 +344,91 @@ export const CustomerManager: React.FC = () => {
               </span>
             </div>
 
-            {/* Total Count Badge */}
-            <div className="px-4 py-2.5 rounded-2xl bg-[#F0F7FF] border border-[#E0F2FE] flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-[#0284C7] text-white flex items-center justify-center">
-                <Users className="w-4 h-4" />
-              </div>
-              <div>
-                <span className="text-[10px] font-mono text-[#64748B] uppercase font-bold block">
-                  Total Customer
-                </span>
-                <span className="font-display font-black text-lg text-[#172033] leading-none">
-                  {customers.length}
-                </span>
-              </div>
-            </div>
-
             {/* Refresh Button */}
             <button
-              onClick={loadCustomers}
-              disabled={isLoading}
+              onClick={() => {
+                loadCustomers();
+                loadInactivityData();
+              }}
+              disabled={isLoading || isLoadingCandidates}
               className="p-3 rounded-2xl bg-white hover:bg-[#F0F7FF] border border-[#E0F2FE] text-[#0284C7] transition-all cursor-pointer shadow-sm hover:shadow active:scale-95"
-              title="Refresh Data Customer"
+              title="Refresh Data Customer &amp; Inactivity"
             >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${isLoading || isLoadingCandidates ? 'animate-spin' : ''}`} />
             </button>
+          </div>
+        </div>
+
+        {/* ---------------------------------------------------- */}
+        {/* STATS SUMMARY BARS                                  */}
+        {/* ---------------------------------------------------- */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mt-6 pt-6 border-t border-[#E0F2FE]">
+          {/* Active Members */}
+          <div className="p-4 rounded-2xl bg-[#F0FDF4] border border-emerald-200/80 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[10px] font-mono text-emerald-800 font-bold uppercase block">
+                Member Aktif
+              </span>
+              <span className="font-display font-black text-xl text-emerald-950 leading-none">
+                {activeCount}
+              </span>
+            </div>
+          </div>
+
+          {/* Inactive Members */}
+          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+              <UserX className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[10px] font-mono text-amber-800 font-bold uppercase block">
+                Member Inactive
+              </span>
+              <span className="font-display font-black text-xl text-amber-950 leading-none">
+                {inactiveCount}
+              </span>
+            </div>
+          </div>
+
+          {/* Candidates Inactive (Mendekati 60 hari) */}
+          <div className="p-4 rounded-2xl bg-sky-50 border border-sky-200/80 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[10px] font-mono text-sky-800 font-bold uppercase block">
+                Kandidat Inactive
+              </span>
+              <span className="font-display font-black text-xl text-sky-950 leading-none">
+                {inactiveCandidates.length}
+              </span>
+            </div>
+          </div>
+
+          {/* Candidates Deletion (Pasca Grace Period 7 hari) */}
+          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200/80 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[10px] font-mono text-rose-800 font-bold uppercase block">
+                Siap Dihapus
+              </span>
+              <span className="font-display font-black text-xl text-rose-950 leading-none">
+                {deletionCandidates.length}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
       {errorMessage && (
-        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between gap-4 mb-6 shadow-sm">
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between gap-4 shadow-sm">
           <div className="flex items-center gap-2">
-            <span className="font-bold">Error:</span>
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{errorMessage}</span>
           </div>
           <button
@@ -277,581 +440,625 @@ export const CustomerManager: React.FC = () => {
         </div>
       )}
 
-      {/* ---------------------------------------------------- */}
-      {/* SEARCH BAR & FILTER CONTROLS                         */}
-      {/* ---------------------------------------------------- */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E0F2FE] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="relative w-full sm:w-96">
-          <Search className="w-4 h-4 text-[#64748B] absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari nama atau nomor HP customer..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#F8FBFF] border border-[#E0F2FE] text-xs font-sans text-[#172033] placeholder-[#94A3B8] focus:outline-none focus:border-[#0284C7] focus:bg-white transition-colors"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#64748B] hover:text-[#172033] px-1"
-            >
-              ✕
-            </button>
-          )}
+      {cleanupSuccessMessage && (
+        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{cleanupSuccessMessage}</span>
+          </div>
+          <button
+            onClick={() => setCleanupSuccessMessage(null)}
+            className="text-xs font-bold text-emerald-700 hover:underline"
+          >
+            Tutup
+          </button>
         </div>
+      )}
 
-        <div className="flex items-center justify-between w-full sm:w-auto text-xs text-[#64748B] font-mono">
-          <span>
-            Menampilkan <strong className="text-[#172033]">{filteredCustomers.length}</strong> dari {customers.length} customer
-          </span>
-        </div>
+      {/* ---------------------------------------------------- */}
+      {/* SUB-TABS NAVIGATION                                  */}
+      {/* ---------------------------------------------------- */}
+      <div className="flex items-center gap-2 border-b border-[#E0F2FE] pb-1">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+            activeTab === 'all'
+              ? 'bg-[#0284C7] text-white shadow-sm'
+              : 'bg-white text-[#64748B] hover:text-[#172033] hover:bg-[#F0F7FF] border border-[#E0F2FE]'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Semua Member ({customers.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('candidates')}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 relative ${
+            activeTab === 'candidates'
+              ? 'bg-[#0284C7] text-white shadow-sm'
+              : 'bg-white text-[#64748B] hover:text-[#172033] hover:bg-[#F0F7FF] border border-[#E0F2FE]'
+          }`}
+        >
+          <AlertTriangle className="w-4 h-4" />
+          <span>Kandidat Inactive &amp; Hapus</span>
+          {(inactiveCandidates.length > 0 || deletionCandidates.length > 0) && (
+            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('settings')}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+            activeTab === 'settings'
+              ? 'bg-[#0284C7] text-white shadow-sm'
+              : 'bg-white text-[#64748B] hover:text-[#172033] hover:bg-[#F0F7FF] border border-[#E0F2FE]'
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          <span>Pengaturan &amp; Auto Cleanup</span>
+        </button>
       </div>
 
       {/* ---------------------------------------------------- */}
-      {/* CUSTOMER LIST / TABLE VIEW                           */}
+      {/* TAB 1: ALL CUSTOMERS LIST VIEW                       */}
       {/* ---------------------------------------------------- */}
-      {isLoading && customers.length === 0 ? (
-        <div className="p-12 text-center bg-white rounded-3xl border border-[#E0F2FE] shadow-sm">
-          <RefreshCw className="w-6 h-6 animate-spin text-[#0284C7] mx-auto mb-3" />
-          <p className="text-xs font-mono text-[#64748B] uppercase tracking-wider">
-            Memuat Data Customer dari Supabase...
-          </p>
-        </div>
-      ) : filteredCustomers.length === 0 ? (
-        <div className="p-12 text-center bg-white rounded-3xl border border-[#E0F2FE] shadow-sm space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-[#F0F7FF] text-[#0284C7] flex items-center justify-center mx-auto">
-            <Users className="w-6 h-6" />
-          </div>
-          <h3 className="font-display font-black text-base uppercase text-[#172033]">
-            {searchQuery ? 'Customer Tidak Ditemukan' : 'Belum Ada Customer Terdaftar'}
-          </h3>
-          <p className="text-xs text-[#64748B] max-w-md mx-auto">
-            {searchQuery
-              ? `Tidak ada data customer yang cocok dengan kata kunci "${searchQuery}".`
-              : 'Customer yang mendaftar melalui halaman aplikasi akan otomatis muncul di sini secara realtime.'}
-          </p>
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="px-4 py-2 rounded-xl bg-[#F0F7FF] text-[#0284C7] text-xs font-bold uppercase tracking-wider hover:bg-[#E0F2FE] transition-colors"
-            >
-              Reset Pencarian
-            </button>
-          )}
-        </div>
-      ) : (
+      {activeTab === 'all' && (
         <div className="space-y-4">
-          {/* DESKTOP / TABLET TABLE (hidden on small mobile screens) */}
-          <div className="hidden md:block bg-white rounded-3xl border border-[#E0F2FE] shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#F8FBFF] border-b border-[#E0F2FE] text-[11px] font-mono text-[#64748B] uppercase tracking-wider">
-                    <th className="py-3.5 px-6 font-bold w-12 text-center">#</th>
-                    <th className="py-3.5 px-6 font-bold">Nama Customer</th>
-                    <th className="py-3.5 px-6 font-bold">Nomor Handphone / WhatsApp</th>
-                    <th className="py-3.5 px-6 font-bold text-center">Tanggal Lahir</th>
-                    <th className="py-3.5 px-6 font-bold text-center">Saldo Poin</th>
-                    <th className="py-3.5 px-6 font-bold text-center">Poin Diperoleh / Ditukar</th>
-                    <th className="py-3.5 px-6 font-bold text-right">Tanggal Terdaftar</th>
-                    <th className="py-3.5 px-6 font-bold text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E0F2FE] text-xs">
-                  {filteredCustomers.map((customer, index) => {
-                    const cleanPhone = customer.nomorHp ? customer.nomorHp.replace(/[^0-9]/g, '') : '';
-                    const waPhone = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
-                    const initial = customer.namaLengkap ? customer.namaLengkap.charAt(0).toUpperCase() : 'C';
+          {/* SEARCH BAR & FILTER CONTROLS */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E0F2FE] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="relative w-full sm:w-96">
+              <Search className="w-4 h-4 text-[#64748B] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari nama atau nomor HP customer..."
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#F8FBFF] border border-[#E0F2FE] text-xs font-sans text-[#172033] placeholder-[#94A3B8] focus:outline-none focus:border-[#0284C7] focus:bg-white transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#64748B] hover:text-[#172033] px-1"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
 
-                    return (
-                      <tr
-                        key={customer.id || index}
-                        className="hover:bg-[#F8FBFF] transition-colors group"
-                      >
-                        {/* No */}
-                        <td className="py-4 px-6 text-center font-mono text-[#64748B] text-xs font-semibold">
-                          {index + 1}
-                        </td>
-
-                        {/* Customer Name */}
-                        <td className="py-4 px-6">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenCustomerDetail(customer)}
-                            className="flex items-center gap-3 text-left group/btn cursor-pointer focus:outline-none"
-                            title="Klik untuk melihat detail & riwayat pesanan"
-                          >
-                            <div className="w-9 h-9 rounded-xl bg-[#0284C7] group-hover/btn:bg-[#0369A1] text-white flex items-center justify-center font-display font-black text-sm shrink-0 shadow-sm transition-colors">
-                              {initial}
-                            </div>
-                            <div className="min-w-0">
-                              <span className="font-bold text-[#172033] group-hover/btn:text-[#0284C7] block truncate text-sm transition-colors underline-offset-2 group-hover/btn:underline">
-                                {customer.namaLengkap}
-                              </span>
-                              <span className="text-[10px] text-[#0284C7] font-semibold flex items-center gap-1 mt-0.5">
-                                <Receipt className="w-3 h-3 text-[#0284C7]" />
-                                Lihat Riwayat Pesanan
-                              </span>
-                            </div>
-                          </button>
-                        </td>
-
-                        {/* Phone Number with quick actions */}
-                        <td className="py-4 px-6 font-mono">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-[#172033]">
-                              {customer.nomorHp || '-'}
-                            </span>
-                            {customer.nomorHp && customer.nomorHp !== '-' && (
-                              <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopyPhone(customer.id, customer.nomorHp)}
-                                  className="p-1 rounded-lg text-[#64748B] hover:text-[#0284C7] hover:bg-[#F0F7FF] transition-colors"
-                                  title="Salin Nomor HP"
-                                >
-                                  {copiedPhoneId === customer.id ? (
-                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                  ) : (
-                                    <Copy className="w-3.5 h-3.5" />
-                                  )}
-                                </button>
-                                {waPhone && (
-                                  <a
-                                    href={`https://wa.me/${waPhone}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="p-1 rounded-lg text-[#64748B] hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
-                                    title="Hubungi via WhatsApp"
-                                  >
-                                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                                  </a>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Tanggal Lahir */}
-                        <td className="py-4 px-6 text-center font-mono text-xs text-[#475569]">
-                          {customer.tanggalLahir || '-'}
-                        </td>
-
-                        {/* Saldo Poin */}
-                        <td className="py-4 px-6 text-center text-xs">
-                          <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F0F9FF] text-[#0284C7] font-bold border border-[#E0F2FE]">
-                            <Award className="w-3.5 h-3.5 text-amber-500" />
-                            <span>{customer.pointsBalance ?? 0} Poin</span>
-                          </div>
-                        </td>
-
-                        {/* Poin Diperoleh / Ditukar */}
-                        <td className="py-4 px-6 text-center text-xs font-mono space-y-0.5">
-                          <div className="text-emerald-600 font-bold" title="Total Poin Diperoleh">
-                            +{customer.totalPointsEarned ?? 0}
-                          </div>
-                          <div className="text-rose-600 font-bold" title="Total Poin Ditukarkan">
-                            -{customer.totalPointsRedeemed ?? 0}
-                          </div>
-                        </td>
-
-                        {/* Registered Date */}
-                        <td className="py-4 px-6 text-right text-[#64748B] font-mono text-xs">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-[#94A3B8] shrink-0" />
-                            <span>{formatDate(customer.createdAt)}</span>
-                          </div>
-                        </td>
-
-                        {/* Action */}
-                        <td className="py-4 px-6 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteCustomer(customer)}
-                            disabled={deletingId === customer.id}
-                            className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50 cursor-pointer"
-                            title="Hapus Member"
-                          >
-                            {deletingId === customer.id ? (
-                              <RefreshCw className="w-4 h-4 animate-spin text-rose-600" />
-                            ) : (
-                              <Trash2 className="w-4 h-4" />
-                            )}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="flex items-center justify-between w-full sm:w-auto text-xs text-[#64748B] font-mono">
+              <span>
+                Menampilkan <strong className="text-[#172033]">{filteredCustomers.length}</strong> dari {customers.length} member
+              </span>
             </div>
           </div>
 
-          {/* MOBILE RESPONSIVE CARD LIST (Visible on screens < md) */}
-          <div className="md:hidden space-y-3">
-            {filteredCustomers.map((customer, index) => {
-              const cleanPhone = customer.nomorHp ? customer.nomorHp.replace(/[^0-9]/g, '') : '';
-              const waPhone = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
-              const initial = customer.namaLengkap ? customer.namaLengkap.charAt(0).toUpperCase() : 'C';
-
-              return (
-                <div
-                  key={customer.id || index}
-                  className="p-4 rounded-2xl bg-white border border-[#E0F2FE] shadow-sm space-y-3"
+          {isLoading && customers.length === 0 ? (
+            <div className="p-12 text-center bg-white rounded-3xl border border-[#E0F2FE] shadow-sm">
+              <RefreshCw className="w-6 h-6 animate-spin text-[#0284C7] mx-auto mb-3" />
+              <p className="text-xs font-mono text-[#64748B] uppercase tracking-wider">
+                Memuat Data Member dari Database...
+              </p>
+            </div>
+          ) : filteredCustomers.length === 0 ? (
+            <div className="p-12 text-center bg-white rounded-3xl border border-[#E0F2FE] shadow-sm space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-[#F0F7FF] text-[#0284C7] flex items-center justify-center mx-auto">
+                <Users className="w-6 h-6" />
+              </div>
+              <h3 className="font-display font-black text-base uppercase text-[#172033]">
+                {searchQuery ? 'Member Tidak Ditemukan' : 'Belum Ada Member Terdaftar'}
+              </h3>
+              <p className="text-xs text-[#64748B] max-w-md mx-auto">
+                {searchQuery
+                  ? `Tidak ada data member yang cocok dengan kata kunci "${searchQuery}".`
+                  : 'Member yang mendaftar melalui aplikasi akan otomatis muncul di sini secara realtime.'}
+              </p>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="px-4 py-2 rounded-xl bg-[#F0F7FF] text-[#0284C7] text-xs font-bold uppercase tracking-wider hover:bg-[#E0F2FE] transition-colors"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-[#0284C7] text-white flex items-center justify-center font-display font-black text-sm shrink-0">
-                        {initial}
-                      </div>
-                      <div className="min-w-0">
-                        <span className="font-bold text-[#172033] text-sm block truncate">
-                          {customer.namaLengkap}
-                        </span>
-                        <span className="text-[10px] font-mono text-[#64748B] block">
-                          #{index + 1} {customer.tanggalLahir ? `| Lahir: ${customer.tanggalLahir}` : ''}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                  Reset Pencarian
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="bg-white rounded-3xl border border-[#E0F2FE] shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[#F8FBFF] border-b border-[#E0F2FE] text-[11px] font-mono text-[#64748B] uppercase tracking-wider">
+                      <th className="py-3.5 px-6 font-bold w-12 text-center">#</th>
+                      <th className="py-3.5 px-6 font-bold">Nama Customer</th>
+                      <th className="py-3.5 px-6 font-bold">Status Member</th>
+                      <th className="py-3.5 px-6 font-bold">Nomor Handphone / WhatsApp</th>
+                      <th className="py-3.5 px-6 font-bold text-center">Saldo Poin</th>
+                      <th className="py-3.5 px-6 font-bold text-right">Tanggal Terdaftar</th>
+                      <th className="py-3.5 px-6 font-bold text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E0F2FE] text-xs">
+                    {filteredCustomers.map((customer, index) => {
+                      const cleanPhone = customer.nomorHp ? customer.nomorHp.replace(/[^0-9]/g, '') : '';
+                      const waPhone = cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone;
+                      const initial = customer.namaLengkap ? customer.namaLengkap.charAt(0).toUpperCase() : 'C';
+                      const isInactive = customer.status === 'INACTIVE';
 
-                  {/* Points summary block */}
-                  <div className="p-3 rounded-xl bg-[#F4F9FF] border border-[#E0F2FE] grid grid-cols-3 gap-2 text-center text-xs">
-                    <div>
-                      <span className="text-[9px] font-mono text-[#64748B] uppercase block">Saldo Poin</span>
-                      <span className="font-bold text-[#0284C7]">{customer.pointsBalance ?? 0}</span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-mono text-[#64748B] uppercase block">Diperoleh</span>
-                      <span className="font-bold text-emerald-600">+{customer.totalPointsEarned ?? 0}</span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-mono text-[#64748B] uppercase block">Ditukarkan</span>
-                      <span className="font-bold text-rose-600">-{customer.totalPointsRedeemed ?? 0}</span>
-                    </div>
-                  </div>
+                      return (
+                        <tr
+                          key={customer.id || index}
+                          className={`hover:bg-[#F8FBFF] transition-colors group ${
+                            isInactive ? 'bg-amber-50/40' : ''
+                          }`}
+                        >
+                          {/* No */}
+                          <td className="py-4 px-6 text-center font-mono text-[#64748B] text-xs font-semibold">
+                            {index + 1}
+                          </td>
 
-                  <div className="pt-2 border-t border-[#E0F2FE] flex items-center justify-between text-xs">
-                    {/* Phone details */}
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-[#0284C7] shrink-0" />
-                      <span className="font-mono font-bold text-[#172033]">
-                        {customer.nomorHp || '-'}
-                      </span>
-                    </div>
-
-                    {/* Action buttons */}
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenCustomerDetail(customer)}
-                        className="px-2.5 py-1 rounded-lg bg-[#F0F7FF] text-[#0284C7] text-[11px] font-bold flex items-center gap-1 hover:bg-[#E0F2FE] transition-colors"
-                      >
-                        <Receipt className="w-3 h-3" />
-                        <span>Riwayat</span>
-                      </button>
-                      {customer.nomorHp && customer.nomorHp !== '-' && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyPhone(customer.id, customer.nomorHp)}
-                            className="p-1.5 rounded-lg bg-[#F0F7FF] text-[#0284C7] hover:bg-[#E0F2FE] transition-colors"
-                            title="Salin Nomor"
-                          >
-                            {copiedPhoneId === customer.id ? (
-                              <Check className="w-3.5 h-3.5 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                          {waPhone && (
-                            <a
-                              href={`https://wa.me/${waPhone}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
-                              title="Chat WhatsApp"
+                          {/* Customer Name */}
+                          <td className="py-4 px-6">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCustomerDetail(customer)}
+                              className="flex items-center gap-3 text-left group/btn cursor-pointer focus:outline-none"
+                              title="Klik untuk melihat detail &amp; riwayat pesanan"
                             >
-                              <MessageCircle className="w-3.5 h-3.5" />
-                            </a>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
+                              <div
+                                className={`w-9 h-9 rounded-xl text-white flex items-center justify-center font-display font-black text-sm shrink-0 shadow-sm transition-colors ${
+                                  isInactive ? 'bg-amber-500' : 'bg-[#0284C7] group-hover/btn:bg-[#0369A1]'
+                                }`}
+                              >
+                                {initial}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="font-bold text-[#172033] group-hover/btn:text-[#0284C7] block truncate text-sm transition-colors underline-offset-2 group-hover/btn:underline">
+                                  {customer.namaLengkap}
+                                </span>
+                                <span className="text-[10px] text-[#0284C7] font-semibold flex items-center gap-1 mt-0.5">
+                                  <Receipt className="w-3 h-3 text-[#0284C7]" />
+                                  Lihat Riwayat Pesanan
+                                </span>
+                              </div>
+                            </button>
+                          </td>
 
-                  <div className="pt-2 border-t border-[#E0F2FE] flex items-center justify-between text-[11px] font-mono text-[#64748B]">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3 h-3 text-[#94A3B8]" />
-                      <span>Terdaftar: {formatDate(customer.createdAt)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCustomer(customer)}
-                        disabled={deletingId === customer.id}
-                        className="px-2 py-1 rounded-lg bg-rose-50 text-rose-600 font-bold flex items-center gap-1 hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-50"
-                        title="Hapus Member"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        <span>{deletingId === customer.id ? '...' : 'Hapus'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenCustomerDetail(customer)}
-                        className="text-[#0284C7] font-bold flex items-center gap-0.5 hover:underline"
-                      >
-                        <span>Detail</span>
-                        <ChevronRight className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                          {/* Status Badge */}
+                          <td className="py-4 px-6">
+                            {isInactive ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-800 text-[10px] font-mono font-bold uppercase">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                <span>INACTIVE</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 text-[10px] font-mono font-bold uppercase">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <span>AKTIF</span>
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Phone Number */}
+                          <td className="py-4 px-6 font-mono">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-[#172033]">
+                                {customer.nomorHp || '-'}
+                              </span>
+                              {customer.nomorHp && customer.nomorHp !== '-' && (
+                                <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyPhone(customer.id, customer.nomorHp)}
+                                    className="p-1 rounded-lg text-[#64748B] hover:text-[#0284C7] hover:bg-[#F0F7FF] transition-colors"
+                                    title="Salin Nomor HP"
+                                  >
+                                    {copiedPhoneId === customer.id ? (
+                                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                  {waPhone && (
+                                    <a
+                                      href={`https://wa.me/${waPhone}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="p-1 rounded-lg text-[#64748B] hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                                      title="Hubungi via WhatsApp"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Saldo Poin */}
+                          <td className="py-4 px-6 text-center text-xs">
+                            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F0F9FF] text-[#0284C7] font-bold border border-[#E0F2FE]">
+                              <Award className="w-3.5 h-3.5 text-amber-500" />
+                              <span>{customer.pointsBalance ?? 0} Poin</span>
+                            </div>
+                          </td>
+
+                          {/* Registered Date */}
+                          <td className="py-4 px-6 text-right font-mono text-[11px] text-[#64748B]">
+                            {formatDate(customer.createdAt)}
+                          </td>
+
+                          {/* Action Delete */}
+                          <td className="py-4 px-6 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCustomer(customer)}
+                              disabled={deletingId === customer.id}
+                              className="p-2 rounded-xl text-rose-600 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50"
+                              title="Hapus Member Ini"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* TAB 2: CANDIDATES PREVIEW                            */}
+      {/* ---------------------------------------------------- */}
+      {activeTab === 'candidates' && (
+        <div className="space-y-6">
+          {/* Candidates Inactive Section */}
+          <div className="p-6 rounded-3xl bg-white border border-[#E0F2FE] shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-[#E0F2FE] pb-4">
+              <div>
+                <h3 className="font-display font-black text-lg text-[#172033] uppercase flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-amber-500" />
+                  <span>Kandidat Member Inactive (&ge; 60 Hari Tanpa Transaksi Valid)</span>
+                </h3>
+                <p className="text-xs text-[#64748B] mt-0.5">
+                  Member aktif yang telah mendekati / memenuhi ambang batas {inactivitySettings.inactivityPeriodDays} hari tanpa transaksi berstatus PAID / COMPLETED.
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-mono font-bold">
+                {inactiveCandidates.length} Member
+              </span>
+            </div>
+
+            {inactiveCandidates.length === 0 ? (
+              <div className="p-8 text-center bg-[#F8FBFF] rounded-2xl text-xs text-[#64748B]">
+                Tidak ada member yang memenuhi kriteria kandidat inactive saat ini.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-[#F8FBFF] border-b border-[#E0F2FE] text-[11px] font-mono text-[#64748B] uppercase">
+                      <th className="py-3 px-4 font-bold">Nama Member</th>
+                      <th className="py-3 px-4 font-bold">Nomor HP</th>
+                      <th className="py-3 px-4 font-bold text-center">Transaksi Valid</th>
+                      <th className="py-3 px-4 font-bold text-center">Transaksi Terakhir</th>
+                      <th className="py-3 px-4 font-bold text-center">Hari Tanpa Order</th>
+                      <th className="py-3 px-4 font-bold text-right">Status Prediksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E0F2FE]">
+                    {inactiveCandidates.map((cand) => (
+                      <tr key={cand.id} className="hover:bg-[#F8FBFF]">
+                        <td className="py-3.5 px-4 font-bold text-[#172033]">{cand.namaLengkap}</td>
+                        <td className="py-3.5 px-4 font-mono">{cand.nomorHp}</td>
+                        <td className="py-3.5 px-4 text-center font-bold">{cand.validOrdersCount} Order</td>
+                        <td className="py-3.5 px-4 text-center font-mono text-[11px]">
+                          {cand.lastValidOrderAt ? formatDate(cand.lastValidOrderAt) : 'Belum Ada Transaksi'}
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-mono font-extrabold text-amber-600">
+                          {cand.daysSinceLastValidOrder} Hari
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-mono font-bold">
+                            Akan Diset INACTIVE
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Candidates Deletion Section */}
+          <div className="p-6 rounded-3xl bg-white border border-[#E0F2FE] shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-[#E0F2FE] pb-4">
+              <div>
+                <h3 className="font-display font-black text-lg text-[#172033] uppercase flex items-center gap-2">
+                  <Trash2 className="w-5 h-5 text-rose-600" />
+                  <span>Kandidat Penghapusan Akun (Pasca Grace Period {inactivitySettings.gracePeriodDays} Hari)</span>
+                </h3>
+                <p className="text-xs text-[#64748B] mt-0.5">
+                  Member inactive yang telah melewati masa tenggang {inactivitySettings.gracePeriodDays} hari. Histori transaksi akan tetap aman di database.
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-rose-100 text-rose-800 text-xs font-mono font-bold">
+                {deletionCandidates.length} Member
+              </span>
+            </div>
+
+            {deletionCandidates.length === 0 ? (
+              <div className="p-8 text-center bg-[#F8FBFF] rounded-2xl text-xs text-[#64748B]">
+                Tidak ada member inactive yang masuk dalam kandidat penghapusan akun saat ini.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-[#F8FBFF] border-b border-[#E0F2FE] text-[11px] font-mono text-[#64748B] uppercase">
+                      <th className="py-3 px-4 font-bold">Nama Member</th>
+                      <th className="py-3 px-4 font-bold">Nomor HP</th>
+                      <th className="py-3 px-4 font-bold text-center">Tanggal Inactive</th>
+                      <th className="py-3 px-4 font-bold text-center">Hari Inactive</th>
+                      <th className="py-3 px-4 font-bold text-right">Status Akun</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E0F2FE]">
+                    {deletionCandidates.map((cand) => (
+                      <tr key={cand.id} className="hover:bg-rose-50/50">
+                        <td className="py-3.5 px-4 font-bold text-[#172033]">{cand.namaLengkap}</td>
+                        <td className="py-3.5 px-4 font-mono">{cand.nomorHp}</td>
+                        <td className="py-3.5 px-4 text-center font-mono text-[11px]">
+                          {cand.inactiveAt ? formatDate(cand.inactiveAt) : '-'}
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-mono font-extrabold text-rose-600">
+                          {cand.daysSinceInactive ?? cand.daysSinceLastValidOrder} Hari
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-mono font-bold">
+                            Siap Dibersihkan
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* ---------------------------------------------------- */}
-      {/* MEMBER DETAIL & ORDER HISTORY MODAL                  */}
+      {/* TAB 3: CONFIGURATION & MANUAL CLEANUP                */}
       {/* ---------------------------------------------------- */}
-      {selectedCustomer && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-fadeIn">
-          <div className="bg-white w-full max-w-2xl rounded-3xl border border-[#E0F2FE] shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col">
-            {/* Modal Header */}
-            <div className="p-6 bg-gradient-to-r from-[#0284C7] to-[#0369A1] text-white relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setSelectedCustomer(null)}
-                className="absolute top-5 right-5 p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 border border-white/30 text-white flex items-center justify-center font-display font-black text-2xl shadow-inner shrink-0">
-                  {selectedCustomer.namaLengkap ? selectedCustomer.namaLengkap.charAt(0).toUpperCase() : 'M'}
-                </div>
-                <div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-mono font-bold tracking-wider uppercase mb-1">
-                    <Award className="w-3 h-3 text-amber-300" />
-                    <span>Detail Member</span>
-                  </div>
-                  <h2 className="font-display font-black text-xl sm:text-2xl text-white">
-                    {selectedCustomer.namaLengkap}
-                  </h2>
-                  <p className="text-sky-100 text-xs font-mono mt-0.5">
-                    No. HP: {selectedCustomer.nomorHp || '-'}
-                  </p>
-                </div>
-              </div>
+      {activeTab === 'settings' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Settings Form */}
+          <div className="lg:col-span-2 p-6 sm:p-8 rounded-3xl bg-white border border-[#E0F2FE] shadow-sm space-y-6">
+            <div className="border-b border-[#E0F2FE] pb-4">
+              <h3 className="font-display font-black text-xl text-[#172033] uppercase flex items-center gap-2">
+                <Sliders className="w-5 h-5 text-[#0284C7]" />
+                <span>Pengaturan Aturan Inactivity</span>
+              </h3>
+              <p className="text-xs text-[#64748B] mt-1">
+                Konfigurasikan batas hari ketidakaktifan dan masa tenggang hapus akun secara dinamis tanpa mengubah source code.
+              </p>
             </div>
 
-            {/* Modal Body Info Stats */}
-            <div className="p-6 overflow-y-auto space-y-6 flex-1">
-              {(() => {
-                const validOrdersCount = customerOrders.filter(isOrderValidForTier).length;
-                const customerTier = calculateMembershipTier(validOrdersCount, tierSettings);
+            <form onSubmit={handleSaveInactivitySettings} className="space-y-5">
+              {/* Inactivity Period Days */}
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#172033] mb-1.5">
+                  Masa Inactivity (Hari Tanpa Transaksi Valid)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={inactivitySettings.inactivityPeriodDays}
+                  onChange={(e) =>
+                    setInactivitySettings({
+                      ...inactivitySettings,
+                      inactivityPeriodDays: Math.max(1, Number(e.target.value) || 60),
+                    })
+                  }
+                  className="w-full px-4 py-3 rounded-2xl bg-[#F8FBFF] border border-[#E0F2FE] text-sm font-mono font-bold text-[#172033] focus:outline-none focus:border-[#0284C7] focus:bg-white"
+                  required
+                />
+                <p className="text-[11px] text-[#64748B] mt-1 leading-relaxed">
+                  Default: <strong>60 Hari</strong>. Customer yang tidak melakukan transaksi berstatus <code>PAID</code> / <code>COMPLETED</code> dalam periode ini akan diubah statusnya menjadi <code>INACTIVE</code>.
+                </p>
+              </div>
 
-                return (
-                  <div className="space-y-4">
-                    {/* Tier Level Banner */}
-                    <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white border border-slate-700 flex items-center justify-between shadow-sm">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{customerTier.theme.iconEmoji}</span>
-                        <div>
-                          <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">
-                            Membership Tier
-                          </span>
-                          <span className="text-base font-display font-black text-white">
-                            {customerTier.tierBadge}
-                          </span>
-                        </div>
-                      </div>
+              {/* Grace Period Days */}
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#172033] mb-1.5">
+                  Masa Tenggang Grace Period (Hari)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="90"
+                  value={inactivitySettings.gracePeriodDays}
+                  onChange={(e) =>
+                    setInactivitySettings({
+                      ...inactivitySettings,
+                      gracePeriodDays: Math.max(0, Number(e.target.value) || 7),
+                    })
+                  }
+                  className="w-full px-4 py-3 rounded-2xl bg-[#F8FBFF] border border-[#E0F2FE] text-sm font-mono font-bold text-[#172033] focus:outline-none focus:border-[#0284C7] focus:bg-white"
+                  required
+                />
+                <p className="text-[11px] text-[#64748B] mt-1 leading-relaxed">
+                  Default: <strong>7 Hari</strong>. Setelah member berstatus <code>INACTIVE</code> melewati masa tenggang ini, akun dapat dibersihkan otomatis.
+                </p>
+              </div>
 
-                      <div className="text-right">
-                        <span className="text-[10px] font-mono text-slate-400 uppercase block">
-                          Status Milestone
-                        </span>
-                        <span className="text-xs font-semibold text-amber-400">
-                          {customerTier.statusMessage}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      <div className="p-3.5 rounded-2xl bg-[#F0F7FF] border border-[#E0F2FE]">
-                        <span className="text-[10px] font-mono font-bold text-[#64748B] uppercase block">
-                          Tanggal Terdaftar
-                        </span>
-                        <span className="font-mono font-bold text-xs text-[#172033] mt-1 block">
-                          {formatDate(selectedCustomer.createdAt)}
-                        </span>
-                      </div>
-                      <div className="p-3.5 rounded-2xl bg-[#F0F7FF] border border-[#E0F2FE]">
-                        <span className="text-[10px] font-mono font-bold text-[#64748B] uppercase block">
-                          Pesanan Valid
-                        </span>
-                        <span className="font-display font-black text-base text-[#0284C7] mt-0.5 block">
-                          {validOrdersCount} / {customerOrders.length} Order
-                        </span>
-                      </div>
-                      <div className="p-3.5 rounded-2xl bg-[#F0F7FF] border border-[#E0F2FE] col-span-2 sm:col-span-1">
-                        <span className="text-[10px] font-mono font-bold text-[#64748B] uppercase block">
-                          Status Member
-                        </span>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold text-[11px] mt-1">
-                          <Check className="w-3 h-3 text-emerald-600" /> Member Aktif
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Order History List */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-display font-black text-sm uppercase text-[#172033] flex items-center gap-2">
-                    <ShoppingBag className="w-4 h-4 text-[#0284C7]" />
-                    <span>Riwayat Pesanan ({customerOrders.length})</span>
-                  </h3>
-                  {isLoadingOrders && (
-                    <span className="text-xs font-mono text-[#0284C7] flex items-center gap-1">
-                      <RefreshCw className="w-3 h-3 animate-spin" /> Memuat...
-                    </span>
-                  )}
+              {/* Auto Cleanup Toggle */}
+              <div className="p-4 rounded-2xl bg-[#F8FBFF] border border-[#E0F2FE] flex items-center justify-between gap-4">
+                <div>
+                  <h4 className="font-bold text-xs text-[#172033] uppercase">
+                    Otomatisasi Scheduler Background Worker
+                  </h4>
+                  <p className="text-[11px] text-[#64748B] mt-0.5">
+                    Aktifkan agar server menjalankan pengecekan &amp; cleanup otomatis secara berkala.
+                  </p>
                 </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={inactivitySettings.autoCleanupEnabled}
+                    onChange={(e) =>
+                      setInactivitySettings({
+                        ...inactivitySettings,
+                        autoCleanupEnabled: e.target.checked,
+                      })
+                    }
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0284C7]"></div>
+                </label>
+              </div>
 
-                {isLoadingOrders ? (
-                  <div className="p-8 text-center bg-[#F8FBFF] rounded-2xl border border-[#E0F2FE]">
-                    <RefreshCw className="w-6 h-6 animate-spin text-[#0284C7] mx-auto mb-2" />
-                    <p className="text-xs font-mono text-[#64748B]">Retrieving order history from Supabase...</p>
-                  </div>
-                ) : customerOrders.length === 0 ? (
-                  <div className="p-8 text-center bg-[#F8FBFF] rounded-2xl border border-[#E0F2FE] space-y-2">
-                    <Receipt className="w-8 h-8 text-[#94A3B8] mx-auto" />
-                    <p className="text-xs font-bold text-[#172033]">Belum Ada Riwayat Pesanan</p>
-                    <p className="text-[11px] text-[#64748B]">Member ini belum pernah membuat pesanan di outlet.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
-                    {customerOrders.map((ord) => {
-                      const isReady = ord.orderStatus === 'READY';
-                      const isCompleted = ord.orderStatus === 'COMPLETED';
-                      const isCancelled = ord.orderStatus === 'CANCELLED';
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isSavingSettings}
+                  className="px-6 py-3.5 rounded-2xl bg-[#0284C7] hover:bg-[#0369A1] text-white font-display font-black text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingSettings ? 'MENYIMPAN...' : 'SIMPAN PENGATURAN'}
+                </button>
+              </div>
+            </form>
+          </div>
 
-                      return (
-                        <div
-                          key={ord.id}
-                          className="p-4 rounded-2xl bg-white border border-[#E0F2FE] hover:border-[#0284C7]/40 shadow-sm transition-all space-y-2.5"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono font-black text-sm text-[#172033]">
-                                  #{ord.orderNumber}
-                                </span>
-                                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#E0F2FE] text-[#0284C7] font-bold">
-                                  {ord.orderType}
-                                </span>
-                              </div>
-                              <span className="text-[11px] text-[#64748B] flex items-center gap-1 mt-1">
-                                <Store className="w-3 h-3 text-[#0284C7]" />
-                                {ord.outletName || 'Cabang Leton'}
-                              </span>
-                            </div>
+          {/* Manual Trigger & Execution Summary Card */}
+          <div className="space-y-6">
+            <div className="p-6 rounded-3xl bg-white border border-[#E0F2FE] shadow-sm space-y-4">
+              <h3 className="font-display font-black text-lg text-[#172033] uppercase flex items-center gap-2">
+                <Play className="w-5 h-5 text-emerald-600" />
+                <span>Eksekusi Manual Worker</span>
+              </h3>
+              <p className="text-xs text-[#64748B] leading-relaxed">
+                Jalankan pengecekan dan pembersihan member non-aktif secara langsung saat ini juga.
+              </p>
 
-                            <div className="text-right">
-                              <span
-                                className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase ${
-                                  isCompleted || isReady
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : isCancelled
-                                    ? 'bg-rose-100 text-rose-800'
-                                    : 'bg-amber-100 text-amber-800'
-                                }`}
-                              >
-                                {ord.orderStatus}
-                              </span>
-                              <span className="text-[10px] text-[#64748B] font-mono block mt-1">
-                                {formatDate(ord.createdAt)}
-                              </span>
-                            </div>
-                          </div>
+              <button
+                type="button"
+                onClick={() => setConfirmingManualCleanup(true)}
+                disabled={isExecutingCleanup}
+                className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-display font-black text-xs uppercase tracking-wider shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Play className={`w-4 h-4 ${isExecutingCleanup ? 'animate-spin' : ''}`} />
+                <span>{isExecutingCleanup ? 'MEMPROSES CLEANUP...' : 'JALANKAN CLEANUP SEKARANG'}</span>
+              </button>
+            </div>
 
-                          {/* Ordered Items Summary */}
-                          <div className="p-2.5 rounded-xl bg-[#F8FBFF] border border-[#E0F2FE] text-xs space-y-1">
-                            {Array.isArray(ord.items) && ord.items.map((it: any, idx: number) => (
-                              <div key={idx} className="flex justify-between items-center text-[11px]">
-                                <span className="font-semibold text-[#172033]">
-                                  {it.quantity}x {it.name || it.productName}
-                                </span>
-                                <span className="font-mono text-[#64748B]">
-                                  Rp {((it.unitPrice || it.price || 0) * (it.quantity || 1)).toLocaleString('id-ID')}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="flex items-center justify-between pt-1 text-xs">
-                            <span className="text-[#64748B] font-mono">Total Pembayaran:</span>
-                            <span className="font-display font-black text-sm text-[#0284C7]">
-                              Rp {Number(ord.totalAmount || 0).toLocaleString('id-ID')}
-                            </span>
-                          </div>
-
-                          {ord.rejectionReason && (
-                            <div className="p-2 rounded-xl bg-rose-50 text-rose-700 text-[11px]">
-                              <strong>Alasan Penolakan:</strong> {ord.rejectionReason}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+            {/* Execution History */}
+            <div className="p-6 rounded-3xl bg-white border border-[#E0F2FE] shadow-sm space-y-3">
+              <h4 className="font-display font-black text-sm text-[#172033] uppercase">
+                Hasil Execution Terakhir
+              </h4>
+              <div className="text-xs text-[#64748B] space-y-2 font-mono">
+                <div className="flex justify-between border-b border-[#E0F2FE] pb-1.5">
+                  <span>Last Run:</span>
+                  <span className="font-bold text-[#172033]">
+                    {inactivitySettings.lastRunAt ? formatDate(inactivitySettings.lastRunAt) : 'Belum Pernah'}
+                  </span>
+                </div>
+                {inactivitySettings.lastRunSummary && (
+                  <>
+                    <div className="flex justify-between border-b border-[#E0F2FE] pb-1.5">
+                      <span>Marked Inactive:</span>
+                      <span className="font-bold text-amber-600">
+                        {inactivitySettings.lastRunSummary.markedInactiveCount || 0} Member
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-b border-[#E0F2FE] pb-1.5">
+                      <span>Deleted Members:</span>
+                      <span className="font-bold text-rose-600">
+                        {inactivitySettings.lastRunSummary.deletedMembersCount || 0} Member
+                      </span>
+                    </div>
+                  </>
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
 
-            {/* Modal Footer */}
-            <div className="p-4 bg-[#F8FBFF] border-t border-[#E0F2FE] flex items-center justify-between shrink-0">
+      {/* ---------------------------------------------------- */}
+      {/* CONFIRMATION MODAL: MANUAL CLEANUP RUN               */}
+      {/* ---------------------------------------------------- */}
+      {confirmingManualCleanup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-[#E0F2FE] space-y-5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-display font-black text-xl text-[#172033] uppercase">
+                Jalankan Cleanup Member Manual?
+              </h3>
+              <p className="text-xs text-[#64748B] mt-2 leading-relaxed">
+                Sistem akan memproses seluruh customer terdaftar:
+              </p>
+              <ul className="text-xs text-[#172033] list-disc list-inside mt-2 space-y-1 font-medium">
+                <li>
+                  Member tanpa transaksi valid &ge; <strong>{inactivitySettings.inactivityPeriodDays} hari</strong> akan diset <code>INACTIVE</code>.
+                </li>
+                <li>
+                  Member inactive &ge; <strong>{inactivitySettings.gracePeriodDays} hari</strong> akan dibersihkan akunnya.
+                </li>
+                <li>
+                  Histori transaksi/order akan <strong>tetap utuh tersimpan</strong>.
+                </li>
+              </ul>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => handleDeleteCustomer(selectedCustomer)}
-                disabled={deletingId === selectedCustomer.id}
-                className="px-4 py-2.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                onClick={() => setConfirmingManualCleanup(false)}
+                className="flex-1 py-3 rounded-2xl bg-[#F0F7FF] text-[#64748B] text-xs font-bold uppercase tracking-wider hover:bg-[#E0F2FE] transition-colors cursor-pointer"
               >
-                <Trash2 className="w-4 h-4" />
-                <span>{deletingId === selectedCustomer.id ? 'Menghapus...' : 'Hapus Member Ini'}</span>
+                Batal
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedCustomer(null)}
-                className="px-5 py-2.5 rounded-xl bg-white border border-[#E0F2FE] text-xs font-bold text-[#172033] hover:bg-[#F0F7FF] transition-colors cursor-pointer"
+                onClick={handleExecuteManualCleanup}
+                className="flex-1 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider shadow-md transition-colors cursor-pointer"
               >
-                Tutup Detail
+                Ya, Jalankan
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Confirmation Dialog Modal */}
+      {/* ---------------------------------------------------- */}
+      {/* CONFIRMATION MODAL: SINGLE MEMBER DELETE             */}
+      {/* ---------------------------------------------------- */}
       {confirmingCustomer && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white w-full max-w-md rounded-3xl border border-[#E0F2FE] shadow-2xl overflow-hidden p-6 space-y-6 text-center">
-            <div className="w-16 h-16 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
-              <Trash2 className="w-8 h-8" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-[#E0F2FE] space-y-5">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
             </div>
-
-            <div className="space-y-2">
-              <h3 className="font-display font-black text-xl text-[#172033]">
-                Hapus member ini secara permanen?
+            <div>
+              <h3 className="font-display font-black text-xl text-[#172033] uppercase">
+                Hapus Member Ini?
               </h3>
-              <p className="text-xs text-[#64748B] leading-relaxed">
-                Data profil dan data loyalty member <strong className="text-[#172033]">{confirmingCustomer.namaLengkap}</strong> ({confirmingCustomer.nomorHp}) akan dihapus.
+              <p className="text-xs text-[#64748B] mt-2 leading-relaxed">
+                Anda yakin ingin menghapus member <strong>{confirmingCustomer.namaLengkap}</strong> ({confirmingCustomer.nomorHp})?
+              </p>
+              <p className="text-[11px] text-[#64748B] mt-2 italic bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                Catatan: Akun member akan dihapus dari sistem, tetapi histori transaksi/order akan tetap tersimpan utuh di database.
               </p>
             </div>
 
@@ -859,36 +1066,20 @@ export const CustomerManager: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setConfirmingCustomer(null)}
-                disabled={deletingId === confirmingCustomer.id}
-                className="flex-1 py-3 px-4 rounded-xl bg-white border border-[#E0F2FE] font-bold text-xs text-[#172033] hover:bg-[#F8FBFF] transition-colors cursor-pointer disabled:opacity-50"
+                className="flex-1 py-3 rounded-2xl bg-[#F0F7FF] text-[#64748B] text-xs font-bold uppercase tracking-wider hover:bg-[#E0F2FE] transition-colors cursor-pointer"
               >
-                BATAL
+                Batal
               </button>
               <button
                 type="button"
                 onClick={handleExecuteDelete}
-                disabled={deletingId === confirmingCustomer.id}
-                className="flex-1 py-3 px-4 rounded-xl bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 transition-colors shadow-lg shadow-rose-600/20 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                disabled={Boolean(deletingId)}
+                className="flex-1 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider shadow-md transition-colors cursor-pointer disabled:opacity-50"
               >
-                {deletingId === confirmingCustomer.id ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>MENGHAPUS...</span>
-                  </>
-                ) : (
-                  <span>HAPUS PERMANEN</span>
-                )}
+                {deletingId ? 'MENGHAPUS...' : 'Ya, Hapus'}
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Success Toast */}
-      {successToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 animate-bounce">
-          <Check className="w-5 h-5" />
-          <span className="font-bold text-xs">{successToast}</span>
         </div>
       )}
     </div>

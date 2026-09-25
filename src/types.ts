@@ -320,3 +320,39 @@ export interface CartItem {
   syrup?: AddOnOption;
   customOptions?: SelectedCustomOption[];
 }
+
+export interface MemberInactivitySettings {
+  inactivityPeriodDays: number; // default 60
+  gracePeriodDays: number; // default 7
+  autoCleanupEnabled: boolean; // default true
+  lastRunAt?: string | null;
+  lastRunSummary?: MemberInactivitySummary | null;
+}
+
+export interface MemberInactivityCandidate {
+  id: string;
+  namaLengkap: string;
+  nomorHp: string;
+  createdAt: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  inactiveAt?: string | null;
+  lastValidOrderAt?: string | null;
+  daysSinceLastValidOrder: number;
+  daysSinceInactive?: number | null;
+  validOrdersCount: number;
+  totalSpent: number;
+}
+
+export interface MemberInactivitySummary {
+  timestamp: string;
+  totalActiveMembers: number;
+  totalInactiveMembers: number;
+  markedInactiveCount: number;
+  deletedMembersCount: number;
+  inactiveCandidatesCount: number;
+  deletionCandidatesCount: number;
+  details?: {
+    markedInactive: Array<{ id: string; namaLengkap: string; nomorHp: string }>;
+    deletedMembers: Array<{ id: string; namaLengkap: string; nomorHp: string }>;
+  };
+}

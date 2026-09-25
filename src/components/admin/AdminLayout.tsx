@@ -18,6 +18,7 @@ import { StockManager } from './StockManager';
 import { SalesReportManager } from './SalesReportManager';
 import { LoyaltyManager } from './LoyaltyManager';
 import { CustomerManager } from './CustomerManager';
+import { MembershipTierManager } from './MembershipTierManager';
 import {
   isPushSupported,
   getPushSubscription,
@@ -70,6 +71,7 @@ import {
   Coffee,
   Sparkles,
   Gift,
+  Award,
   Bell,
   BellOff,
 } from 'lucide-react';
@@ -275,6 +277,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
     { id: 'sales', label: 'LAPORAN SALES', icon: TrendingUp },
     { id: 'orders', label: 'AUDIT PESANAN', icon: ShoppingBag },
     { id: 'customers', label: 'DATA CUSTOMER', icon: UserCheck },
+    { id: 'membership-tiers', label: 'MEMBERSHIP TIER', icon: Award },
     { id: 'stock', label: 'KONTROL STOK', icon: Boxes },
     { id: 'menu', label: 'MENU & KATEGORI', icon: UtensilsCrossed },
     { id: 'loyalty', label: 'LOYALTY / POINT', icon: Gift },
@@ -790,6 +793,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
           )}
           {activeTab === 'sales' && !isOutletAdmin && <SalesReportManager />}
           {activeTab === 'customers' && !isOutletAdmin && <CustomerManager />}
+          {activeTab === 'membership-tiers' && !isOutletAdmin && <MembershipTierManager />}
           {activeTab === 'loyalty' && !isOutletAdmin && <LoyaltyManager />}
           {activeTab === 'orders' && <OrderManager />}
           {activeTab === 'stock' && <StockManager />}

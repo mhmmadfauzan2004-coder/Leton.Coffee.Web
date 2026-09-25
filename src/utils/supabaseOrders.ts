@@ -1990,29 +1990,58 @@ export async function fetchCustomerOrdersForAdmin(
         return false;
       });
 
-      return matchedRows.map((row: any) => ({
-        id: row.id,
-        orderNumber: row.order_number || row.orderNumber || 'LTN-????',
-        outletId: row.outlet_id || row.outletId || '',
-        outletName: row.outlet_name || row.outletName || '',
-        customerName: row.customer_name || row.customerName || '',
-        customerPhone: row.customer_phone || row.customerPhone || '',
-        customerId: row.customer_id || row.customerId || undefined,
-        orderType: row.order_type || row.orderType || 'DINE IN',
-        tableNumber: row.table_number || row.tableNumber || '',
-        items: Array.isArray(row.items) ? row.items : [],
-        totalAmount: Number(row.total_amount || row.totalAmount || 0),
-        paymentMethod: row.payment_method || row.paymentMethod || 'QRIS',
-        paymentStatus: row.payment_status || row.paymentStatus || 'WAITING PAYMENT',
-        paymentReceiptUrl: row.payment_receipt_url || row.paymentReceiptUrl,
-        paymentReceiptPath: row.payment_receipt_path || row.paymentReceiptPath,
-        rejectionReason: row.rejection_reason || row.rejectionReason,
-        orderStatus: row.order_status || row.orderStatus || 'NEW',
-        customerNote: row.customer_note || row.customerNote || '',
-        pickupTime: row.pickup_time || row.pickupTime || undefined,
-        pickup_time: row.pickup_time || row.pickupTime || undefined,
-        createdAt: row.created_at || row.createdAt || new Date().toISOString(),
-      }));
+      // Batch verify order_items from public.order_items table
+      const orderIds = matchedRows.map((r: any) => r.id).filter(Boolean);
+      const itemsMap: Record<string, any[]> = {};
+      if (orderIds.length > 0) {
+        try {
+          const { data: dbItems, error: itemsErr } = await client
+            .from('order_items')
+            .select('id, order_id, product_id, name, price, quantity')
+            .in('order_id', orderIds);
+
+          if (!itemsErr && Array.isArray(dbItems)) {
+            dbItems.forEach((it: any) => {
+              if (it && it.order_id) {
+                if (!itemsMap[it.order_id]) itemsMap[it.order_id] = [];
+                itemsMap[it.order_id].push(it);
+              }
+            });
+          }
+        } catch (itemErr) {
+          console.warn('[fetchCustomerOrdersForAdmin] order_items fetch note:', itemErr);
+        }
+      }
+
+      return matchedRows.map((row: any) => {
+        const attachedItems = itemsMap[row.id];
+        const jsonItems = Array.isArray(row.items) ? row.items : [];
+
+        return {
+          id: row.id,
+          orderNumber: row.order_number || row.orderNumber || 'LTN-????',
+          outletId: row.outlet_id || row.outletId || '',
+          outletName: row.outlet_name || row.outletName || '',
+          customerName: row.customer_name || row.customerName || '',
+          customerPhone: row.customer_phone || row.customerPhone || '',
+          customerId: row.customer_id || row.customerId || undefined,
+          orderType: row.order_type || row.orderType || 'DINE IN',
+          tableNumber: row.table_number || row.tableNumber || '',
+          items: jsonItems,
+          order_items: attachedItems !== undefined ? attachedItems : jsonItems,
+          totalAmount: Number(row.total_amount || row.totalAmount || 0),
+          paymentMethod: row.payment_method || row.paymentMethod || 'QRIS',
+          paymentStatus: row.payment_status || row.paymentStatus || 'WAITING PAYMENT',
+          paymentReceiptUrl: row.payment_receipt_url || row.paymentReceiptUrl,
+          paymentReceiptPath: row.payment_receipt_path || row.paymentReceiptPath,
+          rejectionReason: row.rejection_reason || row.rejectionReason,
+          orderStatus: row.order_status || row.orderStatus || 'NEW',
+          customerNote: row.customer_note || row.customerNote || '',
+          pickupTime: row.pickup_time || row.pickupTime || undefined,
+          pickup_time: row.pickup_time || row.pickupTime || undefined,
+          createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+        };
+      });
     }
   } catch (err) {
     console.warn('[fetchCustomerOrdersForAdmin exception]:', err);

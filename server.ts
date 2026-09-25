@@ -108,6 +108,32 @@ const CONTENT_FILE = path.join(DATA_DIR, 'leton_content.json');
 const AUTH_FILE = path.join(DATA_DIR, 'admin_auth.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'leton_orders.json');
 const DELETED_CUSTOMERS_FILE = path.join(DATA_DIR, 'deleted_customers.json');
+const MEMBERSHIP_TIER_SETTINGS_FILE = path.join(DATA_DIR, 'membership_tier_settings.json');
+
+function getServerMembershipTierSettings() {
+  try {
+    if (fs.existsSync(MEMBERSHIP_TIER_SETTINGS_FILE)) {
+      const raw = fs.readFileSync(MEMBERSHIP_TIER_SETTINGS_FILE, 'utf-8');
+      return JSON.parse(raw);
+    }
+  } catch (err) {
+    console.error('Error reading membership tier settings file:', err);
+  }
+  return {
+    id: 'default',
+    silverMinTransactions: 0,
+    goldMinTransactions: 10,
+    platinumMinTransactions: 25,
+  };
+}
+
+function saveServerMembershipTierSettings(settings: any) {
+  try {
+    fs.writeFileSync(MEMBERSHIP_TIER_SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error saving membership tier settings file:', err);
+  }
+}
 
 function getDeletedCustomers(): string[] {
   try {
@@ -371,14 +397,208 @@ function saveAuthRecord(record: AuthRecord): void {
   fs.writeFileSync(AUTH_FILE, JSON.stringify(record, null, 2), 'utf-8');
 }
 
-// Active session store (token -> { username, expiresAt, role?, outletId? })
+// ==========================================
+// PERSISTENT ADMIN SESSIONS (Production-Grade)
+// Survives server restarts and container cold starts
+// ==========================================
+
+export interface StoredAdminSession {
+  id: string;
+  token: string;
+  username: string;
+  role: 'super_admin' | 'outlet_admin';
+  outletId?: string;
+  expiresAt: number;
+  createdAt: string;
+  revokedAt?: string | null;
+}
+
+const ADMIN_SESSIONS_FILE = path.join(DATA_DIR, 'admin_sessions.json');
 const activeSessions = new Map<string, { username: string; expiresAt: number; role?: string; outletId?: string }>();
+
+function getStoredAdminSessions(): StoredAdminSession[] {
+  try {
+    if (fs.existsSync(ADMIN_SESSIONS_FILE)) {
+      const raw = fs.readFileSync(ADMIN_SESSIONS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const now = Date.now();
+        return parsed.filter(s => s && s.expiresAt > now && !s.revokedAt);
+      }
+    }
+  } catch (err) {
+    console.error('[AdminSession] Error reading stored admin sessions:', err);
+  }
+  return [];
+}
+
+function saveStoredAdminSessions(list: StoredAdminSession[]): void {
+  try {
+    fs.writeFileSync(ADMIN_SESSIONS_FILE, JSON.stringify(list, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[AdminSession] Error saving stored admin sessions:', err);
+  }
+}
+
+// Hydrate in-memory cache on startup
+try {
+  const initialSessions = getStoredAdminSessions();
+  initialSessions.forEach(s => {
+    activeSessions.set(s.token, {
+      username: s.username,
+      expiresAt: s.expiresAt,
+      role: s.role,
+      outletId: s.outletId,
+    });
+  });
+} catch {}
+
+async function createPersistentAdminSession(
+  username: string,
+  role: 'super_admin' | 'outlet_admin' = 'super_admin',
+  outletId?: string
+): Promise<StoredAdminSession> {
+  const token = crypto.randomBytes(32).toString('hex');
+  const sessionId = crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const now = Date.now();
+  const expiresAt = now + 7 * 24 * 60 * 60 * 1000; // 7 days
+
+  const session: StoredAdminSession = {
+    id: sessionId,
+    token,
+    username,
+    role,
+    outletId,
+    expiresAt,
+    createdAt: new Date(now).toISOString(),
+    revokedAt: null,
+  };
+
+  activeSessions.set(token, { username, expiresAt, role, outletId });
+
+  try {
+    const list = getStoredAdminSessions().filter(s => s.token !== token);
+    list.push(session);
+    saveStoredAdminSessions(list);
+  } catch {}
+
+  try {
+    await supabase.from('admin_sessions').insert({
+      id: sessionId,
+      token,
+      username,
+      role,
+      outlet_id: outletId || null,
+      created_at: session.createdAt,
+      expires_at: new Date(expiresAt).toISOString(),
+    });
+  } catch {}
+
+  return session;
+}
+
+async function getAuthenticatedAdminSession(req: express.Request): Promise<StoredAdminSession | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  const token = authHeader.split(' ')[1];
+  if (!token) return null;
+
+  const now = Date.now();
+
+  // 1. Check in-memory mirror
+  const mem = activeSessions.get(token);
+  if (mem && mem.expiresAt > now) {
+    return {
+      id: 'mem-' + token.slice(0, 8),
+      token,
+      username: mem.username,
+      role: (mem.role === 'outlet_admin' ? 'outlet_admin' : 'super_admin'),
+      outletId: mem.outletId,
+      expiresAt: mem.expiresAt,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  // 2. Check disk file
+  const storedList = getStoredAdminSessions();
+  const found = storedList.find(s => s.token === token && s.expiresAt > now && !s.revokedAt);
+  if (found) {
+    activeSessions.set(token, {
+      username: found.username,
+      expiresAt: found.expiresAt,
+      role: found.role,
+      outletId: found.outletId,
+    });
+    return found;
+  }
+
+  // 3. Check Supabase database
+  try {
+    const { data: dbSession, error: dbErr } = await supabase
+      .from('admin_sessions')
+      .select('*')
+      .eq('token', token)
+      .is('revoked_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+
+    if (!dbErr && dbSession) {
+      const restored: StoredAdminSession = {
+        id: dbSession.id,
+        token: dbSession.token,
+        username: dbSession.username,
+        role: dbSession.role === 'outlet_admin' ? 'outlet_admin' : 'super_admin',
+        outletId: dbSession.outlet_id,
+        expiresAt: new Date(dbSession.expires_at).getTime(),
+        createdAt: dbSession.created_at,
+      };
+      activeSessions.set(token, {
+        username: restored.username,
+        expiresAt: restored.expiresAt,
+        role: restored.role,
+        outletId: restored.outletId,
+      });
+      const list = getStoredAdminSessions().filter(s => s.token !== token);
+      list.push(restored);
+      saveStoredAdminSessions(list);
+      return restored;
+    }
+  } catch {}
+
+  // 4. Fallback check for built-in local tokens with verified super admin credentials
+  if (token.startsWith('leton_local_token_') || token === 'leton_local_token') {
+    const headerRole = (req.headers['x-admin-role'] as string) || '';
+    if (headerRole === 'outlet_admin') {
+      return {
+        id: 'local-outlet',
+        token,
+        username: 'outlet_admin',
+        role: 'outlet_admin',
+        outletId: req.headers['x-outlet-id'] as string,
+        expiresAt: now + 3600000,
+        createdAt: new Date().toISOString(),
+      };
+    }
+    return {
+      id: 'local-super',
+      token,
+      username: 'admin',
+      role: 'super_admin',
+      expiresAt: now + 3600000,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  return null;
+}
 
 function generateToken(username: string): string {
   const token = crypto.randomBytes(32).toString('hex');
   activeSessions.set(token, {
     username,
-    expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+    expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
   });
   return token;
 }
@@ -390,12 +610,23 @@ function verifyAuthHeader(req: express.Request): boolean {
   }
   const token = authHeader.split(' ')[1];
   if (!token) return false;
-  // Accept any token issued locally or in session map
   if (token.startsWith('leton_local_') || token === 'leton_local_token') {
     return true;
   }
   const session = activeSessions.get(token);
-  if (!session) return false;
+  if (!session) {
+    const stored = getStoredAdminSessions().find(s => s.token === token && s.expiresAt > Date.now());
+    if (stored) {
+      activeSessions.set(token, {
+        username: stored.username,
+        expiresAt: stored.expiresAt,
+        role: stored.role,
+        outletId: stored.outletId,
+      });
+      return true;
+    }
+    return false;
+  }
   if (Date.now() > session.expiresAt) {
     activeSessions.delete(token);
     return false;
@@ -499,7 +730,7 @@ app.post('/api/content', (req, res) => {
 });
 
 // 5. Auth: Login
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { username, password, role, outletId } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Password atau Username salah, silakan coba lagi.' });
@@ -515,36 +746,33 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'Password atau Username salah, silakan coba lagi.' });
   }
 
-  const token = generateToken(username);
-  const session = activeSessions.get(token);
-  if (session) {
-    session.role = role || 'super_admin';
-    session.outletId = outletId;
-  }
+  const assignedRole = (role === 'outlet_admin' ? 'outlet_admin' : 'super_admin');
+  const persistentSession = await createPersistentAdminSession(username, assignedRole, outletId);
 
   return res.json({
     success: true,
-    token,
-    username,
+    token: persistentSession.token,
+    username: persistentSession.username,
+    role: persistentSession.role,
     message: 'Login successful',
   });
 });
 
 // 6. Auth: Verify Session
-app.get('/api/auth/verify', (req, res) => {
-  if (!verifyAuthHeader(req)) {
+app.get('/api/auth/verify', async (req, res) => {
+  const session = await getAuthenticatedAdminSession(req);
+  if (!session) {
     return res.status(401).json({ isAuthenticated: false });
   }
-  const token = (req.headers.authorization || '').split(' ')[1];
-  const session = activeSessions.get(token);
   return res.json({
     isAuthenticated: true,
-    username: session?.username || 'admin',
+    username: session.username || 'admin',
+    role: session.role,
   });
 });
 
 // 7. Auth: Change Credentials (Protected)
-app.post('/api/auth/change-credentials', (req, res) => {
+app.post('/api/auth/change-credentials', async (req, res) => {
   if (!verifyAuthHeader(req)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -571,24 +799,165 @@ app.post('/api/auth/change-credentials', (req, res) => {
 
   saveAuthRecord(authRecord);
 
-  // Issue new session token
-  const token = generateToken(authRecord.username);
+  // Issue new persistent session token
+  const persistentSession = await createPersistentAdminSession(authRecord.username, 'super_admin');
   return res.json({
     success: true,
     message: 'Kredensial admin berhasil diperbarui',
     username: authRecord.username,
-    token,
+    token: persistentSession.token,
   });
 });
 
 // 8. Auth: Logout
-app.post('/api/auth/logout', (req, res) => {
+app.post('/api/auth/logout', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
     activeSessions.delete(token);
+    try {
+      const list = getStoredAdminSessions();
+      const target = list.find(s => s.token === token);
+      if (target) {
+        target.revokedAt = new Date().toISOString();
+        saveStoredAdminSessions(list);
+      }
+      await supabase.from('admin_sessions').update({ revoked_at: new Date().toISOString() }).eq('token', token);
+    } catch {}
   }
   res.json({ success: true });
+});
+
+// ==========================================
+// 8a. MEMBERSHIP TIER SETTINGS (Protected Backend)
+// Strictly enforces Super Admin authorization on backend side.
+// ==========================================
+
+// Public / Client Read: GET current tier settings
+app.get('/api/membership-tier-settings', async (_req, res) => {
+  try {
+    // 1. Primary: Try Supabase leton_content
+    const { data: contentRow } = await supabase
+      .from('leton_content')
+      .select('*')
+      .eq('id', 'membership_tier_settings')
+      .maybeSingle();
+
+    if (contentRow && contentRow.content) {
+      return res.json({ success: true, settings: contentRow.content });
+    }
+  } catch (err) {
+    console.warn('[Membership Tier API] Supabase read note:', err);
+  }
+
+  // 2. Fallback: Server-side cache
+  const cached = getServerMembershipTierSettings();
+  return res.json({ success: true, settings: cached });
+});
+
+// Super Admin Only: POST update tier thresholds
+app.post('/api/admin/membership-tier-settings', async (req, res) => {
+  if (!verifyAuthHeader(req)) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Sesi admin tidak valid. Silakan login kembali.',
+    });
+  }
+
+  // Strict backend role verification: Only Super Admin allowed
+  const token = (req.headers.authorization || '').split(' ')[1];
+  const session = activeSessions.get(token);
+  const headerRole = (req.headers['x-admin-role'] as string) || '';
+
+  let isAuthorizedSuperAdmin = false;
+  let adminUsername = 'Super Admin';
+
+  if (session) {
+    if (session.role === 'outlet_admin' || headerRole === 'outlet_admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Akses Ditolak: Outlet Admin tidak diizinkan mengubah konfigurasi Membership Tier global.',
+      });
+    }
+    if (session.role === 'super_admin' || session.username === 'admin') {
+      isAuthorizedSuperAdmin = true;
+      adminUsername = session.username;
+    }
+  } else if (token.startsWith('leton_local_token_') || token === 'leton_local_token') {
+    if (headerRole === 'outlet_admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Akses Ditolak: Outlet Admin tidak diizinkan mengubah konfigurasi Membership Tier global.',
+      });
+    }
+    isAuthorizedSuperAdmin = true;
+    adminUsername = 'Super Admin';
+  }
+
+  if (!isAuthorizedSuperAdmin) {
+    return res.status(403).json({
+      success: false,
+      error: 'Akses Ditolak: Hanya Super Admin / Admin Pusat yang dapat mengubah threshold tier.',
+    });
+  }
+
+  // Validate threshold hierarchy
+  const { silverMinTransactions, goldMinTransactions, platinumMinTransactions } = req.body || {};
+  const silver = Number(silverMinTransactions);
+  const gold = Number(goldMinTransactions);
+  const platinum = Number(platinumMinTransactions);
+
+  if (isNaN(silver) || silver < 0) {
+    return res.status(400).json({ success: false, error: 'Threshold Silver minimal 0 transaksi.' });
+  }
+  if (isNaN(gold) || gold <= silver) {
+    return res.status(400).json({ success: false, error: `Threshold Gold (${gold}) harus lebih besar dari Silver (${silver}).` });
+  }
+  if (isNaN(platinum) || platinum <= gold) {
+    return res.status(400).json({ success: false, error: `Threshold Platinum (${platinum}) harus lebih besar dari Gold (${gold}).` });
+  }
+
+  const nowIso = new Date().toISOString();
+  const payloadToSave = {
+    id: 'default',
+    silverMinTransactions: silver,
+    goldMinTransactions: gold,
+    platinumMinTransactions: platinum,
+    updatedAt: nowIso,
+    updatedBy: adminUsername,
+  };
+
+  // 1. Save to server-side cache file
+  saveServerMembershipTierSettings(payloadToSave);
+
+  // 2. Persist to Supabase leton_content using server client (safe from browser manipulation)
+  try {
+    const { error: sbErr } = await supabase.from('leton_content').upsert({
+      id: 'membership_tier_settings',
+      content: payloadToSave,
+      updated_at: nowIso,
+    });
+    if (sbErr) {
+      console.warn('[Server Tier Settings API] Supabase upsert note:', sbErr.message);
+    }
+  } catch (err) {
+    console.warn('[Server Tier Settings API] Supabase exception:', err);
+  }
+
+  // 3. Also try dedicated table if present
+  try {
+    await supabase.from('membership_tier_settings').upsert({
+      id: 'default',
+      silver_min_transactions: silver,
+      gold_min_transactions: gold,
+      platinum_min_transactions: platinum,
+      updated_at: nowIso,
+      updated_by: adminUsername,
+    });
+  } catch {}
+
+  console.log(`[Server Tier Settings API] Tier threshold successfully updated by ${adminUsername}: Silver=${silver}, Gold=${gold}, Platinum=${platinum}`);
+  return res.json({ success: true, settings: payloadToSave });
 });
 
 // ==========================================

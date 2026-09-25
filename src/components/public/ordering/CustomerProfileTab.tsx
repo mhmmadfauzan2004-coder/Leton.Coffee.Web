@@ -33,6 +33,14 @@ import {
   PointTransaction,
   RewardRedemption,
 } from '../../../utils/supabaseLoyalty';
+import {
+  getMembershipTierSettings,
+  calculateMembershipTier,
+  isOrderValidForTier,
+  MembershipTierSettings,
+  DEFAULT_MEMBERSHIP_TIER_SETTINGS,
+  CalculatedCustomerTier,
+} from '../../../utils/supabaseMembershipTier';
 
 interface CustomerProfileTabProps {
   profile: CustomerProfile;
@@ -56,6 +64,11 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
   const [loadingLoyalty, setLoadingLoyalty] = useState(false);
   const [redeemingRewardId, setRedeemingRewardId] = useState<string | null>(null);
   const [redeemedVoucher, setRedeemedVoucher] = useState<RewardRedemption | null>(null);
+
+  // Membership Tier states (dynamic, non-hardcoded)
+  const [tierSettings, setTierSettings] = useState<MembershipTierSettings>(DEFAULT_MEMBERSHIP_TIER_SETTINGS);
+  const [tierData, setTierData] = useState<CalculatedCustomerTier | null>(null);
+  const [showTierModal, setShowTierModal] = useState<boolean>(false);
 
   // Form Edit Profile
   const [namaLengkap, setNamaLengkap] = useState(profile?.namaLengkap || '');
@@ -165,32 +178,63 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
       }
 
       if (ordersData) {
+        // Query database order_items to verify relational existence (prevents counting orders where order_items failed)
+        const orderIds = ordersData.map((o: any) => o.id).filter(Boolean);
+        const orderItemsMap: Record<string, any[]> = {};
+        if (orderIds.length > 0) {
+          try {
+            const { data: dbItems, error: itemsErr } = await client
+              .from('order_items')
+              .select('id, order_id, product_id, name, price, quantity')
+              .in('order_id', orderIds);
+
+            if (!itemsErr && Array.isArray(dbItems)) {
+              dbItems.forEach((it: any) => {
+                if (it && it.order_id) {
+                  if (!orderItemsMap[it.order_id]) orderItemsMap[it.order_id] = [];
+                  orderItemsMap[it.order_id].push(it);
+                }
+              });
+            }
+          } catch (itemErr) {
+            console.warn('Error fetching order_items for tier integrity:', itemErr);
+          }
+        }
+
         // Map database table fields to CamelCase TypeScript CustomerOrder properties
-        const mappedOrders: CustomerOrder[] = ordersData.map((o: any) => ({
-          id: o.id,
-          orderNumber: o.order_number || o.orderNumber || 'LTN-????',
-          outletId: o.outlet_id || o.outletId || '',
-          outletName: o.outlet_name || o.outletName || '',
-          customerName: o.customer_name || o.customerName || '',
-          customerPhone: o.customer_phone || o.customerPhone || '',
-          customerId: o.customer_id || o.customerId,
-          userId: o.user_id || o.userId,
-          orderType: o.order_type || o.orderType || 'DINE IN',
-          tableNumber: o.table_number || o.tableNumber || '',
-          items: Array.isArray(o.items) ? o.items : [],
-          totalAmount: Number(o.total_amount || o.totalAmount || 0),
-          paymentMethod: o.payment_method || o.paymentMethod || 'QRIS',
-          paymentStatus: o.payment_status || o.paymentStatus || 'WAITING PAYMENT',
-          paymentReceiptUrl: o.payment_receipt_url || o.paymentReceiptUrl,
-          paymentReceiptPath: o.payment_receipt_path || o.paymentReceiptPath,
-          paymentProofPath: o.payment_proof_path || o.paymentProofPath,
-          rejectionReason: o.rejection_reason || o.rejectionReason,
-          orderStatus: o.order_status || o.orderStatus || 'NEW',
-          customerNote: o.customer_note || o.customerNote || '',
-          createdAt: o.created_at || o.createdAt,
-          updatedAt: o.updated_at || o.updatedAt,
-        }));
+        const mappedOrders: (CustomerOrder & { order_items?: any[] })[] = ordersData.map((o: any) => {
+          const attachedItems = orderItemsMap[o.id];
+          const jsonItems = Array.isArray(o.items) ? o.items : [];
+          return {
+            id: o.id,
+            orderNumber: o.order_number || o.orderNumber || 'LTN-????',
+            outletId: o.outlet_id || o.outletId || '',
+            outletName: o.outlet_name || o.outletName || '',
+            customerName: o.customer_name || o.customerName || '',
+            customerPhone: o.customer_phone || o.customerPhone || '',
+            customerId: o.customer_id || o.customerId,
+            userId: o.user_id || o.userId,
+            orderType: o.order_type || o.orderType || 'DINE IN',
+            tableNumber: o.table_number || o.tableNumber || '',
+            items: jsonItems,
+            order_items: attachedItems !== undefined ? attachedItems : jsonItems,
+            totalAmount: Number(o.total_amount || o.totalAmount || 0),
+            paymentMethod: o.payment_method || o.paymentMethod || 'QRIS',
+            paymentStatus: o.payment_status || o.paymentStatus || 'WAITING PAYMENT',
+            paymentReceiptUrl: o.payment_receipt_url || o.paymentReceiptUrl,
+            paymentReceiptPath: o.payment_receipt_path || o.paymentReceiptPath,
+            paymentProofPath: o.payment_proof_path || o.paymentProofPath,
+            rejectionReason: o.rejection_reason || o.rejectionReason,
+            orderStatus: o.order_status || o.orderStatus || 'NEW',
+            customerNote: o.customer_note || o.customerNote || '',
+            createdAt: o.created_at || o.createdAt,
+            updatedAt: o.updated_at || o.updatedAt,
+          };
+        });
         setOrders(mappedOrders);
+        // Calculate dynamic membership tier based strictly on valid successful transactions
+        const validOrders = mappedOrders.filter(isOrderValidForTier);
+        setTierData(calculateMembershipTier(validOrders.length, tierSettings));
       }
     } catch (err) {
       console.error('Exception loading orders:', err);
@@ -198,6 +242,34 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
       setLoadingOrders(false);
     }
   };
+
+  // Load Tier Settings from database
+  const loadTierConfig = async () => {
+    try {
+      const res = await getMembershipTierSettings();
+      setTierSettings(res.settings);
+      const validCount = orders.filter(isOrderValidForTier).length;
+      setTierData(calculateMembershipTier(validCount, res.settings));
+    } catch (err) {
+      console.warn('Error loading tier settings:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadTierConfig();
+
+    const handleTierUpdated = (e: any) => {
+      if (e.detail) {
+        setTierSettings(e.detail);
+        const validCount = orders.filter(isOrderValidForTier).length;
+        setTierData(calculateMembershipTier(validCount, e.detail));
+      }
+    };
+    window.addEventListener('leton_tier_settings_updated', handleTierUpdated);
+    return () => {
+      window.removeEventListener('leton_tier_settings_updated', handleTierUpdated);
+    };
+  }, [orders]);
 
   useEffect(() => {
     loadOrders();
@@ -325,36 +397,94 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* 1. KARTU PROFIL, MEMBER CARD & EDIT DATA */}
       <div className="lg:col-span-1 space-y-4">
-        {/* PREMIUM GOLD LETON COFFEE MEMBER CARD */}
-        <div className="bg-gradient-to-br from-[#1E293B] via-[#0F172A] to-[#1E293B] rounded-2xl p-5 text-white shadow-md relative overflow-hidden border border-slate-800">
+        {/* DYNAMIC 3-LEVEL MEMBERSHIP CARD */}
+        <div className={`bg-gradient-to-br ${tierData?.theme?.cardGradient || 'from-[#1E293B] via-[#0F172A] to-[#1E293B]'} rounded-2xl p-5 text-white shadow-md relative overflow-hidden border ${tierData?.theme?.borderAccent || 'border-slate-800'} transition-all duration-300`}>
           {/* Accent design circles */}
-          <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-[#C39A6B]/10 rounded-full blur-xl" />
-          <div className="absolute -left-6 -top-6 w-24 h-24 bg-amber-500/5 rounded-full blur-xl" />
+          <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-[#C39A6B]/10 rounded-full blur-xl pointer-events-none" />
+          <div className="absolute -left-6 -top-6 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none" />
 
-          <div className="flex justify-between items-start border-b border-slate-800 pb-3 mb-4">
+          <div className="flex justify-between items-start border-b border-white/10 pb-3 mb-4">
             <div>
               <span className="block text-[9px] font-mono tracking-widest text-[#C39A6B] uppercase font-bold">
                 Leton Coffee
               </span>
-              <span className="text-xs font-semibold text-slate-300">GOLD MEMBERSHIP</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-sm font-bold tracking-wide text-white">
+                  {tierData?.tierBadge || '🥈 SILVER'}
+                </span>
+              </div>
             </div>
-            <Award className="w-6 h-6 text-[#C39A6B]" />
+            <button
+              type="button"
+              onClick={() => setShowTierModal(true)}
+              className="py-1 px-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition-all flex items-center gap-1 text-[10px] font-bold text-slate-200 border border-white/10 cursor-pointer shadow-xs"
+              title="Lihat info tingkatan tier membership"
+            >
+              <Award className="w-3.5 h-3.5 text-[#C39A6B]" />
+              <span>Info Tier</span>
+            </button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3.5">
+            {/* JUMLAH TRANSAKSI & PROGRESS BAR */}
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="block text-[9px] text-slate-400 font-mono uppercase tracking-wider">
+                    Jumlah Transaksi
+                  </span>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="text-2xl font-display font-black text-white">
+                      {tierData?.transactionCount || 0}
+                    </span>
+                    <span className="text-xs font-semibold text-slate-400">transaksi</span>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tierData?.theme?.badgeBg || 'bg-slate-700'} ${tierData?.theme?.badgeText || 'text-slate-300'}`}>
+                    {tierData?.tier === 'PLATINUM' ? '💎 VIP' : tierData?.tier === 'GOLD' ? '🥇 LEVEL 2' : '🥈 LEVEL 1'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress Bar & Subtext */}
+              <div className="space-y-1 pt-1">
+                <div className="flex justify-between items-center text-[10px] font-mono">
+                  <span className="text-slate-300 font-medium">
+                    {tierData?.statusMessage || 'Memuat status tier...'}
+                  </span>
+                  <span className="text-amber-400 font-bold">{tierData?.progressPercent || 0}%</span>
+                </div>
+                <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden p-0.5 border border-white/10">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      tierData?.tier === 'PLATINUM'
+                        ? 'bg-gradient-to-r from-cyan-400 to-purple-400'
+                        : tierData?.tier === 'GOLD'
+                        ? 'bg-gradient-to-r from-amber-400 to-yellow-400'
+                        : 'bg-gradient-to-r from-slate-400 to-amber-400'
+                    }`}
+                    style={{ width: `${tierData?.progressPercent || 0}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Saldo Poin */}
             <div>
               <span className="block text-[10px] text-slate-400 font-mono uppercase tracking-wider">
                 Saldo Poin Aktif
               </span>
               <div className="flex items-baseline gap-1.5 mt-0.5">
-                <span className="text-3xl font-display font-black text-amber-500">
+                <span className="text-2xl font-display font-black text-amber-500">
                   {loyaltyData ? loyaltyData.pointsBalance : 0}
                 </span>
                 <span className="text-xs font-bold text-slate-400 font-mono uppercase">Poin</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 border-t border-slate-800/80 pt-3 text-xs">
+            <div className="grid grid-cols-2 gap-4 border-t border-slate-800/80 pt-2.5 text-xs">
               <div>
                 <span className="block text-[9px] text-slate-400 font-mono uppercase">
                   Total Diperoleh
@@ -379,7 +509,7 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
                 const element = document.getElementById('customer-tab-content-card');
                 if (element) element.scrollIntoView({ behavior: 'smooth' });
               }}
-              className="w-full mt-1.5 py-2 px-3 bg-[#C39A6B] hover:bg-[#B38A5B] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+              className="w-full mt-1 py-2 px-3 bg-[#C39A6B] hover:bg-[#B38A5B] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
             >
               <Gift className="w-3.5 h-3.5" />
               <span>TUKAR POINT REWARD</span>
@@ -831,6 +961,152 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
               >
                 Salin Kode & Tutup
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: MEMBERSHIP TIER INFO MODAL */}
+      {showTierModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-[#F2F4F7] animate-scaleUp">
+            <div className="p-6 bg-gradient-to-br from-[#1E293B] via-[#0F172A] to-[#1E293B] text-white relative">
+              <button
+                type="button"
+                onClick={() => setShowTierModal(false)}
+                className="absolute right-4 top-4 p-1.5 bg-white/10 hover:bg-white/20 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4 text-white" />
+              </button>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="p-2 rounded-xl bg-[#C39A6B]/20 text-[#C39A6B]">
+                  <Award className="w-5 h-5" />
+                </span>
+                <span className="text-[10px] font-mono tracking-widest text-[#C39A6B] uppercase font-bold">
+                  Leton Coffee Rewards
+                </span>
+              </div>
+              <h3 className="font-display font-black text-xl text-white">
+                Tingkatan Membership
+              </h3>
+              <p className="text-xs text-slate-300 mt-1">
+                Level keanggotaan Anda naik otomatis berdasarkan total pesanan valid di Leton Coffee.
+              </p>
+
+              {/* Current Status Box in Modal */}
+              <div className="mt-4 p-3 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-between">
+                <div>
+                  <span className="block text-[10px] text-slate-400 font-mono uppercase">Level Anda Saat Ini</span>
+                  <span className="text-sm font-bold text-white mt-0.5 block">
+                    {tierData?.tierBadge || '🥈 SILVER'}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="block text-[10px] text-slate-400 font-mono uppercase">Total Transaksi</span>
+                  <span className="text-sm font-bold text-amber-400 font-mono">
+                    {tierData?.transactionCount || 0} order
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+              <h4 className="text-xs font-bold text-[#172033] uppercase tracking-wider">
+                Ketentuan 3 Level Member:
+              </h4>
+
+              <div className="space-y-3">
+                {/* Silver Level */}
+                <div className={`p-4 rounded-2xl border transition-all ${
+                  tierData?.tier === 'SILVER'
+                    ? 'bg-slate-50 border-slate-400 ring-2 ring-slate-400/20 shadow-xs'
+                    : 'bg-white border-slate-200'
+                }`}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🥈</span>
+                      <div>
+                        <h5 className="font-bold text-sm text-slate-800">SILVER TIER</h5>
+                        <span className="text-[11px] text-slate-500 font-mono">
+                          Min. {tierSettings.silverMinTransactions} Transaksi
+                        </span>
+                      </div>
+                    </div>
+                    {tierData?.tier === 'SILVER' && (
+                      <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 text-[10px] font-bold">
+                        Level Aktif
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Tier awal untuk setiap pelanggan baru yang bergabung menjadi member Leton Coffee.
+                  </p>
+                </div>
+
+                {/* Gold Level */}
+                <div className={`p-4 rounded-2xl border transition-all ${
+                  tierData?.tier === 'GOLD'
+                    ? 'bg-amber-50/70 border-amber-400 ring-2 ring-amber-400/20 shadow-xs'
+                    : 'bg-white border-slate-200'
+                }`}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🥇</span>
+                      <div>
+                        <h5 className="font-bold text-sm text-amber-900">GOLD TIER</h5>
+                        <span className="text-[11px] text-amber-700 font-mono">
+                          Min. {tierSettings.goldMinTransactions} Transaksi
+                        </span>
+                      </div>
+                    </div>
+                    {tierData?.tier === 'GOLD' && (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-bold">
+                        Level Aktif
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Tier lanjutan bagi penikmat kopi setia Leton Coffee yang telah mencapai minimal {tierSettings.goldMinTransactions} transaksi valid.
+                  </p>
+                </div>
+
+                {/* Platinum Level */}
+                <div className={`p-4 rounded-2xl border transition-all ${
+                  tierData?.tier === 'PLATINUM'
+                    ? 'bg-cyan-50/70 border-cyan-400 ring-2 ring-cyan-400/20 shadow-xs'
+                    : 'bg-white border-slate-200'
+                }`}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">💎</span>
+                      <div>
+                        <h5 className="font-bold text-sm text-cyan-950">PLATINUM VIP</h5>
+                        <span className="text-[11px] text-cyan-700 font-mono">
+                          Min. {tierSettings.platinumMinTransactions} Transaksi
+                        </span>
+                      </div>
+                    </div>
+                    {tierData?.tier === 'PLATINUM' && (
+                      <span className="px-2 py-0.5 rounded-full bg-cyan-200 text-cyan-900 text-[10px] font-bold">
+                        Level Aktif
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Level tertinggi VIP dengan penghargaan loyalitas istimewa setelah mencapai minimal {tierSettings.platinumMinTransactions} transaksi valid.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTierModal(false)}
+                  className="w-full py-2.5 bg-[#172033] hover:bg-slate-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm"
+                >
+                  Tutup Informasi
+                </button>
+              </div>
             </div>
           </div>
         </div>

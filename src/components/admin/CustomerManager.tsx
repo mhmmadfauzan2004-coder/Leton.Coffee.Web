@@ -10,6 +10,13 @@ import { fetchCustomerOrdersForAdmin } from '../../utils/supabaseOrders';
 import { CustomerOrder } from '../../types';
 import { formatOrderDateTime } from '../../utils/formatters';
 import {
+  getMembershipTierSettings,
+  calculateMembershipTier,
+  isOrderValidForTier,
+  MembershipTierSettings,
+  DEFAULT_MEMBERSHIP_TIER_SETTINGS,
+} from '../../utils/supabaseMembershipTier';
+import {
   Users,
   Search,
   RefreshCw,
@@ -36,6 +43,7 @@ export const CustomerManager: React.FC = () => {
   const isSuperAdmin = auth.role === 'super_admin';
 
   const [customers, setCustomers] = useState<RegisteredCustomer[]>([]);
+  const [tierSettings, setTierSettings] = useState<MembershipTierSettings>(DEFAULT_MEMBERSHIP_TIER_SETTINGS);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -108,6 +116,11 @@ export const CustomerManager: React.FC = () => {
     if (!isSuperAdmin) return;
 
     loadCustomers();
+
+    // Load tier settings from database
+    getMembershipTierSettings().then((res) => {
+      setTierSettings(res.settings);
+    }).catch(() => {});
 
     // Setup realtime subscription to public.customers table
     const unsubscribe = subscribeToCustomersRealtime((updatedList) => {
@@ -637,32 +650,65 @@ export const CustomerManager: React.FC = () => {
 
             {/* Modal Body Info Stats */}
             <div className="p-6 overflow-y-auto space-y-6 flex-1">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div className="p-3.5 rounded-2xl bg-[#F0F7FF] border border-[#E0F2FE]">
-                  <span className="text-[10px] font-mono font-bold text-[#64748B] uppercase block">
-                    Tanggal Terdaftar
-                  </span>
-                  <span className="font-mono font-bold text-xs text-[#172033] mt-1 block">
-                    {formatDate(selectedCustomer.createdAt)}
-                  </span>
-                </div>
-                <div className="p-3.5 rounded-2xl bg-[#F0F7FF] border border-[#E0F2FE]">
-                  <span className="text-[10px] font-mono font-bold text-[#64748B] uppercase block">
-                    Total Pesanan
-                  </span>
-                  <span className="font-display font-black text-base text-[#0284C7] mt-0.5 block">
-                    {customerOrders.length} Order
-                  </span>
-                </div>
-                <div className="p-3.5 rounded-2xl bg-[#F0F7FF] border border-[#E0F2FE] col-span-2 sm:col-span-1">
-                  <span className="text-[10px] font-mono font-bold text-[#64748B] uppercase block">
-                    Status Member
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold text-[11px] mt-1">
-                    <Check className="w-3 h-3 text-emerald-600" /> Member Aktif
-                  </span>
-                </div>
-              </div>
+              {(() => {
+                const validOrdersCount = customerOrders.filter(isOrderValidForTier).length;
+                const customerTier = calculateMembershipTier(validOrdersCount, tierSettings);
+
+                return (
+                  <div className="space-y-4">
+                    {/* Tier Level Banner */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white border border-slate-700 flex items-center justify-between shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{customerTier.theme.iconEmoji}</span>
+                        <div>
+                          <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">
+                            Membership Tier
+                          </span>
+                          <span className="text-base font-display font-black text-white">
+                            {customerTier.tierBadge}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[10px] font-mono text-slate-400 uppercase block">
+                          Status Milestone
+                        </span>
+                        <span className="text-xs font-semibold text-amber-400">
+                          {customerTier.statusMessage}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div className="p-3.5 rounded-2xl bg-[#F0F7FF] border border-[#E0F2FE]">
+                        <span className="text-[10px] font-mono font-bold text-[#64748B] uppercase block">
+                          Tanggal Terdaftar
+                        </span>
+                        <span className="font-mono font-bold text-xs text-[#172033] mt-1 block">
+                          {formatDate(selectedCustomer.createdAt)}
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-2xl bg-[#F0F7FF] border border-[#E0F2FE]">
+                        <span className="text-[10px] font-mono font-bold text-[#64748B] uppercase block">
+                          Pesanan Valid
+                        </span>
+                        <span className="font-display font-black text-base text-[#0284C7] mt-0.5 block">
+                          {validOrdersCount} / {customerOrders.length} Order
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-2xl bg-[#F0F7FF] border border-[#E0F2FE] col-span-2 sm:col-span-1">
+                        <span className="text-[10px] font-mono font-bold text-[#64748B] uppercase block">
+                          Status Member
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold text-[11px] mt-1">
+                          <Check className="w-3 h-3 text-emerald-600" /> Member Aktif
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Order History List */}
               <div className="space-y-3">

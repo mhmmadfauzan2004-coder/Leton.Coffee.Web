@@ -1806,61 +1806,88 @@ export function subscribeToOrdersRealtime(
 
 /**
  * Fetch a single order by ID or Order Number
- * Strictly queries Supabase database as the single source of truth.
+ * Uses SECURITY DEFINER RPC get_guest_order_status for guest public tracking,
+ * or direct table access if an admin role is active.
  */
-export async function fetchSingleOrder(orderIdOrNumber: string): Promise<CustomerOrder | null> {
+export async function fetchSingleOrder(
+  orderIdOrNumber: string,
+  customerPhone?: string
+): Promise<CustomerOrder | null> {
   if (!orderIdOrNumber) return null;
   const cleanNumber = orderIdOrNumber.replace(/^#/, '').trim();
 
-  // Primary & Authoritative: Supabase 'orders' table
+  // 1. Admin Flow (If admin role is active in localStorage)
+  const activeRole = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') : '';
+  if (activeRole === 'super_admin' || activeRole === 'outlet_admin') {
+    try {
+      const client = getSupabase(activeRole);
+      const { data, error } = await client
+        .from('orders')
+        .select('*')
+        .or(`id.eq.${orderIdOrNumber},id.eq.${cleanNumber},order_number.eq.${orderIdOrNumber},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`)
+        .maybeSingle();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          orderNumber: data.order_number || data.orderNumber || 'LTN-????',
+          outletId: data.outlet_id || data.outletId || '',
+          outletName: data.outlet_name || data.outletName || '',
+          customerName: data.customer_name || data.customerName || '',
+          customerPhone: data.customer_phone || data.customerPhone || '',
+          customerId: data.customer_id || data.customerId || undefined,
+          userId: data.user_id || data.userId || undefined,
+          orderType: data.order_type || data.orderType || 'DINE IN',
+          tableNumber: data.table_number || data.tableNumber || '',
+          items: Array.isArray(data.items) ? data.items : [],
+          totalAmount: Number(data.total_amount || data.totalAmount || 0),
+          paymentMethod: data.payment_method || data.paymentMethod || 'QRIS',
+          paymentStatus: data.payment_status || data.paymentStatus || 'WAITING PAYMENT',
+          paymentProofPath: data.payment_proof_path || data.payment_receipt_path || data.paymentReceiptPath,
+          paymentReceiptUrl: data.payment_receipt_url || data.paymentReceiptUrl,
+          paymentReceiptPath: data.payment_receipt_path || data.payment_proof_path || data.paymentReceiptPath,
+          rejectionReason: data.rejection_reason || data.rejectionReason,
+          orderStatus: data.order_status || data.orderStatus || 'NEW',
+          customerNote: data.customer_note || data.customerNote || '',
+          createdAt: data.created_at || data.createdAt || new Date().toISOString(),
+          updatedAt: data.updated_at || data.updatedAt,
+        };
+      }
+    } catch (err) {
+      console.warn('[Fetch Single Admin Order Note]:', err);
+    }
+  }
+
+  // 2. Public / Guest Flow via Security Definer RPC (2-Factor Authorization)
   try {
     const client = getSupabase();
-    const { data, error } = await client
-      .from('orders')
-      .select('*')
-      .or(`id.eq.${orderIdOrNumber},id.eq.${cleanNumber},order_number.eq.${orderIdOrNumber},order_number.eq.${cleanNumber},order_number.eq.#${cleanNumber}`)
-      .maybeSingle();
+    const { data: rpcRes, error: rpcErr } = await client.rpc('get_guest_order_status', {
+      p_order_identifier: orderIdOrNumber,
+      p_phone: customerPhone || ''
+    });
 
-    if (!error && data) {
-      // Security Check: If a customer is logged in, and this order is associated with a user,
-      // only allow them to view it if it is their own order.
-      const activeRole = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') : '';
-      const { data: { user } } = await client.auth.getUser().catch(() => ({ data: { user: null } }));
-      
-      if (data.user_id && user && !activeRole && data.user_id !== user.id) {
-        console.warn('[Security] Unauthorized access attempt to order:', orderIdOrNumber);
-        return null;
-      }
-
+    if (!rpcErr && rpcRes && rpcRes.success && rpcRes.order) {
+      const o = rpcRes.order;
       return {
-        id: data.id,
-        orderNumber: data.order_number || data.orderNumber || 'LTN-????',
-        outletId: data.outlet_id || data.outletId || '',
-        outletName: data.outlet_name || data.outletName || '',
-        customerName: data.customer_name || data.customerName || '',
-        customerPhone: data.customer_phone || data.customerPhone || '',
-        customerId: data.customer_id || data.customerId || undefined,
-        userId: data.user_id || data.userId || undefined,
-        orderType: data.order_type || data.orderType || 'DINE IN',
-        tableNumber: data.table_number || data.tableNumber || '',
-        items: Array.isArray(data.items) ? data.items : [],
-        totalAmount: Number(data.total_amount || data.totalAmount || 0),
-        paymentMethod: data.payment_method || data.paymentMethod || 'QRIS',
-        paymentStatus: data.payment_status || data.paymentStatus || 'WAITING PAYMENT',
-        paymentProofPath: data.payment_proof_path || data.payment_receipt_path || data.paymentReceiptPath,
-        paymentReceiptUrl: data.payment_receipt_url || data.paymentReceiptUrl,
-        paymentReceiptPath: data.payment_receipt_path || data.payment_proof_path || data.paymentReceiptPath,
-        rejectionReason: data.rejection_reason || data.rejectionReason,
-        orderStatus: data.order_status || data.orderStatus || 'NEW',
-        customerNote: data.customer_note || data.customerNote || '',
-        pickupTime: data.pickup_time || data.pickupTime || undefined,
-        pickup_time: data.pickup_time || data.pickupTime || undefined,
-        createdAt: data.created_at || data.createdAt || new Date().toISOString(),
-        updatedAt: data.updated_at || data.updatedAt,
+        id: o.id,
+        orderNumber: o.orderNumber || 'LTN-????',
+        outletId: o.outletId || '',
+        outletName: o.outletName || '',
+        customerName: o.customerName || '',
+        customerPhone: customerPhone || o.customerPhone || '',
+        orderType: 'DINE IN',
+        items: Array.isArray(o.items) ? o.items : [],
+        totalAmount: Number(o.totalAmount || 0),
+        paymentMethod: o.paymentMethod || 'QRIS',
+        paymentStatus: o.paymentStatus || 'WAITING PAYMENT',
+        orderStatus: o.orderStatus || 'NEW',
+        customerNote: o.customerNote || '',
+        createdAt: o.createdAt || new Date().toISOString(),
+        updatedAt: o.updatedAt,
       };
     }
   } catch (err) {
-    console.warn('[Fetch Single Supabase Order Error]:', err);
+    console.warn('[Fetch Single Guest Order RPC Note]:', err);
   }
 
   return null;
@@ -1872,6 +1899,7 @@ export async function fetchSingleOrder(orderIdOrNumber: string): Promise<Custome
  */
 export function subscribeToSingleOrder(
   orderIdOrNumber: string,
+  customerPhone: string | undefined,
   onUpdate: (order: CustomerOrder) => void
 ): () => void {
   let isSubscribed = true;
@@ -1880,7 +1908,7 @@ export function subscribeToSingleOrder(
 
   const checkOrder = async () => {
     if (!isSubscribed) return;
-    const latest = await fetchSingleOrder(orderIdOrNumber);
+    const latest = await fetchSingleOrder(orderIdOrNumber, customerPhone);
     if (latest && isSubscribed) {
       onUpdate(latest);
     }

@@ -120,79 +120,41 @@ export const OrderConfirmation: React.FC<OrderConfirmationProps> = ({
   useEffect(() => {
     if (!initialOrder?.id) return;
 
-    // Use Supabase realtime channel
-    const channel = getSupabase()
-      .channel(`order:${initialOrder.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'orders',
-          filter: `id=eq.${initialOrder.id}`,
-        },
-        (payload: any) => {
-          const row = payload.new;
-          if (!row) return;
+    const unsubscribe = subscribeToSingleOrder(
+      initialOrder.id,
+      initialOrder.customerPhone,
+      (updatedOrder) => {
+        if (!updatedOrder) return;
+        setCurrentOrder(updatedOrder);
 
-          // Map snake_case database columns back to camelCase CustomerOrder structure
-          const updatedOrder: CustomerOrder = {
-            id: row.id,
-            orderNumber: row.order_number || row.orderNumber || 'LTN-????',
-            outletId: row.outlet_id || row.outletId || '',
-            outletName: row.outlet_name || row.outletName || '',
-            customerName: row.customer_name || row.customerName || '',
-            customerPhone: row.customer_phone || row.customerPhone || '',
-            customerId: row.customer_id || row.customerId || undefined,
-            userId: row.user_id || row.userId || undefined,
-            orderType: row.order_type || row.orderType || 'DINE IN',
-            tableNumber: row.table_number || row.tableNumber || '',
-            items: Array.isArray(row.items) ? row.items : [],
-            totalAmount: Number(row.total_amount || row.totalAmount || 0),
-            paymentMethod: row.payment_method || row.paymentMethod || 'QRIS',
-            paymentStatus: row.payment_status || row.paymentStatus || 'WAITING PAYMENT',
-            paymentProofPath: row.payment_proof_path || row.payment_receipt_path || row.paymentReceiptPath,
-            paymentReceiptUrl: row.payment_receipt_url || row.paymentReceiptUrl,
-            paymentReceiptPath: row.payment_receipt_path || row.payment_proof_path || row.paymentReceiptPath,
-            rejectionReason: row.rejection_reason || row.rejectionReason,
-            orderStatus: row.order_status || row.orderStatus || 'NEW',
-            customerNote: row.customer_note || row.customerNote || '',
-            pickupTime: row.pickup_time || row.pickupTime || undefined,
-            pickup_time: row.pickup_time || row.pickupTime || undefined,
-            createdAt: row.created_at || row.createdAt || new Date().toISOString(),
-          };
+        // Trigger in-app notification when status changes
+        if (updatedOrder.orderStatus !== lastNotifiedStatusRef.current) {
+          const oldStatus = lastNotifiedStatusRef.current;
+          lastNotifiedStatusRef.current = updatedOrder.orderStatus;
 
-          setCurrentOrder(updatedOrder);
-
-          // Trigger in-app notification when status changes
-          if (updatedOrder.orderStatus !== lastNotifiedStatusRef.current) {
-            const oldStatus = lastNotifiedStatusRef.current;
-            lastNotifiedStatusRef.current = updatedOrder.orderStatus;
-
-            if (
-              (updatedOrder.orderStatus === 'READY' || updatedOrder.orderStatus === 'COMPLETED') &&
-              oldStatus !== 'READY' &&
-              oldStatus !== 'COMPLETED'
-            ) {
-              setInAppNotice({
-                message: '🎉 Pesanan Kamu Sudah Siap! Silakan ambil pesanan kamu.',
-                type: 'ready',
-              });
-            } else if (updatedOrder.orderStatus === 'CANCELLED' && oldStatus !== 'CANCELLED') {
-              setInAppNotice({
-                message: `Pesanan Ditolak: ${updatedOrder.rejectionReason || 'Tanpa alasan'}`,
-                type: 'rejected',
-              });
-            }
+          if (
+            (updatedOrder.orderStatus === 'READY' || updatedOrder.orderStatus === 'COMPLETED') &&
+            oldStatus !== 'READY' &&
+            oldStatus !== 'COMPLETED'
+          ) {
+            setInAppNotice({
+              message: '🎉 Pesanan Kamu Sudah Siap! Silakan ambil pesanan kamu.',
+              type: 'ready',
+            });
+          } else if (updatedOrder.orderStatus === 'CANCELLED' && oldStatus !== 'CANCELLED') {
+            setInAppNotice({
+              message: `Pesanan Ditolak: ${updatedOrder.rejectionReason || 'Tanpa alasan'}`,
+              type: 'rejected',
+            });
           }
         }
-      )
-      .subscribe();
+      }
+    );
 
     return () => {
-      channel.unsubscribe();
+      unsubscribe();
     };
-  }, [initialOrder?.id]);
+  }, [initialOrder?.id, initialOrder?.customerPhone]);
 
   const handleCopyOrderNumber = () => {
     navigator.clipboard.writeText(currentOrder.orderNumber);

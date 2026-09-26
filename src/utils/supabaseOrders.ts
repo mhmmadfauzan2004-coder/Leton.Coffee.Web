@@ -1657,7 +1657,24 @@ export function subscribeToOrdersRealtime(
   // Initial load
   refresh();
 
-  // 1. Supabase Postgres Realtime & Broadcast Stream
+  // 1. Fallback Polling Control (Only active when Realtime channel is NOT healthy/subscribed)
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  const startFallbackPolling = () => {
+    if (!isSubscribed || pollInterval !== null) return;
+    pollInterval = setInterval(() => {
+      if (isSubscribed) {
+        refresh();
+      }
+    }, 2500);
+  };
+  const stopFallbackPolling = () => {
+    if (pollInterval !== null) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  };
+
+  // 2. Supabase Postgres Realtime & Broadcast Stream
   try {
     const client = getSupabase(activeRole, filterOutletId);
     clientChannel = client
@@ -1726,12 +1743,19 @@ export function subscribeToOrdersRealtime(
           refresh();
         }
       )
-      .subscribe();
+      .subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') {
+          stopFallbackPolling();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          startFallbackPolling();
+        }
+      });
   } catch (err) {
     console.warn('[Orders Realtime Subscription Error]:', err);
+    startFallbackPolling();
   }
 
-  // 2. Server-Sent Events (SSE) Listener for Backend events
+  // 3. Server-Sent Events (SSE) Listener for Backend events
   try {
     if (typeof window !== 'undefined' && window.EventSource) {
       sseSource = new EventSource(getApiUrl('/api/events'));
@@ -1762,17 +1786,10 @@ export function subscribeToOrdersRealtime(
     // SSE optional notice
   }
 
-  // 3. Fast Backup Polling every 2.5 seconds
-  const pollInterval = setInterval(() => {
-    if (isSubscribed) {
-      refresh();
-    }
-  }, 2500);
-
   // Return cleanup
   return () => {
     isSubscribed = false;
-    clearInterval(pollInterval);
+    stopFallbackPolling();
     if (sseSource) {
       sseSource.close();
     }
@@ -1872,7 +1889,24 @@ export function subscribeToSingleOrder(
   // 1. Initial fetch
   checkOrder();
 
-  // 2. Supabase Postgres Realtime Channel
+  // 2. Fallback Polling Control (Only active when Realtime channel is NOT healthy/subscribed)
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  const startFallbackPolling = () => {
+    if (!isSubscribed || pollInterval !== null) return;
+    pollInterval = setInterval(() => {
+      if (isSubscribed) {
+        checkOrder();
+      }
+    }, 2500);
+  };
+  const stopFallbackPolling = () => {
+    if (pollInterval !== null) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  };
+
+  // 3. Supabase Postgres Realtime Channel
   try {
     const client = getSupabase();
     clientChannel = client
@@ -1913,12 +1947,19 @@ export function subscribeToSingleOrder(
           checkOrder();
         }
       )
-      .subscribe();
+      .subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') {
+          stopFallbackPolling();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          startFallbackPolling();
+        }
+      });
   } catch (err) {
     console.warn('[Single Order Realtime Error]:', err);
+    startFallbackPolling();
   }
 
-  // 3. SSE Listener
+  // 4. SSE Listener
   try {
     if (typeof window !== 'undefined' && window.EventSource) {
       sseSource = new EventSource(getApiUrl('/api/events'));
@@ -1955,16 +1996,9 @@ export function subscribeToSingleOrder(
     // ignore
   }
 
-  // 4. Polling fallback every 2.5 seconds
-  const pollInterval = setInterval(() => {
-    if (isSubscribed) {
-      checkOrder();
-    }
-  }, 2500);
-
   return () => {
     isSubscribed = false;
-    clearInterval(pollInterval);
+    stopFallbackPolling();
     if (sseSource) sseSource.close();
     if (clientChannel) {
       try {

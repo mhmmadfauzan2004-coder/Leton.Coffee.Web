@@ -332,7 +332,28 @@ export function subscribeToOutletAvailabilityRealtime(
     });
   }
 
-  // 4. Supabase Realtime channel subscription on 'leton_content' table
+  // 4. Fallback Polling Control (Only active when Realtime channel is NOT healthy/subscribed)
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  const startFallbackPolling = () => {
+    if (!isSubscribed || pollInterval !== null) return;
+    pollInterval = setInterval(() => {
+      if (isSubscribed) {
+        fetchOutletsAvailability().then((latest) => {
+          if (isSubscribed) {
+            onUpdate(latest);
+          }
+        });
+      }
+    }, 8000);
+  };
+  const stopFallbackPolling = () => {
+    if (pollInterval !== null) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  };
+
+  // 5. Supabase Realtime channel subscription on 'leton_content' table
   let supabaseChannel: any = null;
   try {
     const client = getSupabase();
@@ -358,25 +379,21 @@ export function subscribeToOutletAvailabilityRealtime(
           }
         }
       )
-      .subscribe();
-  } catch (rtErr) {
-    console.warn('[subscribeToOutletAvailabilityRealtime Notice]:', rtErr);
-  }
-
-  // 5. Periodic polling fallback (every 8 seconds) for maximum real-time reliability
-  const intervalId = setInterval(() => {
-    if (isSubscribed) {
-      fetchOutletsAvailability().then((latest) => {
-        if (isSubscribed) {
-          onUpdate(latest);
+      .subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') {
+          stopFallbackPolling();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          startFallbackPolling();
         }
       });
-    }
-  }, 8000);
+  } catch (rtErr) {
+    console.warn('[subscribeToOutletAvailabilityRealtime Notice]:', rtErr);
+    startFallbackPolling();
+  }
 
   return () => {
     isSubscribed = false;
-    clearInterval(intervalId);
+    stopFallbackPolling();
     if (typeof window !== 'undefined') {
       window.removeEventListener(OUTLET_AVAILABILITY_EVENT, handleCustomEvent);
     }

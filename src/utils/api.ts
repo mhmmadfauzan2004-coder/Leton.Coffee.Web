@@ -3,8 +3,43 @@
  * Supports split deployment: Frontend (Cloudflare Pages) & Backend (Express Node.js).
  */
 
-// Explicitly define the production Express/Cloud Run backend API URL for the Leton Coffee system
-export const API_BASE_URL = 'https://ais-pre-gfncvyyhq4omamytu5kgc4-866159737618.asia-southeast1.run.app';
+const rawEnvApiUrl = typeof import.meta !== 'undefined' ? (import.meta.env?.VITE_API_URL || '') : '';
+const cleanEnvApiUrl = typeof rawEnvApiUrl === 'string' ? rawEnvApiUrl.trim().replace(/\/+$/, '') : '';
+
+/**
+ * Checks whether the current runtime is an external production host (e.g. Cloudflare Pages).
+ */
+export function isProductionExternalHost(): boolean {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return host === 'leton-coffee-web.pages.dev' || (!host.includes('.run.app') && host !== 'localhost' && host !== '127.0.0.1');
+}
+
+/**
+ * Resolves the active base API URL.
+ * - Prioritizes VITE_API_URL from environment variables.
+ * - In production external host, VITE_API_URL is REQUIRED. Fallback to ais-pre-*.run.app is strictly blocked.
+ * - Fallback to AI Studio preview is only allowed in local/development environment.
+ */
+export function getApiBaseUrl(): string {
+  if (cleanEnvApiUrl) {
+    return cleanEnvApiUrl;
+  }
+
+  // Strict production check: do not silently fallback to sandbox preview
+  if (isProductionExternalHost()) {
+    console.error(
+      '[API Config Error] VITE_API_URL belum dikonfigurasi di environment production Cloudflare Pages. ' +
+      'AI Studio preview URL tidak digunakan sebagai fallback di production.'
+    );
+    return '';
+  }
+
+  // Development / local fallback only
+  return 'https://ais-pre-gfncvyyhq4omamytu5kgc4-866159737618.asia-southeast1.run.app';
+}
+
+export const API_BASE_URL = getApiBaseUrl();
 
 /**
  * Returns the full API URL for a given endpoint path.
@@ -20,10 +55,12 @@ export function getApiUrl(path: string): string {
       return normalizedPath;
     }
   }
-  if (!API_BASE_URL) {
+
+  const baseUrl = getApiBaseUrl();
+  if (!baseUrl) {
     return normalizedPath;
   }
-  return `${API_BASE_URL}${normalizedPath}`;
+  return `${baseUrl}${normalizedPath}`;
 }
 
 /**
@@ -46,8 +83,9 @@ export function resolveMediaUrl(url: string | null | undefined): string | undefi
   // Handle uploaded server media paths like "/uploads/xxx.jpg" or "uploads/xxx.jpg"
   if (trimmed.startsWith('/uploads') || trimmed.startsWith('uploads') || trimmed.startsWith('/public/uploads')) {
     const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-    if (API_BASE_URL) {
-      return `${API_BASE_URL}${cleanPath}`;
+    const baseUrl = getApiBaseUrl();
+    if (baseUrl) {
+      return `${baseUrl}${cleanPath}`;
     }
     return cleanPath;
   }

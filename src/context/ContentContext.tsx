@@ -17,7 +17,7 @@ import {
   sanitizeLoadedData,
   LETON_STORAGE_KEY,
 } from '../utils/storage';
-import { getApiUrl } from '../utils/api';
+import { getApiUrl, getApiBaseUrl, isProductionExternalHost } from '../utils/api';
 import { preloadImage } from '../utils/imagePreloader';
 import { findPresetAdmin } from '../data/adminAccounts';
 import {
@@ -651,6 +651,14 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     if (isValid) {
+      // Validate that backend API URL is configured in production environment
+      if (isProductionExternalHost() && !getApiBaseUrl()) {
+        return {
+          success: false,
+          error: 'Konfigurasi backend (VITE_API_URL) belum diatur di production Cloudflare Pages.'
+        };
+      }
+
       try {
         // Synchronously authenticate with the server to register session and generate official secure token
         const response = await fetch(getApiUrl('/api/auth/login'), {

@@ -6,6 +6,7 @@ import { normalizeIndonesianPhone } from './phone';
 import { matchesOutlet } from '../data/adminAccounts';
 import { getApiUrl } from './api';
 import { safeSetItem, safeGetItem, stripHeavyBase64Images } from './safeStorage';
+import { normalizeOutletKey } from './supabaseOutletStatus';
 
 const ORDERS_STORAGE_KEY = 'leton_orders_history';
 const ADMIN_ORDERS_CACHE_KEY = 'leton_admin_orders_cache';
@@ -1242,10 +1243,16 @@ export async function updateOrderStatus(
 
   try {
     const role = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '';
+    const rawOutlet = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '';
+    const activeOutlet = normalizeOutletKey(rawOutlet);
     const cleanNumber = orderId.replace(/^#/, '').trim();
-    let client = getSupabase();
 
-    // Fetch the order first to discover exact ID and outlet_id
+    // Authenticate update call with admin session authorization context (super_admin or normalized activeOutlet)
+    const client = role === 'super_admin'
+      ? getSupabase('super_admin')
+      : getSupabase(role || 'outlet_admin', activeOutlet);
+
+    // Fetch the order first to discover exact ID
     const { data: ordList } = await client
       .from('orders')
       .select('id, outlet_id, order_number')
@@ -1253,14 +1260,6 @@ export async function updateOrderStatus(
       .limit(1);
 
     const actualDbId = ordList && ordList[0]?.id ? ordList[0].id : orderId;
-    const targetOutlet = ordList && ordList[0]?.outlet_id ? ordList[0].outlet_id : undefined;
-
-    if (role === 'super_admin' && targetOutlet) {
-      // Authenticate update call with outlet context to satisfy RLS
-      client = getSupabase('outlet_admin', targetOutlet);
-    } else if (targetOutlet) {
-      client = getSupabase(role || 'outlet_admin', targetOutlet);
-    }
 
     let { data, error } = await client
       .from('orders')
@@ -1343,7 +1342,7 @@ export async function updateOrderStatus(
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${adminToken}`,
         'x-admin-role': adminRole || 'super_admin',
-        'x-outlet-id': adminOutlet,
+        'x-outlet-id': normalizeOutletKey(adminOutlet),
       },
       body: JSON.stringify({
         orderStatus: newOrderStatus,
@@ -1357,18 +1356,13 @@ export async function updateOrderStatus(
       if (serverJson && (serverJson.success || serverJson.order)) {
         updateSuccess = true;
       }
-    } else if (serverRes.status === 404) {
-      throw new Error('Pesanan tidak ditemukan di Supabase (telah dihapus sebelumnya).');
     }
   } catch (apiErr: any) {
-    if (apiErr?.message?.includes('tidak ditemukan')) {
-      throw apiErr;
-    }
     console.warn('[Server updateOrderStatus API Warning]:', apiErr?.message || apiErr);
   }
 
   if (!updateSuccess) {
-    throw new Error(lastDbError || 'Akses Ditolak (RLS) atau pesanan tidak ditemukan di Supabase.');
+    throw new Error(lastDbError || 'Gagal memperbarui status pesanan. Pastikan akun admin memiliki akses wewenang ke outlet ini.');
   }
 
   // 2. Parallel background sync for registry & local cache without blocking caller

@@ -393,7 +393,7 @@ export const SettingsEditor: React.FC = () => {
             <input
               type="password"
               required
-              placeholder="Masukkan password saat ini (Default: LetonAdmin2026!)"
+              placeholder="Masukkan password saat ini"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-amber-500/40 text-white text-sm focus:outline-none focus:border-[#00E5FF]"
@@ -474,8 +474,8 @@ export const SettingsEditor: React.FC = () => {
                     <code className="text-[#00E5FF] font-bold">{acc.username}</code>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px]">PASSWORD DEFAULT</span>
-                    <code className="text-slate-300 font-bold">{acc.password}</code>
+                    <span className="text-slate-500 block text-[10px]">AUTENTIKASI</span>
+                    <code className="text-emerald-400 font-bold">Terenkripsi Cloudflare</code>
                   </div>
                 </div>
               </div>
@@ -493,7 +493,7 @@ export const SettingsEditor: React.FC = () => {
               <b className="text-white">Super Admin:</b> Akses penuh ke pesanan semua outlet, ganti status pesanan, kontrol stok, kelola foto/slider/hero, kelola data cabang, konfigurasi database & kredensial.
             </li>
             <li>
-              <b className="text-white">Outlet Admin:</b> Terisolasi hanya ke cabang masing-masing (Sudirman, Ratusima/Kelakap 7, atau LetGo MPP). Hanya melihat pesanan cabang terkait, verifikasi bukti bayar QRIS cabang terkait, dan kontrol ketersediaan stok cabang terkait.
+              <b className="text-white">Outlet Admin:</b> Terisolasi hanya ke cabang masing-masing (Sudirman atau Kelakap 7). Hanya melihat pesanan cabang terkait, verifikasi bukti bayar QRIS cabang terkait, dan kontrol ketersediaan stok cabang terkait.
             </li>
           </ul>
         </div>

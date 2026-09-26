@@ -77,9 +77,8 @@ export const ROLE_STORAGE_KEY = 'leton_admin_role';
 export const OUTLET_STORAGE_KEY = 'leton_admin_outlet';
 export const OUTLET_NAME_STORAGE_KEY = 'leton_admin_outlet_name';
 
-// Local hardcoded default credentials
+// Local default username fallback
 export const DEFAULT_ADMIN_USERNAME = 'admin';
-export const DEFAULT_ADMIN_PASSWORD = 'LetonAdmin2026!';
 
 export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // 1. Initialize data strictly from localStorage first (or fallback to initialLetonData if localStorage is empty)
@@ -611,122 +610,92 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Login supporting Super Admin and Outlet Admins
+  // Login supporting Super Admin and Outlet Admins via Cloudflare Edge Backend
   const login = async (inputUser: string, inputPass: string): Promise<{ success: boolean; error?: string }> => {
     const trimmedUser = inputUser.trim();
-
-    // 1. Check against Preset Admin Accounts (Super Admin and Outlet Admins)
-    const preset = findPresetAdmin(trimmedUser);
-    let matchedRole: AdminRole = 'super_admin';
-    let matchedOutletId: string | undefined;
-    let matchedOutletName: string | undefined;
-    let activeUsername = trimmedUser;
-    let isValid = false;
-
-    if (preset) {
-      // Valid if matching preset password, or default admin password for super_admin
-      if (inputPass === preset.password || (preset.role === 'super_admin' && inputPass === DEFAULT_ADMIN_PASSWORD)) {
-        isValid = true;
-        matchedRole = preset.role;
-        matchedOutletId = preset.outletId;
-        matchedOutletName = preset.outletName;
-        activeUsername = preset.username;
-      }
+    if (!trimmedUser || !inputPass) {
+      return { success: false, error: 'Silakan masukkan username dan password.' };
     }
 
-    // 2. Check against custom local credentials for super admin
-    const storedUser = localStorage.getItem('leton_custom_user');
-    const storedPass = localStorage.getItem('leton_custom_pass');
-    if (!isValid && storedUser && storedPass && trimmedUser === storedUser && inputPass === storedPass) {
-      isValid = true;
-      matchedRole = 'super_admin';
-      activeUsername = storedUser;
-    }
+    try {
+      // Authenticate directly with the server (Cloudflare Pages Function / backend API)
+      const response = await fetch(getApiUrl('/api/auth/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: trimmedUser,
+          password: inputPass,
+        }),
+      });
 
-    // 3. Fallback check for default admin
-    if (!isValid && (trimmedUser === DEFAULT_ADMIN_USERNAME || trimmedUser.toLowerCase() === 'admin') && inputPass === DEFAULT_ADMIN_PASSWORD) {
-      isValid = true;
-      matchedRole = 'super_admin';
-      activeUsername = DEFAULT_ADMIN_USERNAME;
-    }
-
-    if (isValid) {
-      try {
-        // Synchronously authenticate with the server (same-origin Cloudflare Pages Function or configured API)
-        const response = await fetch(getApiUrl('/api/auth/login'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: activeUsername,
-            password: inputPass,
-            role: matchedRole,
-            outletId: matchedOutletId,
-          }),
-        });
-
-        if (!response.ok) {
-          return {
-            success: false,
-            error: 'Gagal menghubungkan ke server otentikasi. Silakan coba lagi.'
-          };
-        }
-
-        const resData = await response.json();
-        const serverToken = resData?.token;
-
-        if (!serverToken) {
-          return {
-            success: false,
-            error: 'Server otentikasi tidak mengembalikan token sesi yang sah.'
-          };
-        }
-
-        // Store official secure session token from server in localStorage
-        localStorage.setItem(TOKEN_STORAGE_KEY, serverToken);
-        localStorage.setItem(USERNAME_STORAGE_KEY, activeUsername);
-        localStorage.setItem(ROLE_STORAGE_KEY, matchedRole);
-        if (matchedOutletId) {
-          localStorage.setItem(OUTLET_STORAGE_KEY, matchedOutletId);
-        } else {
-          localStorage.removeItem(OUTLET_STORAGE_KEY);
-        }
-        if (matchedOutletName) {
-          localStorage.setItem(OUTLET_NAME_STORAGE_KEY, matchedOutletName);
-        } else {
-          localStorage.removeItem(OUTLET_NAME_STORAGE_KEY);
-        }
-
-        // Re-initialize Supabase client headers with the verified role and token
-        resetSupabaseClient();
-
-        // Update react auth state with verified credentials
-        setAuth({
-          isAuthenticated: true,
-          token: serverToken,
-          username: activeUsername,
-          role: matchedRole,
-          outletId: matchedOutletId,
-          outletName: matchedOutletName,
-        });
-
-        const welcomeMsg = matchedRole === 'super_admin'
-          ? `Selamat datang, Super Admin Leton Coffee!`
-          : `Selamat datang di Admin Outlet ${matchedOutletName || ''}!`;
-        showToast(welcomeMsg, 'success');
-        return { success: true };
-      } catch (authErr: any) {
-        console.error('[Admin Login Server Sync Error]:', authErr);
+      if (!response.ok) {
+        let serverErrorMessage = '';
+        try {
+          const errJson = await response.json();
+          serverErrorMessage = errJson?.error || errJson?.message;
+        } catch {}
         return {
           success: false,
-          error: 'Terjadi kesalahan jaringan saat otentikasi dengan server.'
+          error: serverErrorMessage || `Password atau Username salah, silakan coba lagi. (${response.status})`
         };
       }
-    }
 
-    return {
-      success: false,
-      error: 'Password atau Username salah, silakan coba lagi.',
-    };
+      const resData = await response.json();
+      const serverToken = resData?.token;
+
+      if (!serverToken) {
+        return {
+          success: false,
+          error: 'Server otentikasi tidak mengembalikan token sesi yang sah.'
+        };
+      }
+
+      const activeUsername = resData.username || trimmedUser;
+      const matchedRole: AdminRole = resData.role === 'outlet_admin' ? 'outlet_admin' : 'super_admin';
+      const matchedOutletId = resData.outlet_id || resData.outletId;
+      const preset = findPresetAdmin(activeUsername);
+      const matchedOutletName = resData.outletName || preset?.outletName;
+
+      // Store official secure session token from server in localStorage
+      localStorage.setItem(TOKEN_STORAGE_KEY, serverToken);
+      localStorage.setItem(USERNAME_STORAGE_KEY, activeUsername);
+      localStorage.setItem(ROLE_STORAGE_KEY, matchedRole);
+      if (matchedOutletId) {
+        localStorage.setItem(OUTLET_STORAGE_KEY, matchedOutletId);
+      } else {
+        localStorage.removeItem(OUTLET_STORAGE_KEY);
+      }
+      if (matchedOutletName) {
+        localStorage.setItem(OUTLET_NAME_STORAGE_KEY, matchedOutletName);
+      } else {
+        localStorage.removeItem(OUTLET_NAME_STORAGE_KEY);
+      }
+
+      // Re-initialize Supabase client headers with the verified role and token
+      resetSupabaseClient();
+
+      // Update react auth state with verified credentials
+      setAuth({
+        isAuthenticated: true,
+        token: serverToken,
+        username: activeUsername,
+        role: matchedRole,
+        outletId: matchedOutletId,
+        outletName: matchedOutletName,
+      });
+
+      const welcomeMsg = matchedRole === 'super_admin'
+        ? `Selamat datang, Super Admin Leton Coffee!`
+        : `Selamat datang di Admin Outlet ${matchedOutletName || ''}!`;
+      showToast(welcomeMsg, 'success');
+      return { success: true };
+    } catch (authErr: any) {
+      console.error('[Admin Login Server Sync Error]:', authErr);
+      return {
+        success: false,
+        error: 'Terjadi kesalahan jaringan saat otentikasi dengan server.'
+      };
+    }
   };
 
   // Logout
@@ -766,8 +735,8 @@ export const ContentProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return { success: false, error: 'Silakan login terlebih dahulu' };
       }
 
-      const storedPass = localStorage.getItem('leton_custom_pass') || DEFAULT_ADMIN_PASSWORD;
-      if (currentPassword !== storedPass && currentPassword !== DEFAULT_ADMIN_PASSWORD) {
+      const storedPass = localStorage.getItem('leton_custom_pass');
+      if (storedPass && currentPassword !== storedPass) {
         return { success: false, error: 'Password saat ini salah' };
       }
 

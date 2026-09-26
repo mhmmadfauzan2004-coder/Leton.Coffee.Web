@@ -423,11 +423,10 @@ function getAuthRecord(): AuthRecord {
   } catch (err) {
     console.error('Error reading auth file:', err);
   }
-  // Default: admin / LetonAdmin2026!
-  const defaultSalt = bcrypt.genSaltSync(10);
-  const defaultHash = bcrypt.hashSync('LetonAdmin2026!', defaultSalt);
+  // Default fallback hash (precomputed BCrypt hash)
+  const defaultHash = process.env.ADMIN_PASSWORD_HASH || '$2b$10$OEufMOAwduTYuouLxXCX4ei/IUxtIqnvKS8E/CXgxNs.flL8Zl1Ru';
   const defaultAuth: AuthRecord = {
-    username: 'admin',
+    username: process.env.ADMIN_USERNAME || 'admin',
     passwordHash: defaultHash,
   };
   fs.writeFileSync(AUTH_FILE, JSON.stringify(defaultAuth, null, 2), 'utf-8');
@@ -861,7 +860,7 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(401).json({ error: 'Password atau Username salah, silakan coba lagi.' });
   }
 
-  const isMatch = bcrypt.compareSync(password, authRecord.passwordHash) || password === 'LetonAdmin2026!';
+  const isMatch = bcrypt.compareSync(password, authRecord.passwordHash);
   if (!isMatch) {
     return res.status(401).json({ error: 'Password atau Username salah, silakan coba lagi.' });
   }

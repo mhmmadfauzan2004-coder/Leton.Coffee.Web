@@ -17,7 +17,6 @@ import {
   normalizeOutletKey,
 } from '../../../utils/supabaseOutletStatus';
 import {
-  Utensils,
   Package,
   ArrowLeft,
   CheckCircle2,
@@ -77,8 +76,6 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
   const activeQrisUrl = outlet.qrisImage || data?.siteSettings?.qrisImage;
 
   // Form State
-  const [orderType, setOrderType] = useState<OrderType>('DINE IN');
-  const [tableNumber, setTableNumber] = useState<string>('');
   const [customerName, setCustomerName] = useState<string>(customerProfile?.namaLengkap || '');
   const [customerPhone, setCustomerPhone] = useState<string>(customerProfile?.nomorHp || '');
   const [isMemberChoice, setIsMemberChoice] = useState<boolean>(customerProfile ? true : false);
@@ -96,43 +93,6 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
     });
     return () => unsub();
   }, [outlet?.id]);
-
-  // Generate pickup time options based on outlet operating hours
-  const pickupTimeOptions = useMemo(() => {
-    const slots: string[] = [];
-    let startHour = 8;
-    let endHour = 23;
-    let endMinute = 0;
-
-    const hoursStr = outlet?.hours || (outlet as any)?.openingHours || '';
-    if (hoursStr) {
-      const match = hoursStr.match(/(\d{1,2}):(\d{2})\s*[–\-]\s*(\d{1,2}):(\d{2})/);
-      if (match) {
-        startHour = parseInt(match[1], 10);
-        endHour = parseInt(match[3], 10);
-        endMinute = parseInt(match[4], 10);
-      }
-    }
-
-    for (let h = startHour; h <= endHour; h++) {
-      for (let m of [0, 30]) {
-        if (h === endHour && m > endMinute) break;
-        const hh = h.toString().padStart(2, '0');
-        const mm = m.toString().padStart(2, '0');
-        slots.push(`${hh}:${mm} WIB`);
-      }
-    }
-
-    if (slots.length === 0) {
-      return [
-        '17:00 WIB', '17:30 WIB', '18:00 WIB', '18:30 WIB',
-        '19:00 WIB', '19:30 WIB', '20:00 WIB', '20:30 WIB',
-        '21:00 WIB', '21:30 WIB', '22:00 WIB'
-      ];
-    }
-
-    return slots;
-  }, [outlet?.hours]);
   const [copiedAmount, setCopiedAmount] = useState<boolean>(false);
   const [showQrisInstructions, setShowQrisInstructions] = useState<boolean>(false);
   const [isQrisVisible, setIsQrisVisible] = useState<boolean>(false);
@@ -255,16 +215,6 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
       return;
     }
 
-    if (!pickupTime || !pickupTime.trim()) {
-      setFormError('Silakan pilih jam pengambilan pesanan.');
-      return;
-    }
-
-    if (orderType === 'DINE IN' && !tableNumber.trim()) {
-      setFormError('Nomor meja wajib diisi untuk pesanan Dine In (Makan di Tempat).');
-      return;
-    }
-
     if (paymentMethod === 'QRIS' && !uploadedReceiptUrl) {
       setFormError('Bukti transfer / screenshot pembayaran QRIS wajib diunggah sebelum melanjutkan.');
       return;
@@ -273,13 +223,13 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
     await onSubmitOrder({
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
-      orderType,
-      tableNumber: tableNumber.trim(),
+      orderType: 'TAKE AWAY',
+      tableNumber: '',
       paymentMethod,
       paymentReceiptUrl: paymentMethod === 'QRIS' ? (uploadedReceiptUrl || undefined) : undefined,
       paymentReceiptPath: paymentMethod === 'QRIS' ? (uploadedReceiptPath || undefined) : undefined,
       isMemberChoice,
-      pickupTime,
+      pickupTime: pickupTime.trim(),
     });
   };
 
@@ -405,67 +355,6 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
           </div>
         </div>
 
-        {/* Section 1.8: Jam Pengambilan Pesanan */}
-        <div className="bg-white rounded-xl p-4 sm:p-5 border border-[#e4efff] shadow-xs space-y-3">
-          <div className="flex items-center justify-between">
-            <label htmlFor="pickup-time-select" className="block text-xs font-black uppercase tracking-wider text-[#041d32] flex items-center gap-2">
-              <Clock className="w-4 h-4 text-[#006389]" />
-              <span>JAM PENGAMBILAN PESANAN</span>
-              <span className="text-rose-500 font-bold">*</span>
-            </label>
-            <span className="text-[10px] font-bold text-[#006389] bg-[#eef4ff] px-2.5 py-0.5 rounded-full border border-[#dbe9ff]">
-              Wajib Dipilih
-            </span>
-          </div>
-
-          <p className="text-xs text-[#3e484f] font-medium">
-            Pesanan ini mau diambil jam berapa? Silakan tentukan perkiraan jam mengambil pesanan di outlet {outlet.shortName || outlet.name}.
-          </p>
-
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#006389]">
-              <Clock className="w-4 h-4" />
-            </div>
-            <select
-              id="pickup-time-select"
-              value={pickupTime}
-              onChange={(e) => {
-                setPickupTime(e.target.value);
-                if (formError) setFormError('');
-              }}
-              className={`w-full pl-10 pr-10 py-3 rounded-xl border text-xs sm:text-sm font-extrabold appearance-none transition-all cursor-pointer ${
-                pickupTime
-                  ? 'bg-amber-50/60 border-amber-300 text-amber-950 ring-2 ring-amber-500/20 shadow-xs'
-                  : 'bg-[#f8f9ff] border-[#c2dcff] text-[#3e484f] hover:border-[#006389] focus:bg-white focus:border-[#006389] focus:ring-2 focus:ring-[#006389]/20'
-              }`}
-            >
-              <option value="" disabled>
-                🕐 Pilih Jam Pengambilan ▼
-              </option>
-              {pickupTimeOptions.map((slot) => (
-                <option key={slot} value={slot}>
-                  🕐 {slot}
-                </option>
-              ))}
-            </select>
-            <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-[#006389]">
-              <ChevronDown className="w-4 h-4" />
-            </div>
-          </div>
-
-          {pickupTime && (
-            <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200/80 text-amber-900 text-xs font-bold flex items-center justify-between shadow-2xs">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Jam Pengambilan Terpilih:</span>
-              </div>
-              <span className="font-mono text-sm font-black text-amber-900 bg-white px-3 py-1 rounded-lg border border-amber-300 shadow-2xs">
-                🕐 {pickupTime}
-              </span>
-            </div>
-          )}
-        </div>
-
         {/* Section 2: Ringkasan Pesanan (Order Items Summary) */}
         <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#e4efff] shadow-xs space-y-3">
           <div className="flex items-center justify-between border-b border-[#eef4ff] pb-2.5">
@@ -569,75 +458,19 @@ export const OrderCheckout: React.FC<OrderCheckoutProps> = ({
           </div>
         </div>
 
-        {/* Section 3: "Mau Duduk Dimana?" (Service Type & Table) */}
-        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#e4efff] shadow-xs space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-extrabold text-sm text-[#041d32] uppercase tracking-wide">
-              Mau Duduk Dimana?
-            </h2>
-            <span className="text-[11px] text-[#3e484f]">
-              {orderType === 'DINE IN' ? 'Santai di Cafe' : 'Ambil di Counter'}
-            </span>
-          </div>
-
-          {/* Dual Toggle Pill Buttons */}
-          <div className="grid grid-cols-2 gap-2 p-1 bg-[#eef4ff] rounded-xl border border-[#e4efff]">
-            <button
-              type="button"
-              onClick={() => setOrderType('DINE IN')}
-              className={`py-2.5 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                orderType === 'DINE IN'
-                  ? 'bg-white text-[#006389] shadow-xs border border-[#e4efff]'
-                  : 'text-[#3e484f] hover:text-[#041d32]'
-              }`}
-            >
-              <Utensils className="w-4 h-4" />
-              <span>DINE IN (Makan di Tempat)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setOrderType('TAKE AWAY')}
-              className={`py-2.5 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                orderType === 'TAKE AWAY'
-                  ? 'bg-white text-[#006389] shadow-xs border border-[#e4efff]'
-                  : 'text-[#3e484f] hover:text-[#041d32]'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <span>TAKE AWAY (Bawa Pulang)</span>
-            </button>
-          </div>
-
-          {/* Conditional Table Number for Dine In */}
-          {orderType === 'DINE IN' ? (
-            <div className="space-y-1.5 pt-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-[#041d32] font-bold flex items-center gap-1">
-                  <span>Mau duduk di mana?</span>
-                  <span className="text-rose-500">*</span>
-                </label>
-                <span className="text-[10px] text-[#3e484f]">Tersedia Meja di Area Cafe</span>
-              </div>
-              <input
-                type="text"
-                required
-                value={tableNumber}
-                onChange={(e) => setTableNumber(e.target.value)}
-                placeholder="Masukkan nomor meja"
-                className="w-full px-3.5 py-2.5 bg-white border border-[#e4efff] rounded-lg text-xs sm:text-sm font-semibold text-[#041d32] focus:outline-none focus:border-[#006389] shadow-2xs"
-              />
-              <p className="text-[11px] text-[#3e484f]">
-                Lihat stiker nomor akrilik di atas meja Anda agar barista dapat mengantar pesanan.
-              </p>
-            </div>
-          ) : (
-            <div className="p-3 rounded-lg bg-[#eef4ff] border border-[#e4efff] text-xs text-[#006389] flex items-center gap-2">
-              <Package className="w-4 h-4 shrink-0" />
-              <span>
-                Kemasan Ramah Lingkungan — Pesanan disiapkan dalam paper bag Leton siap ambil di Pick-up Counter dalam 5-10 menit.
-              </span>
-            </div>
-          )}
+        {/* Section: "MAU PICKUP JAM BERAPA?" */}
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#e4efff] shadow-xs space-y-2">
+          <label htmlFor="input-pickup-time" className="block font-extrabold text-sm text-[#041d32] uppercase tracking-wide">
+            MAU PICKUP JAM BERAPA?
+          </label>
+          <input
+            id="input-pickup-time"
+            type="text"
+            value={pickupTime}
+            onChange={(e) => setPickupTime(e.target.value)}
+            placeholder="Contoh: Jam 17.00"
+            className="w-full px-3.5 py-2.5 bg-white border border-[#e4efff] rounded-lg text-xs sm:text-sm font-semibold text-[#041d32] placeholder:text-slate-400 focus:outline-none focus:border-[#006389] shadow-2xs"
+          />
         </div>
 
         {/* Section 4: Data Pemesan & Member */}

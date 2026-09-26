@@ -306,6 +306,9 @@ export interface CustomerProfile {
   namaLengkap: string;
   nomorHp: string;
   tanggalLahir: string;
+  referralCode?: string;
+  referredBy?: string | null;
+  referralRewarded?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

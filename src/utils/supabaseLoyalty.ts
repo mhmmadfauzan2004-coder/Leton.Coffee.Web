@@ -650,6 +650,12 @@ export async function processOrderPointsEarning(
     }
 
     console.log(`[Loyalty Success]: Awarded ${pointsToEarn} points to customer ${custId} for order ${order.id}. New balance: ${after}`);
+
+    // Check & process referral reward on first order completion asynchronously
+    processReferralRewardIfEligible(custId).catch((refErr) => {
+      console.warn('[processReferralRewardIfEligible notice]:', refErr);
+    });
+
     return { success: true, pointsEarned: pointsToEarn };
   } catch (err: any) {
     console.error('[Loyalty Earning Exception]:', err);
@@ -658,7 +664,139 @@ export async function processOrderPointsEarning(
 }
 
 /**
- * 12. Retrieve all customers with their loyalty stats (for admin dashboard)
+ * 12. Process Member Get Member (Referral) Reward upon First Order
+ * Rules:
+ * - Only runs once when new member has referred_by set and referral_rewarded is false.
+ * - Referrer receives +100 points
+ * - New Member receives +50 points
+ * - Updates referral_rewarded = true in public.customers
+ */
+export async function processReferralRewardIfEligible(customerId: string): Promise<boolean> {
+  if (!customerId) return false;
+
+  try {
+    const adminClient = getSupabase('super_admin');
+
+    // 1. Fetch new member referral link status
+    const { data: memberData, error: memberErr } = await adminClient
+      .from('customers')
+      .select('id, nama_lengkap, nomor_hp, points_balance, total_points_earned, referred_by, referral_rewarded')
+      .eq('id', customerId)
+      .maybeSingle();
+
+    if (memberErr || !memberData || !memberData.referred_by || memberData.referral_rewarded) {
+      // Not eligible or already rewarded
+      return false;
+    }
+
+    const referrerId = memberData.referred_by;
+
+    // Prevent self-referral
+    if (referrerId === customerId) {
+      await adminClient.from('customers').update({ referral_rewarded: true }).eq('id', customerId);
+      return false;
+    }
+
+    // 2. Fetch referrer information
+    const { data: referrerData, error: refErr } = await adminClient
+      .from('customers')
+      .select('id, nama_lengkap, nomor_hp, points_balance, total_points_earned')
+      .eq('id', referrerId)
+      .maybeSingle();
+
+    if (refErr || !referrerData) {
+      console.warn('[processReferralReward] Referrer not found:', referrerId);
+      await adminClient.from('customers').update({ referral_rewarded: true }).eq('id', customerId);
+      return false;
+    }
+
+    // 3. Update Registry & Customer Points
+    const registry = await fetchCloudLoyaltyRegistry();
+    const nowIso = new Date().toISOString();
+
+    // Reward amounts
+    const REFERRER_REWARD_POINTS = 100;
+    const MEMBER_REWARD_POINTS = 50;
+
+    // a. Update Referrer (+100 points)
+    const refCurrentLoyalty = await getCustomerLoyalty(referrerId, referrerData.nomor_hp);
+    const refBefore = refCurrentLoyalty.pointsBalance;
+    const refAfter = refBefore + REFERRER_REWARD_POINTS;
+    const refNewEarned = refCurrentLoyalty.totalPointsEarned + REFERRER_REWARD_POINTS;
+
+    registry.balances[referrerId] = {
+      pointsBalance: refAfter,
+      totalPointsEarned: refNewEarned,
+      totalPointsRedeemed: refCurrentLoyalty.totalPointsRedeemed,
+    };
+
+    const refTxId = 'TX-REF-' + Math.floor(Math.random() * 900000 + 100000);
+    const refTx: PointTransaction = {
+      id: refTxId,
+      customerId: referrerId,
+      customerName: referrerData.nama_lengkap,
+      customerPhone: referrerData.nomor_hp,
+      transactionType: 'EARN',
+      points: REFERRER_REWARD_POINTS,
+      balanceBefore: refBefore,
+      balanceAfter: refAfter,
+      reason: `Reward Referral: Undangan teman (${memberData.nama_lengkap || 'Member Baru'}) berhasil transaksi pertama`,
+      createdAt: nowIso,
+    };
+
+    // b. Update New Member (+50 points)
+    const memCurrentLoyalty = await getCustomerLoyalty(customerId, memberData.nomor_hp);
+    const memBefore = memCurrentLoyalty.pointsBalance;
+    const memAfter = memBefore + MEMBER_REWARD_POINTS;
+    const memNewEarned = memCurrentLoyalty.totalPointsEarned + MEMBER_REWARD_POINTS;
+
+    registry.balances[customerId] = {
+      pointsBalance: memAfter,
+      totalPointsEarned: memNewEarned,
+      totalPointsRedeemed: memCurrentLoyalty.totalPointsRedeemed,
+    };
+
+    const memTxId = 'TX-REF-' + Math.floor(Math.random() * 900000 + 100000);
+    const memTx: PointTransaction = {
+      id: memTxId,
+      customerId,
+      customerName: memberData.nama_lengkap,
+      customerPhone: memberData.nomor_hp,
+      transactionType: 'EARN',
+      points: MEMBER_REWARD_POINTS,
+      balanceBefore: memBefore,
+      balanceAfter: memAfter,
+      reason: 'Bonus Referral: Transaksi pertama member baru via kode referral teman',
+      createdAt: nowIso,
+    };
+
+    registry.transactions = [refTx, memTx, ...(registry.transactions || [])];
+
+    // 4. Save Registry and Database Rows
+    await saveCloudLoyaltyRegistry(registry);
+
+    await Promise.all([
+      adminClient.from('customers').update({
+        points_balance: refAfter,
+        total_points_earned: refNewEarned,
+      }).eq('id', referrerId),
+      adminClient.from('customers').update({
+        points_balance: memAfter,
+        total_points_earned: memNewEarned,
+        referral_rewarded: true,
+      }).eq('id', customerId),
+    ]);
+
+    console.log(`[Referral Success] Rewarded +${REFERRER_REWARD_POINTS} pts to referrer ${referrerId} and +${MEMBER_REWARD_POINTS} pts to member ${customerId}`);
+    return true;
+  } catch (err) {
+    console.error('[processReferralReward] Exception:', err);
+    return false;
+  }
+}
+
+/**
+ * 13. Retrieve all customers with their loyalty stats (for admin dashboard)
  */
 export async function getCustomersWithLoyalty(): Promise<any[]> {
   try {

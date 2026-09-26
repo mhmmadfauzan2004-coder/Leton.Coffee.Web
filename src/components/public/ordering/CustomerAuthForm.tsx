@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { loginCustomer, registerCustomer } from '../../../utils/supabase';
 import { CustomerProfile } from '../../../types';
-import { Phone, User, Calendar, Lock, AlertCircle, CheckCircle2, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Phone, User, Calendar, Lock, AlertCircle, CheckCircle2, Loader2, ArrowRight, ArrowLeft, Gift } from 'lucide-react';
 
 interface CustomerAuthFormProps {
   onAuthSuccess: (profile: CustomerProfile) => void;
@@ -32,6 +32,7 @@ export default function CustomerAuthForm({
   const [tanggalLahir, setTanggalLahir] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
 
   // Login Form States (Nomor HP & Password)
   const [loginPhone, setLoginPhone] = useState('');
@@ -53,6 +54,7 @@ export default function CustomerAuthForm({
     setTanggalLahir('');
     setRegPassword('');
     setConfirmPassword('');
+    setReferralCode('');
     setLoginPhone('');
     setLoginPassword('');
   };
@@ -144,7 +146,7 @@ export default function CustomerAuthForm({
 
     setLoading(true);
     try {
-      const res = await registerCustomer(cleanNama, cleanHp, tanggalLahir, regPassword);
+      const res = await registerCustomer(cleanNama, cleanHp, tanggalLahir, regPassword, referralCode.trim());
       if (res.success && res.profile) {
         setSuccessMsg('Pendaftaran berhasil! Membuka akun member...');
         onAuthSuccess(res.profile);
@@ -340,6 +342,38 @@ export default function CustomerAuthForm({
                 className="w-full pl-10 pr-4 py-2.5 bg-[#F9FAFB] border border-[#D0D5DD] rounded-xl text-sm text-[#172033] focus:outline-none focus:ring-2 focus:ring-[#C39A6B]/20 focus:border-[#C39A6B] disabled:opacity-60 transition-all"
               />
             </div>
+          </div>
+
+          {/* 6. Kode Referral (Opsional) */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-[#344054] uppercase tracking-wider">
+                Kode Referral <span className="text-gray-400 font-normal lowercase">(opsional)</span>
+              </label>
+              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                Bonus +50 Poin
+              </span>
+            </div>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-[#98A2B3]">
+                <Gift className="w-4 h-4 text-[#C39A6B]" />
+              </span>
+              <input
+                id="input-reg-referral-code"
+                type="text"
+                disabled={loading}
+                placeholder="Contoh: LET892ABC"
+                value={referralCode}
+                onChange={(e) => {
+                  clearAlerts();
+                  setReferralCode(e.target.value.toUpperCase());
+                }}
+                className="w-full pl-10 pr-4 py-2.5 bg-[#F9FAFB] border border-[#D0D5DD] rounded-xl text-sm font-mono text-[#172033] placeholder:font-sans uppercase focus:outline-none focus:ring-2 focus:ring-[#C39A6B]/20 focus:border-[#C39A6B] disabled:opacity-60 transition-all tracking-wider"
+              />
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+              Punya kode referral dari teman? Masukkan untuk mendapatkan bonus 50 poin setelah transaksi pertamamu.
+            </p>
           </div>
 
           {/* Tombol Submit Register */}

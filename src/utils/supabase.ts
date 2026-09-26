@@ -461,6 +461,9 @@ function extractCustomerProfile(rawCustomer: any): CustomerProfile {
   const nama = obj.namaLengkap || obj.nama_lengkap || obj.nama || obj.full_name || 'Member Leton';
   const hp = obj.nomorHp || obj.nomor_hp || obj.phone || obj.handphone || '';
   const birthDate = obj.tanggalLahir || obj.tanggal_lahir || obj.birth_date || obj.birthdate || '';
+  const referralCode = obj.referralCode || obj.referral_code || undefined;
+  const referredBy = obj.referredBy || obj.referred_by || null;
+  const referralRewarded = Boolean(obj.referralRewarded || obj.referral_rewarded);
   const createdAt = obj.createdAt || obj.created_at || new Date().toISOString();
   const updatedAt = obj.updatedAt || obj.updated_at || new Date().toISOString();
 
@@ -470,6 +473,9 @@ function extractCustomerProfile(rawCustomer: any): CustomerProfile {
     namaLengkap: String(nama),
     nomorHp: String(hp),
     tanggalLahir: String(birthDate),
+    referralCode: referralCode ? String(referralCode) : undefined,
+    referredBy: referredBy ? String(referredBy) : null,
+    referralRewarded,
     createdAt: String(createdAt),
     updatedAt: String(updatedAt),
   };
@@ -501,6 +507,9 @@ function parseRpcResponse(rawData: any): { success: boolean; token?: string; cus
     pointsBalance: parsed.points_balance,
     totalPointsEarned: parsed.total_points_earned,
     totalPointsRedeemed: parsed.total_points_redeemed,
+    referral_code: parsed.referral_code,
+    referred_by: parsed.referred_by,
+    referral_rewarded: parsed.referral_rewarded,
   } : undefined);
 
   return {
@@ -512,19 +521,21 @@ function parseRpcResponse(rawData: any): { success: boolean; token?: string; cus
 }
 
 /**
- * Register a new customer with Nama Lengkap, Nomor HP, Tanggal Lahir, and Password.
+ * Register a new customer with Nama Lengkap, Nomor HP, Tanggal Lahir, Password, and Optional Referral Code.
  * Password is cryptographically hashed with bcrypt on the server-side.
- * Never generates or uses fake emails.
+ * Generates a unique 6-character referral code (LETXXXXXX) once upon creation.
  */
 export async function registerCustomer(
   namaLengkap: string,
   nomorHp: string,
   tanggalLahir: string,
-  password: string
+  password: string,
+  rawReferralCode?: string
 ): Promise<{ success: boolean; profile?: CustomerProfile; error?: string }> {
   try {
     const cleanNama = (namaLengkap || '').trim();
     const cleanPhoneNumber = (nomorHp || '').replace(/[^0-9]/g, '');
+    const cleanReferral = (rawReferralCode || '').trim().toUpperCase();
 
     // Basic client-side validation
     if (!cleanNama || cleanNama.length < 2) {
@@ -541,6 +552,33 @@ export async function registerCustomer(
     }
 
     const client = getSupabase();
+    let validatedReferrerId: string | null = null;
+
+    // Validate referral code if provided
+    if (cleanReferral) {
+      const { data: refOwner, error: refErr } = await client
+        .from('customers')
+        .select('id, nomor_hp, nama_lengkap')
+        .ilike('referral_code', cleanReferral)
+        .maybeSingle();
+
+      if (refErr || !refOwner) {
+        return {
+          success: false,
+          error: `Kode referral "${cleanReferral}" tidak ditemukan atau tidak valid. Kosongkan jika tidak memiliki kode.`,
+        };
+      }
+
+      const refOwnerPhone = (refOwner.nomor_hp || '').replace(/[^0-9]/g, '');
+      if (refOwnerPhone && (refOwnerPhone === cleanPhoneNumber || cleanPhoneNumber.endsWith(refOwnerPhone))) {
+        return {
+          success: false,
+          error: 'Anda tidak dapat menggunakan kode referral Anda sendiri.',
+        };
+      }
+
+      validatedReferrerId = refOwner.id;
+    }
 
     // Call secure PostgreSQL function (SECURITY DEFINER)
     const { data, error } = await client.rpc('customer_register', {
@@ -569,6 +607,27 @@ export async function registerCustomer(
 
     const sessionToken = parsed.token;
     const profile = extractCustomerProfile(parsed.customer);
+
+    // Generate unique referral code for the new member
+    const newReferralCode = 'LET' + Math.random().toString(36).substring(2, 8).toUpperCase();
+    profile.referralCode = newReferralCode;
+    profile.referredBy = validatedReferrerId;
+    profile.referralRewarded = false;
+
+    // Attach referral columns in public.customers once
+    try {
+      const adminClient = getSupabase('super_admin');
+      await adminClient
+        .from('customers')
+        .update({
+          referral_code: newReferralCode,
+          referred_by: validatedReferrerId,
+          referral_rewarded: false,
+        })
+        .eq('id', profile.id);
+    } catch (refUpdateErr) {
+      console.warn('[Customer Register Referral update notice]:', refUpdateErr);
+    }
 
     // Persist session token and profile safely
     if (typeof window !== 'undefined') {
@@ -666,7 +725,7 @@ export async function loginCustomer(
 
       const { data: matchedCustomers, error: lookupErr } = await adminClient
         .from('customers')
-        .select('id, nama_lengkap, nomor_hp, tanggal_lahir, password_hash, points_balance, total_points_earned, total_points_redeemed')
+        .select('id, nama_lengkap, nomor_hp, tanggal_lahir, password_hash, points_balance, total_points_earned, total_points_redeemed, referral_code, referred_by, referral_rewarded')
         .in('nomor_hp', phoneCandidates)
         .limit(1);
 
@@ -697,6 +756,20 @@ export async function loginCustomer(
             if (parsed2.success) {
               const sessionToken = parsed2.token;
               const profile = extractCustomerProfile(parsed2.customer || customerRecord);
+
+              // If profile is missing referralCode, retain or generate once
+              if (!profile.referralCode && customerRecord.referral_code) {
+                profile.referralCode = customerRecord.referral_code;
+              } else if (!profile.referralCode) {
+                profile.referralCode = 'LET' + Math.random().toString(36).substring(2, 8).toUpperCase();
+                adminClient.from('customers').update({ referral_code: profile.referralCode }).eq('id', profile.id).then(() => {});
+              }
+              if (profile.referredBy === undefined && customerRecord.referred_by !== undefined) {
+                profile.referredBy = customerRecord.referred_by;
+              }
+              if (profile.referralRewarded === undefined && customerRecord.referral_rewarded !== undefined) {
+                profile.referralRewarded = Boolean(customerRecord.referral_rewarded);
+              }
 
               if (typeof window !== 'undefined') {
                 if (sessionToken) {
@@ -763,12 +836,22 @@ export async function loginCustomer(
               }
             } catch {}
 
+            // Ensure referral code is assigned if missing
+            let userReferralCode = customerRecord.referral_code;
+            if (!userReferralCode) {
+              userReferralCode = 'LET' + Math.random().toString(36).substring(2, 8).toUpperCase();
+              adminClient.from('customers').update({ referral_code: userReferralCode }).eq('id', customerRecord.id).then(() => {});
+            }
+
             const profile: CustomerProfile = extractCustomerProfile({
               id: customerRecord.id,
               userId: customerRecord.id,
               namaLengkap: customerRecord.nama_lengkap,
               nomorHp: customerRecord.nomor_hp,
               tanggalLahir: customerRecord.tanggal_lahir ? String(customerRecord.tanggal_lahir).split('T')[0] : '',
+              referralCode: userReferralCode,
+              referredBy: customerRecord.referred_by || null,
+              referralRewarded: Boolean(customerRecord.referral_rewarded),
             });
 
             if (typeof window !== 'undefined') {

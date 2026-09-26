@@ -11,6 +11,9 @@ export interface RegisteredCustomer {
   totalPointsRedeemed: number;
   status: 'ACTIVE' | 'INACTIVE';
   inactiveAt?: string | null;
+  referralCode?: string;
+  referredBy?: string | null;
+  referralRewarded?: boolean;
   createdAt: string;
   updatedAt?: string;
 }
@@ -41,6 +44,9 @@ function normalizeCustomerRow(row: any): RegisteredCustomer {
     totalPointsRedeemed: Number(row.total_points_redeemed || row.totalPointsRedeemed || 0),
     status: row.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE',
     inactiveAt: row.inactive_at || row.inactiveAt || null,
+    referralCode: row.referral_code || row.referralCode || undefined,
+    referredBy: row.referred_by || row.referredBy || null,
+    referralRewarded: Boolean(row.referral_rewarded || row.referralRewarded),
     createdAt: row.created_at || row.createdAt || new Date().toISOString(),
     updatedAt: row.updated_at || row.updatedAt,
   };

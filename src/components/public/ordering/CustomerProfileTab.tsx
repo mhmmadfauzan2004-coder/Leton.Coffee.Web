@@ -22,6 +22,9 @@ import {
   QrCode,
   X,
   Lock,
+  Copy,
+  Share2,
+  Users,
 } from 'lucide-react';
 import {
   getCustomerLoyalty,
@@ -73,6 +76,7 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
 
   // Carousel Swipe Card states (0: Silver, 1: Gold, 2: Platinum)
   const [activeCardIndex, setActiveCardIndex] = useState<number>(0);
+  const [copiedReferral, setCopiedReferral] = useState<boolean>(false);
   const carouselRef = useRef<HTMLDivElement | null>(null);
   const initialPositionSetRef = useRef<boolean>(false);
 
@@ -1002,6 +1006,98 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
             </div>
           </form>
         </div>
+
+        {/* MEMBER GET MEMBER / REFERRAL CARD */}
+        {(() => {
+          const userReferralCode =
+            profile.referralCode ||
+            `LET${(profile.id || profile.userId || '123456').replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`;
+
+          return (
+            <div className="bg-gradient-to-br from-[#172033] via-[#1E293B] to-[#0F172A] rounded-2xl border border-slate-700/60 p-5 shadow-lg text-white relative overflow-hidden">
+              {/* Ambient Gold Glow */}
+              <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#D4AF37]/15 blur-2xl rounded-full pointer-events-none" />
+
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/20 border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37]">
+                      <Gift className="w-4 h-4 text-[#D4AF37]" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm tracking-wide text-white">Member Get Member</h4>
+                      <p className="text-[10px] text-slate-300">Ajak Teman, Raih Poin Bersama</p>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-[#D4AF37]/20 border border-[#D4AF37]/40 text-[#D4AF37] font-bold text-[10px] font-mono">
+                    +100 PTS
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed mb-4">
+                  Bagikan kode referral Anda ke teman. Dapatkan <span className="text-[#D4AF37] font-bold">100 poin</span> saat teman melakukan transaksi pertamanya, dan teman Anda mendapatkan bonus <span className="text-[#D4AF37] font-bold">50 poin</span>!
+                </p>
+
+                {/* Referral Code Box */}
+                <div className="bg-black/40 border border-slate-600/60 rounded-xl p-3 mb-3 flex items-center justify-between">
+                  <div>
+                    <span className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold block">Kode Referral Anda</span>
+                    <span className="text-lg font-mono font-extrabold tracking-widest text-amber-300">
+                      {userReferralCode}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                        navigator.clipboard.writeText(userReferralCode);
+                        setCopiedReferral(true);
+                        setTimeout(() => setCopiedReferral(false), 2500);
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                  >
+                    {copiedReferral ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400">Tersalin!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Salin</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Share Button via WhatsApp */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const shareText = encodeURIComponent(
+                      `Hai! Gabung jadi member Leton Coffee pakai kode referral saya: *${userReferralCode}* dan dapatkan bonus 50 poin loyalty di pesanan pertamamu! ☕ https://${typeof window !== 'undefined' ? window.location.host : 'letoncoffee.com'}`
+                    );
+                    if (typeof window !== 'undefined') {
+                      window.open(`https://api.whatsapp.com/send?text=${shareText}`, '_blank');
+                    }
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md active:scale-98 cursor-pointer"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Bagikan via WhatsApp</span>
+                </button>
+
+                {profile.referredBy && (
+                  <p className="text-[10px] text-emerald-400/90 font-medium text-center mt-2.5 flex items-center justify-center gap-1">
+                    <Check className="w-3 h-3 text-emerald-400" />
+                    <span>Anda bergabung menggunakan kode referral teman</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* 2. DUAL TAB BAR: ORDERS HISTORY vs LOYALTY PORTAL */}

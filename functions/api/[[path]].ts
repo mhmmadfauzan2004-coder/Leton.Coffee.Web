@@ -454,7 +454,169 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   // ----------------------------------------------------------------------------
-  // 9. DEFAULT / UNHANDLED API ROUTE
+  // 9. MEMBERSHIP TIER SETTINGS: GET /api/membership-tier-settings
+  // ----------------------------------------------------------------------------
+  if (pathname === '/api/membership-tier-settings' && method === 'GET') {
+    const defaultSettings = {
+      id: 'default',
+      silverMinTransactions: 0,
+      goldMinTransactions: 10,
+      platinumMinTransactions: 25,
+      updatedAt: new Date().toISOString(),
+      updatedBy: 'system',
+    };
+
+    try {
+      const supabase = getSupabase(env, true);
+      const { data: contentRow, error: contentErr } = await supabase
+        .from('leton_content')
+        .select('*')
+        .eq('id', 'membership_tier_settings')
+        .maybeSingle();
+
+      if (!contentErr && contentRow && contentRow.content) {
+        return jsonResponse(
+          {
+            success: true,
+            settings: {
+              ...defaultSettings,
+              ...contentRow.content,
+            },
+          },
+          200,
+          request
+        );
+      }
+    } catch (err: any) {
+      console.warn('[Cloudflare Pages Functions] Read membership tier settings exception:', err?.message || err);
+    }
+
+    return jsonResponse({ success: true, settings: defaultSettings }, 200, request);
+  }
+
+  // ----------------------------------------------------------------------------
+  // 10. MEMBERSHIP TIER SETTINGS: POST /api/admin/membership-tier-settings
+  // Strictly Protected: Only Super Admin can modify membership thresholds.
+  // ----------------------------------------------------------------------------
+  if (
+    (pathname === '/api/admin/membership-tier-settings' || pathname === '/api/membership-tier-settings') &&
+    method === 'POST'
+  ) {
+    const auth = await verifyAdminAuth(request, env);
+    if (!auth.isValid) {
+      return jsonResponse(
+        {
+          success: false,
+          error: 'Unauthorized: Sesi admin tidak valid atau telah kedaluwarsa. Silakan login kembali sebagai Super Admin.',
+        },
+        401,
+        request
+      );
+    }
+
+    // Role enforcement: Only Super Admin is allowed to modify tier thresholds
+    const headerRole = request.headers.get('x-admin-role') || '';
+    if (auth.role !== 'super_admin' || headerRole === 'outlet_admin') {
+      return jsonResponse(
+        {
+          success: false,
+          error: 'Akses Ditolak: Hanya Super Admin / Admin Pusat yang dapat mengubah threshold tier.',
+        },
+        403,
+        request
+      );
+    }
+
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {
+      return jsonResponse({ success: false, error: 'Format data JSON tidak valid.' }, 400, request);
+    }
+
+    const { silverMinTransactions, goldMinTransactions, platinumMinTransactions } = body || {};
+    const silver = Number(silverMinTransactions);
+    const gold = Number(goldMinTransactions);
+    const platinum = Number(platinumMinTransactions);
+
+    if (isNaN(silver) || silver < 0) {
+      return jsonResponse({ success: false, error: 'Threshold Silver minimal 0 transaksi.' }, 400, request);
+    }
+    if (isNaN(gold) || gold <= silver) {
+      return jsonResponse(
+        { success: false, error: `Threshold Gold (${gold}) harus lebih besar dari Silver (${silver}).` },
+        400,
+        request
+      );
+    }
+    if (isNaN(platinum) || platinum <= gold) {
+      return jsonResponse(
+        { success: false, error: `Threshold Platinum (${platinum}) harus lebih besar dari Gold (${gold}).` },
+        400,
+        request
+      );
+    }
+
+    const nowIso = new Date().toISOString();
+    const payloadToSave = {
+      id: 'default',
+      silverMinTransactions: Math.round(silver),
+      goldMinTransactions: Math.round(gold),
+      platinumMinTransactions: Math.round(platinum),
+      updatedAt: nowIso,
+      updatedBy: auth.username || 'Super Admin',
+    };
+
+    try {
+      const supabase = getSupabase(env, true);
+      const { error: sbErr } = await supabase.from('leton_content').upsert({
+        id: 'membership_tier_settings',
+        content: payloadToSave,
+        updated_at: nowIso,
+      });
+
+      if (sbErr) {
+        console.error('[Cloudflare Pages Functions] Supabase upsert error:', sbErr);
+        return jsonResponse(
+          { success: false, error: `Gagal menyimpan ke database Supabase: ${sbErr.message}` },
+          500,
+          request
+        );
+      }
+
+      // Also try dedicated table non-blockingly if present
+      try {
+        await supabase.from('membership_tier_settings').upsert({
+          id: 'default',
+          silver_min_transactions: Math.round(silver),
+          gold_min_transactions: Math.round(gold),
+          platinum_min_transactions: Math.round(platinum),
+          updated_at: nowIso,
+          updated_by: auth.username || 'Super Admin',
+        });
+      } catch {}
+
+      return jsonResponse(
+        {
+          success: true,
+          message: 'Konfigurasi Membership Tier berhasil disimpan ke database Supabase.',
+          settings: payloadToSave,
+        },
+        200,
+        request
+      );
+    } catch (err: any) {
+      console.error('[Cloudflare Pages Functions] Save membership tier settings exception:', err);
+      return jsonResponse(
+        { success: false, error: err?.message || 'Terjadi kesalahan sistem saat menyimpan ke database.' },
+        500,
+        request
+      );
+    }
+  }
+
+  // ----------------------------------------------------------------------------
+  // 11. DEFAULT / UNHANDLED API ROUTE
   // ----------------------------------------------------------------------------
   return jsonResponse(
     {

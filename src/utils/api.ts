@@ -26,12 +26,9 @@ export function getApiBaseUrl(): string {
     return cleanEnvApiUrl;
   }
 
-  // Strict production check: do not silently fallback to sandbox preview
+  // On production external host without custom external backend, use same-domain Pages Functions
   if (isProductionExternalHost()) {
-    console.error(
-      '[API Config Error] VITE_API_URL belum dikonfigurasi di environment production Cloudflare Pages. ' +
-      'AI Studio preview URL tidak digunakan sebagai fallback di production.'
-    );
+    // Relative path routes directly to Cloudflare Pages Functions (/functions/api/[[path]].ts)
     return '';
   }
 

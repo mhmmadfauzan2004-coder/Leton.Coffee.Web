@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CustomerProfile, CustomerOrder } from '../../../types';
 import { getSupabase, updateCustomerProfile, getCustomerOrdersRpc, getCustomerSessionToken } from '../../../utils/supabase';
 import { formatOrderDateTime } from '../../../utils/formatters';
@@ -21,6 +21,7 @@ import {
   Check,
   QrCode,
   X,
+  Lock,
 } from 'lucide-react';
 import {
   getCustomerLoyalty,
@@ -69,6 +70,51 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
   const [tierSettings, setTierSettings] = useState<MembershipTierSettings>(DEFAULT_MEMBERSHIP_TIER_SETTINGS);
   const [tierData, setTierData] = useState<CalculatedCustomerTier | null>(null);
   const [showTierModal, setShowTierModal] = useState<boolean>(false);
+
+  // Carousel Swipe Card states (0: Silver, 1: Gold, 2: Platinum)
+  const [activeCardIndex, setActiveCardIndex] = useState<number>(0);
+  const carouselRef = useRef<HTMLDivElement | null>(null);
+  const initialPositionSetRef = useRef<boolean>(false);
+
+  // Auto-position carousel to current active tier on load
+  useEffect(() => {
+    if (!tierData) return;
+    const targetIdx = tierData.tier === 'PLATINUM' ? 2 : tierData.tier === 'GOLD' ? 1 : 0;
+    setActiveCardIndex(targetIdx);
+
+    const timer = setTimeout(() => {
+      if (carouselRef.current) {
+        const width = carouselRef.current.clientWidth;
+        carouselRef.current.scrollTo({
+          left: targetIdx * width,
+          behavior: 'smooth',
+        });
+        initialPositionSetRef.current = true;
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [tierData?.tier]);
+
+  const handleCarouselScroll = () => {
+    if (!carouselRef.current) return;
+    const { scrollLeft, clientWidth } = carouselRef.current;
+    if (clientWidth > 0) {
+      const newIdx = Math.round(scrollLeft / clientWidth);
+      if (newIdx >= 0 && newIdx <= 2 && newIdx !== activeCardIndex) {
+        setActiveCardIndex(newIdx);
+      }
+    }
+  };
+
+  const scrollToTierCard = (index: number) => {
+    if (!carouselRef.current) return;
+    const width = carouselRef.current.clientWidth;
+    carouselRef.current.scrollTo({
+      left: index * width,
+      behavior: 'smooth',
+    });
+    setActiveCardIndex(index);
+  };
 
   // Form Edit Profile
   const [namaLengkap, setNamaLengkap] = useState(profile?.namaLengkap || '');
@@ -397,282 +443,436 @@ export default function CustomerProfileTab({ profile, onLogout, onProfileUpdate,
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* 1. KARTU PROFIL, MEMBER CARD & EDIT DATA */}
       <div className="lg:col-span-1 space-y-4">
-        {/* DYNAMIC 3-LEVEL MEMBERSHIP CARD (Stitch Final Design System) */}
+        {/* DYNAMIC 3-LEVEL MEMBERSHIP CAROUSEL (Stitch Final Design System with Horizontal Swipe & Locked Tiers) */}
         {(() => {
           const currentTier = tierData?.tier || 'SILVER';
+          const validOrdersCount = orders.filter(isOrderValidForTier).length;
           const customerCode = profile?.nomorHp
             ? profile.nomorHp.replace(/\D/g, '').slice(-7).padStart(7, '0')
             : (profile?.id || '8821904').slice(0, 7);
           const expiryYear = (new Date().getFullYear() % 100) + 2;
 
-          if (currentTier === 'PLATINUM') {
-            return (
-              <div className="group relative rounded-2xl p-[1px] bg-gradient-to-b from-[#0F2C59]/30 via-slate-300/60 to-[#0F2C59]/20 shadow-[0_16px_36px_-8px_rgba(15,44,89,0.16)] transition-all duration-300 hover:-translate-y-0.5">
-                <div
-                  className="relative w-full rounded-[15px] p-5 sm:p-6 flex flex-col justify-between overflow-hidden border border-slate-200/90"
-                  style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 50%, #EDF2F7 100%)' }}
-                >
-                  {/* Iridescent Sapphire Glow */}
-                  <div className="absolute -top-14 -right-14 w-52 h-52 bg-blue-100/60 blur-3xl rounded-full pointer-events-none" />
-                  <div className="absolute inset-0 bg-gradient-to-br from-white/90 via-transparent to-slate-100/60 pointer-events-none" />
+          const silverMin = tierSettings.silverMinTransactions ?? 0;
+          const goldMin = tierSettings.goldMinTransactions ?? 10;
+          const platinumMin = tierSettings.platinumMinTransactions ?? 25;
 
-                  {/* Top Header: Monogram & Tier Badge */}
-                  <div className="relative z-10 flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-[#0F2C59]/10 border border-[#0F2C59]/20 flex items-center justify-center text-[#0F2C59] shadow-inner shrink-0">
-                        <Coffee className="w-5 h-5 text-[#0F2C59]" />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-sm sm:text-base text-[#0F2C59] font-bold tracking-wider leading-none">LETON COFFEE</span>
-                        <span className="text-[9px] tracking-[0.22em] text-[#0F2C59]/75 uppercase mt-1 font-semibold">Elite Atelier</span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowTierModal(true)}
-                      className="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-[#0F2C59]/10 border border-[#0F2C59]/20 backdrop-blur-md shadow-xs text-[#0F2C59] hover:bg-[#0F2C59]/15 transition-all cursor-pointer"
-                      title="Lihat info tingkatan tier membership"
-                    >
-                      <Award className="w-3.5 h-3.5 text-[#0F2C59]" />
-                      <span className="text-[10px] font-bold tracking-wider uppercase">PLATINUM TIER</span>
-                    </button>
-                  </div>
+          const isSilverUnlocked = true;
+          const isGoldUnlocked = validOrdersCount >= goldMin;
+          const isPlatinumUnlocked = validOrdersCount >= platinumMin;
 
-                  {/* Middle: Saldo Poin Aktif */}
-                  <div className="relative z-10 my-2">
-                    <span className="text-[11px] uppercase text-[#0F2C59]/80 tracking-wider font-semibold block">Saldo Poin Aktif</span>
-                    <div className="flex items-baseline gap-2 mt-0.5">
-                      <span className="text-3xl sm:text-4xl leading-tight text-[#0F172A] font-extrabold tracking-tight">
-                        {loyaltyData ? loyaltyData.pointsBalance.toLocaleString('id-ID') : 0}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded-md bg-[#0F2C59]/10 border border-[#0F2C59]/20 text-[#0F2C59] font-bold">PTS</span>
-                    </div>
-                  </div>
-
-                  {/* Stats Dual-Column Grid */}
-                  <div className="relative z-10 grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-100/90 border border-slate-200 backdrop-blur-md mb-4">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] uppercase text-slate-500 font-medium">Total Diperoleh</span>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-xs sm:text-sm text-[#0F172A] font-bold">
-                          +{loyaltyData ? loyaltyData.totalPointsEarned.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-slate-500">Pts</span>
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col pl-3 border-l border-slate-300">
-                      <span className="text-[10px] uppercase text-slate-500 font-medium">Telah Ditukar</span>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-xs sm:text-sm text-[#0F172A] font-bold">
-                          -{loyaltyData ? loyaltyData.totalPointsRedeemed.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-slate-500">Pts</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card CTA Action Button */}
-                  <div className="relative z-10">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveSection('loyalty');
-                        const element = document.getElementById('customer-tab-content-card');
-                        if (element) element.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                      className="w-full py-2.5 px-4 rounded-xl bg-[#0F2C59] hover:bg-[#163a75] text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-md shadow-blue-900/20 active:scale-[0.98] cursor-pointer"
-                    >
-                      <Gift className="w-3.5 h-3.5" />
-                      <span>Tukar Point Reward</span>
-                      <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
-                    </button>
-                  </div>
-
-                  {/* Card Meta Footer */}
-                  <div className="relative z-10 flex items-center justify-between mt-3 pt-2 border-t border-slate-200 text-[#0F2C59]/80 text-[9px] font-mono">
-                    <span>ID: #LC-{customerCode}</span>
-                    <span>VALID THRU: 12/{expiryYear}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          }
-
-          if (currentTier === 'GOLD') {
-            return (
-              <div className="group relative rounded-2xl p-[1px] bg-gradient-to-b from-[#D4AF37] via-[#91751D]/60 to-[#D4AF37]/30 shadow-[0_16px_36px_-8px_rgba(212,175,55,0.3)] transition-all duration-300 hover:-translate-y-0.5">
-                <div
-                  className="relative w-full rounded-[15px] p-5 sm:p-6 flex flex-col justify-between overflow-hidden"
-                  style={{ background: 'linear-gradient(135deg, #0B132B 0%, #152449 60%, #070D1E 100%)' }}
-                >
-                  {/* Warm Amber & Champagne Specular Glow */}
-                  <div className="absolute -top-16 -right-16 w-56 h-56 bg-amber-400/20 blur-3xl rounded-full pointer-events-none" />
-                  <div className="absolute bottom-0 left-0 w-44 h-44 bg-amber-400/10 blur-2xl rounded-full pointer-events-none" />
-                  <div className="absolute inset-0 bg-[radial-gradient(#D4AF37_1px,transparent_1px)] [background-size:18px_18px] opacity-15 pointer-events-none" />
-
-                  {/* Top Header: Monogram & Tier Badge */}
-                  <div className="relative z-10 flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-amber-400/20 border border-amber-400/40 backdrop-blur-md flex items-center justify-center text-[#F5E6BE] shadow-inner shrink-0">
-                        <Coffee className="w-5 h-5 text-[#F5E6BE]" />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-sm sm:text-base text-[#F5E6BE] font-bold tracking-wider leading-none">LETON COFFEE</span>
-                        <span className="text-[9px] tracking-[0.22em] text-[#D4AF37] uppercase mt-1 font-semibold">Signature Reserve</span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowTierModal(true)}
-                      className="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-amber-400/15 border border-[#D4AF37]/50 backdrop-blur-md shadow-xs text-[#F5E6BE] hover:bg-amber-400/25 transition-all cursor-pointer"
-                      title="Lihat info tingkatan tier membership"
-                    >
-                      <Award className="w-3.5 h-3.5 text-[#F5E6BE]" />
-                      <span className="text-[10px] font-bold tracking-wider uppercase">GOLD TIER</span>
-                    </button>
-                  </div>
-
-                  {/* Middle: Saldo Poin Aktif */}
-                  <div className="relative z-10 my-2">
-                    <span className="text-[11px] uppercase text-[#D4AF37] tracking-wider font-semibold block">Saldo Poin Aktif</span>
-                    <div className="flex items-baseline gap-2 mt-0.5">
-                      <span className="text-3xl sm:text-4xl leading-tight text-white font-extrabold tracking-tight">
-                        {loyaltyData ? loyaltyData.pointsBalance.toLocaleString('id-ID') : 0}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded-md bg-amber-400/20 border border-amber-400/30 text-[#F5E6BE] font-bold">PTS</span>
-                    </div>
-                  </div>
-
-                  {/* Stats Dual-Column Grid */}
-                  <div className="relative z-10 grid grid-cols-2 gap-3 p-3 rounded-xl bg-black/40 border border-[#D4AF37]/25 backdrop-blur-md mb-4">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] uppercase text-slate-300/80 font-medium">Total Diperoleh</span>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-xs sm:text-sm text-white font-bold">
-                          +{loyaltyData ? loyaltyData.totalPointsEarned.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-slate-400">Pts</span>
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col pl-3 border-l border-[#D4AF37]/25">
-                      <span className="text-[10px] uppercase text-slate-300/80 font-medium">Telah Ditukar</span>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-xs sm:text-sm text-white font-bold">
-                          -{loyaltyData ? loyaltyData.totalPointsRedeemed.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-slate-400">Pts</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card CTA Action Button */}
-                  <div className="relative z-10">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveSection('loyalty');
-                        const element = document.getElementById('customer-tab-content-card');
-                        if (element) element.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                      className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#E5B842] via-[#D4AF37] to-[#E5B842] hover:brightness-105 text-[#241A00] text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-amber-500/20 active:scale-[0.98] cursor-pointer"
-                    >
-                      <Gift className="w-3.5 h-3.5" />
-                      <span>Tukar Point Reward</span>
-                      <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
-                    </button>
-                  </div>
-
-                  {/* Card Meta Footer */}
-                  <div className="relative z-10 flex items-center justify-between mt-3 pt-2 border-t border-[#D4AF37]/25 text-[#D4AF37]/90 text-[9px] font-mono">
-                    <span>ID: #LC-{customerCode}</span>
-                    <span>VALID THRU: 12/{expiryYear}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          }
-
-          // Default: SILVER TIER (Frosted Silver-Blue / Palladium)
           return (
-            <div className="group relative rounded-2xl p-[1px] bg-gradient-to-b from-slate-200 via-slate-300 to-slate-200 shadow-[0_14px_30px_-8px_rgba(71,85,105,0.18)] transition-all duration-300 hover:-translate-y-0.5">
-              <div
-                className="relative w-full rounded-[15px] p-5 sm:p-6 flex flex-col justify-between overflow-hidden"
-                style={{ background: 'linear-gradient(135deg, #7E9BB8 0%, #A3BCD3 48%, #6B8BAE 100%)' }}
-              >
-                {/* Specular Sheen */}
-                <div className="absolute -top-12 -right-12 w-48 h-48 bg-white/30 blur-2xl rounded-full pointer-events-none" />
-                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/15 to-transparent opacity-70 pointer-events-none" />
+            <div className="w-full space-y-3">
+              {/* Carousel Container — Strictly Confined to Card Area */}
+              <div className="relative w-full overflow-hidden rounded-2xl">
+                <div
+                  ref={carouselRef}
+                  onScroll={handleCarouselScroll}
+                  className="w-full overflow-x-auto snap-x snap-mandatory flex gap-4 scroll-smooth pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+                >
+                  {/* SLIDE 1: SILVER MEMBERSHIP (Frosted Silver-Blue / Palladium) */}
+                  <div className="w-full min-w-full shrink-0 snap-center select-none">
+                    <div className="group relative rounded-2xl p-[1px] bg-gradient-to-b from-slate-200 via-slate-300 to-slate-200 shadow-[0_14px_30px_-8px_rgba(71,85,105,0.18)] transition-all duration-300">
+                      <div
+                        className="relative w-full rounded-[15px] p-5 sm:p-6 flex flex-col justify-between overflow-hidden"
+                        style={{ background: 'linear-gradient(135deg, #7E9BB8 0%, #A3BCD3 48%, #6B8BAE 100%)' }}
+                      >
+                        {/* Specular Sheen */}
+                        <div className="absolute -top-12 -right-12 w-48 h-48 bg-white/30 blur-2xl rounded-full pointer-events-none" />
+                        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/15 to-transparent opacity-70 pointer-events-none" />
 
-                {/* Top Header: Monogram & Tier Badge */}
-                <div className="relative z-10 flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-white/25 backdrop-blur-md border border-white/40 flex items-center justify-center text-white shadow-inner shrink-0">
-                      <Coffee className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-sm sm:text-base text-white font-bold tracking-wider leading-none">LETON COFFEE</span>
-                      <span className="text-[9px] tracking-[0.22em] text-white/85 uppercase mt-1 font-medium">Private Club</span>
+                        {/* Top Header: Monogram & Tier Badge */}
+                        <div className="relative z-10 flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-white/25 backdrop-blur-md border border-white/40 flex items-center justify-center text-white shadow-inner shrink-0">
+                              <Coffee className="w-5 h-5 text-white" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-sm sm:text-base text-white font-bold tracking-wider leading-none">LETON COFFEE</span>
+                              <span className="text-[9px] tracking-[0.22em] text-white/85 uppercase mt-1 font-medium">Private Club</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {currentTier === 'SILVER' && (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/80 border border-emerald-300/60 text-white font-bold text-[9px] tracking-wider uppercase backdrop-blur-xs">
+                                Aktif
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setShowTierModal(true)}
+                              className="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-white/25 border border-white/40 backdrop-blur-md shadow-xs text-white hover:bg-white/30 transition-all cursor-pointer"
+                              title="Lihat info tingkatan tier membership"
+                            >
+                              <Award className="w-3.5 h-3.5 text-white" />
+                              <span className="text-[10px] font-bold tracking-wider uppercase">SILVER TIER</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Middle: Saldo Poin Aktif */}
+                        <div className="relative z-10 my-2">
+                          <span className="text-[11px] uppercase text-white/90 tracking-wider font-semibold block">Saldo Poin Aktif</span>
+                          <div className="flex items-baseline gap-2 mt-0.5">
+                            <span className="text-3xl sm:text-4xl leading-tight text-white font-extrabold tracking-tight drop-shadow-sm font-mono">
+                              {loyaltyData ? loyaltyData.pointsBalance.toLocaleString('id-ID') : 0}
+                            </span>
+                            <span className="text-xs px-2 py-0.5 rounded-md bg-white/25 border border-white/30 backdrop-blur-sm text-white font-bold">PTS</span>
+                          </div>
+                        </div>
+
+                        {/* Stats Dual-Column Grid */}
+                        <div className="relative z-10 grid grid-cols-2 gap-3 p-3 rounded-xl bg-black/15 backdrop-blur-md border border-white/20 mb-4">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] uppercase text-white/80 font-medium">Total Diperoleh</span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-xs sm:text-sm text-white font-bold font-mono">
+                                +{loyaltyData ? loyaltyData.totalPointsEarned.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-white/80 font-sans">Pts</span>
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-col pl-3 border-l border-white/20">
+                            <span className="text-[10px] uppercase text-white/80 font-medium">Telah Ditukar</span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-xs sm:text-sm text-white font-bold font-mono">
+                                -{loyaltyData ? loyaltyData.totalPointsRedeemed.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-white/80 font-sans">Pts</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Card CTA Action Button */}
+                        <div className="relative z-10">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveSection('loyalty');
+                              const element = document.getElementById('customer-tab-content-card');
+                              if (element) element.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                            className="w-full py-2.5 px-4 rounded-xl bg-white/90 hover:bg-white text-slate-800 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-[0.98] cursor-pointer"
+                          >
+                            <Gift className="w-3.5 h-3.5" />
+                            <span>Tukar Point Reward</span>
+                            <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+                          </button>
+                        </div>
+
+                        {/* Card Meta Footer */}
+                        <div className="relative z-10 flex items-center justify-between mt-3 pt-2 border-t border-white/20 text-white/80 text-[9px] font-mono">
+                          <span>ID: #LC-{customerCode}</span>
+                          <span>VALID THRU: 12/{expiryYear}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowTierModal(true)}
-                    className="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-white/25 border border-white/40 backdrop-blur-md shadow-xs text-white hover:bg-white/30 transition-all cursor-pointer"
-                    title="Lihat info tingkatan tier membership"
-                  >
-                    <Award className="w-3.5 h-3.5 text-white" />
-                    <span className="text-[10px] font-bold tracking-wider uppercase">SILVER TIER</span>
-                  </button>
-                </div>
 
-                {/* Middle: Saldo Poin Aktif */}
-                <div className="relative z-10 my-2">
-                  <span className="text-[11px] uppercase text-white/90 tracking-wider font-semibold block">Saldo Poin Aktif</span>
-                  <div className="flex items-baseline gap-2 mt-0.5">
-                    <span className="text-3xl sm:text-4xl leading-tight text-white font-extrabold tracking-tight drop-shadow-sm">
-                      {loyaltyData ? loyaltyData.pointsBalance.toLocaleString('id-ID') : 0}
-                    </span>
-                    <span className="text-xs px-2 py-0.5 rounded-md bg-white/25 border border-white/30 backdrop-blur-sm text-white font-bold">PTS</span>
-                  </div>
-                </div>
+                  {/* SLIDE 2: GOLD MEMBERSHIP (The Signature Reserve - Rich Navy & Gold) */}
+                  <div className="w-full min-w-full shrink-0 snap-center select-none">
+                    <div
+                      className={`group relative rounded-2xl p-[1px] bg-gradient-to-b from-[#D4AF37] via-[#91751D]/60 to-[#D4AF37]/30 shadow-[0_16px_36px_-8px_rgba(212,175,55,0.3)] transition-all duration-300 ${
+                        !isGoldUnlocked ? 'opacity-85' : ''
+                      }`}
+                    >
+                      <div
+                        className="relative w-full rounded-[15px] p-5 sm:p-6 flex flex-col justify-between overflow-hidden"
+                        style={{ background: 'linear-gradient(135deg, #0B132B 0%, #152449 60%, #070D1E 100%)' }}
+                      >
+                        {/* Amber Glow Specular */}
+                        <div className="absolute -top-16 -right-16 w-56 h-56 bg-amber-400/20 blur-3xl rounded-full pointer-events-none" />
+                        <div className="absolute bottom-0 left-0 w-44 h-44 bg-amber-400/10 blur-2xl rounded-full pointer-events-none" />
+                        <div className="absolute inset-0 bg-[radial-gradient(#D4AF37_1px,transparent_1px)] [background-size:18px_18px] opacity-15 pointer-events-none" />
 
-                {/* Stats Dual-Column Grid */}
-                <div className="relative z-10 grid grid-cols-2 gap-3 p-3 rounded-xl bg-black/15 backdrop-blur-md border border-white/20 mb-4">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-white/80 font-medium">Total Diperoleh</span>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <span className="text-xs sm:text-sm text-white font-bold">
-                        +{loyaltyData ? loyaltyData.totalPointsEarned.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-white/80">Pts</span>
-                      </span>
+                        {/* LOCKED OVERLAY (If not yet reached Gold threshold) */}
+                        {!isGoldUnlocked && (
+                          <div className="absolute inset-0 z-20 rounded-[15px] bg-black/65 backdrop-blur-[2px] flex flex-col items-center justify-center p-5 text-center select-none">
+                            <div className="w-12 h-12 rounded-2xl bg-amber-400/20 border border-amber-400/40 backdrop-blur-md flex items-center justify-center text-amber-300 mb-2 shadow-lg">
+                              <Lock className="w-6 h-6 text-amber-300" />
+                            </div>
+                            <span className="text-white font-extrabold text-sm tracking-wider uppercase drop-shadow-sm">
+                              GOLD TIER TERKUNCI
+                            </span>
+                            <p className="text-xs text-amber-200/90 font-medium mt-1">
+                              {goldMin} transaksi untuk membuka
+                            </p>
+                            {goldMin > validOrdersCount && (
+                              <span className="text-[10px] text-white/90 mt-1 px-3 py-0.5 rounded-full bg-black/40 border border-amber-400/30 font-mono">
+                                {goldMin - validOrdersCount} transaksi lagi
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Top Header: Monogram & Tier Badge */}
+                        <div className="relative z-10 flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-amber-400/20 border border-amber-400/40 backdrop-blur-md flex items-center justify-center text-[#F5E6BE] shadow-inner shrink-0">
+                              <Coffee className="w-5 h-5 text-[#F5E6BE]" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-sm sm:text-base text-[#F5E6BE] font-bold tracking-wider leading-none">LETON COFFEE</span>
+                              <span className="text-[9px] tracking-[0.22em] text-[#D4AF37] uppercase mt-1 font-semibold">Signature Reserve</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {currentTier === 'GOLD' && (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-500/80 border border-amber-300/60 text-white font-bold text-[9px] tracking-wider uppercase backdrop-blur-xs">
+                                Aktif
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setShowTierModal(true)}
+                              className="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-amber-400/15 border border-[#D4AF37]/50 backdrop-blur-md shadow-xs text-[#F5E6BE] hover:bg-amber-400/25 transition-all cursor-pointer"
+                              title="Lihat info tingkatan tier membership"
+                            >
+                              <Award className="w-3.5 h-3.5 text-[#F5E6BE]" />
+                              <span className="text-[10px] font-bold tracking-wider uppercase">GOLD TIER</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Middle: Saldo Poin Aktif */}
+                        <div className="relative z-10 my-2">
+                          <span className="text-[11px] uppercase text-[#D4AF37] tracking-wider font-semibold block">Saldo Poin Aktif</span>
+                          <div className="flex items-baseline gap-2 mt-0.5">
+                            <span className="text-3xl sm:text-4xl leading-tight text-white font-extrabold tracking-tight font-mono">
+                              {loyaltyData ? loyaltyData.pointsBalance.toLocaleString('id-ID') : 0}
+                            </span>
+                            <span className="text-xs px-2 py-0.5 rounded-md bg-amber-400/20 border border-amber-400/30 text-[#F5E6BE] font-bold">PTS</span>
+                          </div>
+                        </div>
+
+                        {/* Stats Dual-Column Grid */}
+                        <div className="relative z-10 grid grid-cols-2 gap-3 p-3 rounded-xl bg-black/40 border border-[#D4AF37]/25 backdrop-blur-md mb-4">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] uppercase text-slate-300/80 font-medium">Total Diperoleh</span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-xs sm:text-sm text-white font-bold font-mono">
+                                +{loyaltyData ? loyaltyData.totalPointsEarned.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-slate-400 font-sans">Pts</span>
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-col pl-3 border-l border-[#D4AF37]/25">
+                            <span className="text-[10px] uppercase text-slate-300/80 font-medium">Telah Ditukar</span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-xs sm:text-sm text-white font-bold font-mono">
+                                -{loyaltyData ? loyaltyData.totalPointsRedeemed.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-slate-400 font-sans">Pts</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Card CTA Action Button */}
+                        <div className="relative z-10">
+                          {isGoldUnlocked ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveSection('loyalty');
+                                const element = document.getElementById('customer-tab-content-card');
+                                if (element) element.scrollIntoView({ behavior: 'smooth' });
+                              }}
+                              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#E5B842] via-[#D4AF37] to-[#E5B842] hover:brightness-105 text-[#241A00] text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-amber-500/20 active:scale-[0.98] cursor-pointer"
+                            >
+                              <Gift className="w-3.5 h-3.5" />
+                              <span>Tukar Point Reward</span>
+                              <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              className="w-full py-2.5 px-4 rounded-xl bg-slate-800/80 text-slate-400 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 cursor-not-allowed opacity-60 border border-white/10"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                              <span>Tier Belum Terbuka</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Card Meta Footer */}
+                        <div className="relative z-10 flex items-center justify-between mt-3 pt-2 border-t border-[#D4AF37]/25 text-[#D4AF37]/90 text-[9px] font-mono">
+                          <span>ID: #LC-{customerCode}</span>
+                          <span>VALID THRU: 12/{expiryYear}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex flex-col pl-3 border-l border-white/20">
-                    <span className="text-[10px] uppercase text-white/80 font-medium">Telah Ditukar</span>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <span className="text-xs sm:text-sm text-white font-bold">
-                        -{loyaltyData ? loyaltyData.totalPointsRedeemed.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-white/80">Pts</span>
-                      </span>
+
+                  {/* SLIDE 3: PLATINUM MEMBERSHIP (The Elite Atelier - Pearl White & Royal Sapphire) */}
+                  <div className="w-full min-w-full shrink-0 snap-center select-none">
+                    <div
+                      className={`group relative rounded-2xl p-[1px] bg-gradient-to-b from-[#0F2C59]/30 via-slate-300/60 to-[#0F2C59]/20 shadow-[0_16px_36px_-8px_rgba(15,44,89,0.16)] transition-all duration-300 ${
+                        !isPlatinumUnlocked ? 'opacity-85' : ''
+                      }`}
+                    >
+                      <div
+                        className="relative w-full rounded-[15px] p-5 sm:p-6 flex flex-col justify-between overflow-hidden border border-slate-200/90"
+                        style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 50%, #EDF2F7 100%)' }}
+                      >
+                        {/* Iridescent Sapphire Glow */}
+                        <div className="absolute -top-14 -right-14 w-52 h-52 bg-blue-100/60 blur-3xl rounded-full pointer-events-none" />
+                        <div className="absolute inset-0 bg-gradient-to-br from-white/90 via-transparent to-slate-100/60 pointer-events-none" />
+
+                        {/* LOCKED OVERLAY (If not yet reached Platinum threshold) */}
+                        {!isPlatinumUnlocked && (
+                          <div className="absolute inset-0 z-20 rounded-[15px] bg-[#0F172A]/70 backdrop-blur-[2px] flex flex-col items-center justify-center p-5 text-center select-none">
+                            <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-400/40 backdrop-blur-md flex items-center justify-center text-cyan-300 mb-2 shadow-lg">
+                              <Lock className="w-6 h-6 text-cyan-300" />
+                            </div>
+                            <span className="text-white font-extrabold text-sm tracking-wider uppercase drop-shadow-sm">
+                              PLATINUM TIER TERKUNCI
+                            </span>
+                            <p className="text-xs text-cyan-200/90 font-medium mt-1">
+                              {platinumMin} transaksi untuk membuka
+                            </p>
+                            {platinumMin > validOrdersCount && (
+                              <span className="text-[10px] text-white/90 mt-1 px-3 py-0.5 rounded-full bg-black/40 border border-cyan-400/30 font-mono">
+                                {platinumMin - validOrdersCount} transaksi lagi
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Top Header: Monogram & Tier Badge */}
+                        <div className="relative z-10 flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-[#0F2C59]/10 border border-[#0F2C59]/20 flex items-center justify-center text-[#0F2C59] shadow-inner shrink-0">
+                              <Coffee className="w-5 h-5 text-[#0F2C59]" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-sm sm:text-base text-[#0F2C59] font-bold tracking-wider leading-none">LETON COFFEE</span>
+                              <span className="text-[9px] tracking-[0.22em] text-[#0F2C59]/75 uppercase mt-1 font-semibold">Elite Atelier</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {currentTier === 'PLATINUM' && (
+                              <span className="px-2 py-0.5 rounded-full bg-cyan-600/80 border border-cyan-300/60 text-white font-bold text-[9px] tracking-wider uppercase backdrop-blur-xs">
+                                Aktif
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setShowTierModal(true)}
+                              className="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full bg-[#0F2C59]/10 border border-[#0F2C59]/20 backdrop-blur-md shadow-xs text-[#0F2C59] hover:bg-[#0F2C59]/15 transition-all cursor-pointer"
+                              title="Lihat info tingkatan tier membership"
+                            >
+                              <Award className="w-3.5 h-3.5 text-[#0F2C59]" />
+                              <span className="text-[10px] font-bold tracking-wider uppercase">PLATINUM TIER</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Middle: Saldo Poin Aktif */}
+                        <div className="relative z-10 my-2">
+                          <span className="text-[11px] uppercase text-[#0F2C59]/80 tracking-wider font-semibold block">Saldo Poin Aktif</span>
+                          <div className="flex items-baseline gap-2 mt-0.5">
+                            <span className="text-3xl sm:text-4xl leading-tight text-[#0F172A] font-extrabold tracking-tight font-mono">
+                              {loyaltyData ? loyaltyData.pointsBalance.toLocaleString('id-ID') : 0}
+                            </span>
+                            <span className="text-xs px-2 py-0.5 rounded-md bg-[#0F2C59]/10 border border-[#0F2C59]/20 text-[#0F2C59] font-bold">PTS</span>
+                          </div>
+                        </div>
+
+                        {/* Stats Dual-Column Grid */}
+                        <div className="relative z-10 grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-100/90 border border-slate-200 backdrop-blur-md mb-4">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] uppercase text-slate-500 font-medium">Total Diperoleh</span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-xs sm:text-sm text-[#0F172A] font-bold font-mono">
+                                +{loyaltyData ? loyaltyData.totalPointsEarned.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-slate-500 font-sans">Pts</span>
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-col pl-3 border-l border-slate-300">
+                            <span className="text-[10px] uppercase text-slate-500 font-medium">Telah Ditukar</span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-xs sm:text-sm text-[#0F172A] font-bold font-mono">
+                                -{loyaltyData ? loyaltyData.totalPointsRedeemed.toLocaleString('id-ID') : 0} <span className="text-[10px] font-normal text-slate-500 font-sans">Pts</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Card CTA Action Button */}
+                        <div className="relative z-10">
+                          {isPlatinumUnlocked ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveSection('loyalty');
+                                const element = document.getElementById('customer-tab-content-card');
+                                if (element) element.scrollIntoView({ behavior: 'smooth' });
+                              }}
+                              className="w-full py-2.5 px-4 rounded-xl bg-[#0F2C59] hover:bg-[#163a75] text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-md shadow-blue-900/20 active:scale-[0.98] cursor-pointer"
+                            >
+                              <Gift className="w-3.5 h-3.5" />
+                              <span>Tukar Point Reward</span>
+                              <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              className="w-full py-2.5 px-4 rounded-xl bg-slate-200 text-slate-500 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 cursor-not-allowed opacity-60 border border-slate-300"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                              <span>Tier Belum Terbuka</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Card Meta Footer */}
+                        <div className="relative z-10 flex items-center justify-between mt-3 pt-2 border-t border-slate-200 text-[#0F2C59]/80 text-[9px] font-mono">
+                          <span>ID: #LC-{customerCode}</span>
+                          <span>VALID THRU: 12/{expiryYear}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
+              </div>
 
-                {/* Card CTA Action Button */}
-                <div className="relative z-10">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveSection('loyalty');
-                      const element = document.getElementById('customer-tab-content-card');
-                      if (element) element.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    className="w-full py-2.5 px-4 rounded-xl bg-white/90 hover:bg-white text-slate-800 text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-[0.98] cursor-pointer"
-                  >
-                    <Gift className="w-3.5 h-3.5" />
-                    <span>Tukar Point Reward</span>
-                    <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
-                  </button>
+              {/* CAROUSEL CONTROLS & INDICATOR (● ○ ○) */}
+              <div className="flex flex-col items-center justify-center pt-0.5 space-y-1">
+                <div className="flex items-center gap-2">
+                  {[
+                    { name: 'Silver', tier: 'SILVER', index: 0, unlocked: isSilverUnlocked },
+                    { name: 'Gold', tier: 'GOLD', index: 1, unlocked: isGoldUnlocked },
+                    { name: 'Platinum', tier: 'PLATINUM', index: 2, unlocked: isPlatinumUnlocked },
+                  ].map((item) => {
+                    const isSelected = activeCardIndex === item.index;
+                    return (
+                      <button
+                        key={item.tier}
+                        type="button"
+                        onClick={() => scrollToTierCard(item.index)}
+                        className={`transition-all duration-300 cursor-pointer ${
+                          isSelected
+                            ? 'w-6 h-2 bg-slate-800 rounded-full'
+                            : 'w-2 h-2 bg-slate-300 hover:bg-slate-400 rounded-full'
+                        }`}
+                        title={`Lihat ${item.name} Tier`}
+                      />
+                    );
+                  })}
                 </div>
-
-                {/* Card Meta Footer */}
-                <div className="relative z-10 flex items-center justify-between mt-3 pt-2 border-t border-white/20 text-white/80 text-[9px] font-mono">
-                  <span>ID: #LC-{customerCode}</span>
-                  <span>VALID THRU: 12/{expiryYear}</span>
+                <div className="flex items-center justify-between w-full text-[10px] text-slate-500 px-1 font-mono">
+                  <span className="flex items-center gap-1">
+                    <span>↔ Geser kartu</span>
+                  </span>
+                  <span className="font-bold text-slate-700">
+                    {activeCardIndex === 0 ? 'Silver' : activeCardIndex === 1 ? 'Gold' : 'Platinum'} Tier
+                    {currentTier === (activeCardIndex === 0 ? 'SILVER' : activeCardIndex === 1 ? 'GOLD' : 'PLATINUM') ? (
+                      <span className="ml-1 text-emerald-600 font-bold">(Aktif)</span>
+                    ) : (
+                      activeCardIndex === 1 && !isGoldUnlocked ? (
+                        <span className="ml-1 text-amber-600 font-medium">(Terkunci)</span>
+                      ) : activeCardIndex === 2 && !isPlatinumUnlocked ? (
+                        <span className="ml-1 text-cyan-700 font-medium">(Terkunci)</span>
+                      ) : null
+                    )}
+                  </span>
                 </div>
               </div>
             </div>

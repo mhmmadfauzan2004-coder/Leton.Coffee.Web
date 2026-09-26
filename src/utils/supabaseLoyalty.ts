@@ -1,5 +1,6 @@
 import { getSupabase } from './supabase';
 import { CustomerOrder } from '../types';
+import { getReferralRewardSettings } from './supabaseReferralSettings';
 
 export interface LoyaltySettings {
   id: string;
@@ -714,11 +715,12 @@ export async function processReferralRewardIfEligible(customerId: string): Promi
     const registry = await fetchCloudLoyaltyRegistry();
     const nowIso = new Date().toISOString();
 
-    // Reward amounts
-    const REFERRER_REWARD_POINTS = 100;
-    const MEMBER_REWARD_POINTS = 50;
+    // Reward amounts from dynamic settings
+    const { settings: referralSettings } = await getReferralRewardSettings();
+    const REFERRER_REWARD_POINTS = Number(referralSettings.referrer_reward ?? 100);
+    const MEMBER_REWARD_POINTS = Number(referralSettings.referred_reward ?? 50);
 
-    // a. Update Referrer (+100 points)
+    // a. Update Referrer (+points)
     const refCurrentLoyalty = await getCustomerLoyalty(referrerId, referrerData.nomor_hp);
     const refBefore = refCurrentLoyalty.pointsBalance;
     const refAfter = refBefore + REFERRER_REWARD_POINTS;

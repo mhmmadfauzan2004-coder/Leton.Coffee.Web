@@ -19,6 +19,7 @@ import { SalesReportManager } from './SalesReportManager';
 import { LoyaltyManager } from './LoyaltyManager';
 import { CustomerManager } from './CustomerManager';
 import { MembershipTierManager } from './MembershipTierManager';
+import { ReferralManager } from './ReferralManager';
 import {
   isPushSupported,
   getPushSubscription,
@@ -278,9 +279,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
     { id: 'orders', label: 'AUDIT PESANAN', icon: ShoppingBag },
     { id: 'customers', label: 'DATA CUSTOMER', icon: UserCheck },
     { id: 'membership-tiers', label: 'MEMBERSHIP TIER', icon: Award },
+    { id: 'referral-settings', label: 'MEMBER GET MEMBER', icon: Gift },
+    { id: 'loyalty', label: 'LOYALTY / POINT', icon: Gift },
     { id: 'stock', label: 'KONTROL STOK', icon: Boxes },
     { id: 'menu', label: 'MENU & KATEGORI', icon: UtensilsCrossed },
-    { id: 'loyalty', label: 'LOYALTY / POINT', icon: Gift },
   ];
 
   const contentItems = [
@@ -794,6 +796,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onBackToPublic }) => {
           {activeTab === 'sales' && !isOutletAdmin && <SalesReportManager />}
           {activeTab === 'customers' && !isOutletAdmin && <CustomerManager />}
           {activeTab === 'membership-tiers' && !isOutletAdmin && <MembershipTierManager />}
+          {activeTab === 'referral-settings' && !isOutletAdmin && <ReferralManager />}
           {activeTab === 'loyalty' && !isOutletAdmin && <LoyaltyManager />}
           {activeTab === 'orders' && <OrderManager />}
           {activeTab === 'stock' && <StockManager />}

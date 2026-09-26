@@ -1,8 +1,9 @@
 import { getSupabase } from './supabase';
 import { adjustCustomerPointsManual } from './supabaseLoyalty';
+import { getReferralRewardSettings, DEFAULT_REFERRAL_SETTINGS } from './supabaseReferralSettings';
 
-export const REFERRAL_REWARD_REFERRER = 100;
-export const REFERRAL_REWARD_NEW_MEMBER = 50;
+export const REFERRAL_REWARD_REFERRER = DEFAULT_REFERRAL_SETTINGS.referrer_reward;
+export const REFERRAL_REWARD_NEW_MEMBER = DEFAULT_REFERRAL_SETTINGS.referred_reward;
 
 export interface ReferredFriend {
   id: string;
@@ -145,13 +146,15 @@ export async function fetchCustomerReferralStats(
       }));
 
       const successfulCount = friends.filter((f) => f.isRewarded).length;
+      const { settings } = await getReferralRewardSettings();
+      const referrerRewardAmount = settings.referrer_reward;
 
       return {
         referralCode: activeCode,
         referredFriends: friends,
         totalReferred: friends.length,
         successfulReferrals: successfulCount,
-        totalPointsEarned: successfulCount * REFERRAL_REWARD_REFERRER,
+        totalPointsEarned: successfulCount * referrerRewardAmount,
       };
     }
 
@@ -211,11 +214,16 @@ export async function processReferralRewardOnFirstValidOrder(
 
     console.log(`[Referral System] Processing first valid order reward for new member ${newCustomerId} (Referrer: ${referrerId})`);
 
-    // 3. Award points to Referrer (+100 Points)
+    // Fetch dynamic reward configuration
+    const { settings: referralSettings } = await getReferralRewardSettings();
+    const referrerRewardPts = Number(referralSettings.referrer_reward ?? 100);
+    const newMemberRewardPts = Number(referralSettings.referred_reward ?? 50);
+
+    // 3. Award points to Referrer
     try {
       await adjustCustomerPointsManual(
         referrerId,
-        REFERRAL_REWARD_REFERRER,
+        referrerRewardPts,
         'MANUAL_ADD',
         `Bonus Referral: Temanmu (${customer.nama_lengkap || 'Member'}) menyelesaikan transaksi pertama (#${orderId})`,
         'System Referral'
@@ -224,11 +232,11 @@ export async function processReferralRewardOnFirstValidOrder(
       console.warn('[Referral System] Failed to award points to referrer:', refErr);
     }
 
-    // 4. Award points to New Member (+50 Points)
+    // 4. Award points to New Member
     try {
       await adjustCustomerPointsManual(
         newCustomerId,
-        REFERRAL_REWARD_NEW_MEMBER,
+        newMemberRewardPts,
         'MANUAL_ADD',
         `Bonus Referral: Selamat atas transaksi pertamamu (#${orderId})`,
         'System Referral'
@@ -237,7 +245,7 @@ export async function processReferralRewardOnFirstValidOrder(
       console.warn('[Referral System] Failed to award points to new member:', newErr);
     }
 
-    console.log(`[Referral System] Successfully awarded +${REFERRAL_REWARD_REFERRER} pts to Referrer and +${REFERRAL_REWARD_NEW_MEMBER} pts to New Member!`);
+    console.log(`[Referral System] Successfully awarded +${referrerRewardPts} pts to Referrer and +${newMemberRewardPts} pts to New Member!`);
     return { awarded: true, referrerId };
   } catch (err: any) {
     console.error('[processReferralRewardOnFirstValidOrder] Exception:', err);

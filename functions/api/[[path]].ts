@@ -616,7 +616,163 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   // ----------------------------------------------------------------------------
-  // 11. DEFAULT / UNHANDLED API ROUTE
+  // 11. REFERRAL SETTINGS: GET /api/referral-settings
+  // ----------------------------------------------------------------------------
+  if ((pathname === '/api/referral-settings' || pathname === '/api/referral/settings') && method === 'GET') {
+    const defaultSettings = {
+      referrer_reward: 100,
+      referred_reward: 50,
+      updated_at: new Date().toISOString(),
+      updated_by: 'system',
+    };
+
+    try {
+      const supabase = getSupabase(env, true);
+      const { data: contentRow, error: contentErr } = await supabase
+        .from('leton_content')
+        .select('*')
+        .eq('id', 'referral_settings')
+        .maybeSingle();
+
+      if (!contentErr && contentRow && contentRow.content) {
+        const c = contentRow.content;
+        return jsonResponse(
+          {
+            success: true,
+            settings: {
+              referrer_reward: Number(c.referrer_reward ?? c.referrerReward ?? 100),
+              referred_reward: Number(c.referred_reward ?? c.referredReward ?? 50),
+              updated_at: contentRow.updated_at || c.updated_at,
+              updated_by: c.updated_by || 'Super Admin',
+            },
+          },
+          200,
+          request
+        );
+      }
+    } catch (err: any) {
+      console.warn('[Cloudflare Pages Functions] Read referral settings exception:', err?.message || err);
+    }
+
+    return jsonResponse({ success: true, settings: defaultSettings }, 200, request);
+  }
+
+  // ----------------------------------------------------------------------------
+  // 12. REFERRAL SETTINGS: POST /api/admin/referral-settings
+  // Strictly Protected: Only Super Admin can modify referral rewards.
+  // ----------------------------------------------------------------------------
+  if (
+    (pathname === '/api/admin/referral-settings' || pathname === '/api/referral-settings') &&
+    method === 'POST'
+  ) {
+    const auth = await verifyAdminAuth(request, env);
+    if (!auth.isValid) {
+      return jsonResponse(
+        {
+          success: false,
+          error: 'Unauthorized: Sesi admin tidak valid atau telah kedaluwarsa. Silakan login kembali sebagai Super Admin.',
+        },
+        401,
+        request
+      );
+    }
+
+    // Role enforcement: Only Super Admin is allowed to modify referral rewards
+    const headerRole = request.headers.get('x-admin-role') || '';
+    if (auth.role !== 'super_admin' || headerRole === 'outlet_admin') {
+      return jsonResponse(
+        {
+          success: false,
+          error: 'Akses Ditolak: Hanya Super Admin yang dapat mengubah pengaturan reward referral.',
+        },
+        403,
+        request
+      );
+    }
+
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {
+      return jsonResponse({ success: false, error: 'Format data JSON tidak valid.' }, 400, request);
+    }
+
+    const rawReferrer = body?.referrer_reward ?? body?.referrerReward;
+    const rawReferred = body?.referred_reward ?? body?.referredReward;
+
+    const referrerReward = Number(rawReferrer);
+    const referredReward = Number(rawReferred);
+
+    if (isNaN(referrerReward) || !Number.isInteger(referrerReward) || referrerReward < 0) {
+      return jsonResponse(
+        { success: false, error: 'Reward Pengundang harus berupa bilangan bulat positif (minimal 0 poin).' },
+        400,
+        request
+      );
+    }
+
+    if (isNaN(referredReward) || !Number.isInteger(referredReward) || referredReward < 0) {
+      return jsonResponse(
+        { success: false, error: 'Reward Member Baru harus berupa bilangan bulat positif (minimal 0 poin).' },
+        400,
+        request
+      );
+    }
+
+    if (referrerReward > 100000 || referredReward > 100000) {
+      return jsonResponse(
+        { success: false, error: 'Nilai reward maksimal 100.000 poin untuk menjaga stabilitas sistem loyalty.' },
+        400,
+        request
+      );
+    }
+
+    const nowIso = new Date().toISOString();
+    const payloadToSave = {
+      referrer_reward: Math.round(referrerReward),
+      referred_reward: Math.round(referredReward),
+      updated_at: nowIso,
+      updated_by: auth.username || 'Super Admin',
+    };
+
+    try {
+      const supabase = getSupabase(env, true);
+      const { error: sbErr } = await supabase.from('leton_content').upsert({
+        id: 'referral_settings',
+        content: payloadToSave,
+        updated_at: nowIso,
+      });
+
+      if (sbErr) {
+        console.error('[Cloudflare Pages Functions] Supabase upsert referral settings error:', sbErr);
+        return jsonResponse(
+          { success: false, error: `Gagal menyimpan ke database Supabase: ${sbErr.message}` },
+          500,
+          request
+        );
+      }
+
+      return jsonResponse(
+        {
+          success: true,
+          message: 'Pengaturan Member Get Member berhasil disimpan ke database.',
+          settings: payloadToSave,
+        },
+        200,
+        request
+      );
+    } catch (err: any) {
+      console.error('[Cloudflare Pages Functions] Save referral settings exception:', err);
+      return jsonResponse(
+        { success: false, error: err?.message || 'Terjadi kesalahan sistem saat menyimpan ke database.' },
+        500,
+        request
+      );
+    }
+  }
+
+  // ----------------------------------------------------------------------------
+  // 13. DEFAULT / UNHANDLED API ROUTE
   // ----------------------------------------------------------------------------
   return jsonResponse(
     {

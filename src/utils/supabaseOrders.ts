@@ -1330,35 +1330,37 @@ export async function updateOrderStatus(
     lastDbError = err?.message || 'Direct Supabase update error';
   }
 
-  // 2. Server API fallback / verification
-  try {
-    const adminRole = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '';
-    const adminOutlet = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '';
-    const adminToken = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_token') || 'leton_local_token' : 'leton_local_token';
+  // 2. Server API fallback / verification (ONLY executed if direct Supabase DB update failed)
+  if (!updateSuccess) {
+    try {
+      const adminRole = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_role') || '' : '';
+      const adminOutlet = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_outlet') || '' : '';
+      const adminToken = typeof window !== 'undefined' ? localStorage.getItem('leton_admin_token') || 'leton_local_token' : 'leton_local_token';
 
-    const serverRes = await fetch(getApiUrl(`/api/orders/${encodeURIComponent(orderId)}`), {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`,
-        'x-admin-role': adminRole || 'super_admin',
-        'x-outlet-id': normalizeOutletKey(adminOutlet),
-      },
-      body: JSON.stringify({
-        orderStatus: newOrderStatus,
-        paymentStatus: newPaymentStatus,
-        rejectionReason: rejectionReason,
-      }),
-    });
+      const serverRes = await fetch(getApiUrl(`/api/orders/${encodeURIComponent(orderId)}`), {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`,
+          'x-admin-role': adminRole || 'super_admin',
+          'x-outlet-id': normalizeOutletKey(adminOutlet),
+        },
+        body: JSON.stringify({
+          orderStatus: newOrderStatus,
+          paymentStatus: newPaymentStatus,
+          rejectionReason: rejectionReason,
+        }),
+      });
 
-    if (serverRes.ok) {
-      const serverJson = await serverRes.json();
-      if (serverJson && (serverJson.success || serverJson.order)) {
-        updateSuccess = true;
+      if (serverRes.ok) {
+        const serverJson = await serverRes.json();
+        if (serverJson && (serverJson.success || serverJson.order)) {
+          updateSuccess = true;
+        }
       }
+    } catch (apiErr: any) {
+      console.warn('[Server updateOrderStatus API Warning]:', apiErr?.message || apiErr);
     }
-  } catch (apiErr: any) {
-    console.warn('[Server updateOrderStatus API Warning]:', apiErr?.message || apiErr);
   }
 
   if (!updateSuccess) {
